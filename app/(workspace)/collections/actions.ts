@@ -42,10 +42,10 @@ export async function addReferenceToCollection(formData: FormData) {
     {
       owner_id: user.id,
       collection_id: collectionId,
-      item_type: "reference",
-      item_id: referenceId,
+      record_type: "reference",
+      record_id: referenceId,
     },
-    { onConflict: "collection_id,item_type,item_id" },
+    { onConflict: "collection_id,record_type,record_id" },
   );
 
   if (error) {

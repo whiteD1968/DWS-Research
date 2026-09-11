@@ -17,7 +17,7 @@ type ReferenceOption = {
 
 type CollectionItem = {
   collection_id: string;
-  item_id: string;
+  record_id: string;
 };
 
 export default async function CollectionsPage({
@@ -44,8 +44,8 @@ export default async function CollectionsPage({
         .returns<ReferenceOption[]>(),
       supabase
         .from("collection_items")
-        .select("collection_id,item_id")
-        .eq("item_type", "reference")
+        .select("collection_id,record_id")
+        .eq("record_type", "reference")
         .returns<CollectionItem[]>(),
     ]);
 
@@ -123,7 +123,7 @@ export default async function CollectionsPage({
             collections.map((collection) => {
               const linkedReferences = (collectionItems ?? [])
                 .filter((item) => item.collection_id === collection.id)
-                .map((item) => referenceById.get(item.item_id))
+                .map((item) => referenceById.get(item.record_id))
                 .filter(Boolean) as ReferenceOption[];
 
               return (

@@ -15,6 +15,31 @@ export async function createReference(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const sourceUrl = getOptionalFormValue(formData, "source_url");
+  let primarySourceId: string | null = null;
+
+  if (sourceUrl) {
+    const { data: source, error: sourceError } = await supabase
+      .from("sources")
+      .insert({
+        owner_id: user.id,
+        source_type: "url",
+        title,
+        url: sourceUrl,
+        creator: getOptionalFormValue(formData, "creator"),
+      })
+      .select("id")
+      .single();
+
+    if (sourceError || !source) {
+      redirect(
+        `/library/references?error=${encodeURIComponent(sourceError?.message ?? "Unable to create source")}`,
+      );
+    }
+
+    primarySourceId = source.id;
+  }
+
   const { data, error } = await supabase
     .from("references")
     .insert({
@@ -27,7 +52,7 @@ export async function createReference(formData: FormData) {
       location: getOptionalFormValue(formData, "location"),
       description: getOptionalFormValue(formData, "description"),
       why_saved: getOptionalFormValue(formData, "why_saved"),
-      source_url: getOptionalFormValue(formData, "source_url"),
+      primary_source_id: primarySourceId,
     })
     .select("id")
     .single();

@@ -5,6 +5,16 @@ import { redirect } from "next/navigation";
 import { getFormValue, getOptionalFormValue, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
+function slugify(value: string) {
+  const slug = value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || crypto.randomUUID();
+}
+
 export async function createProject(formData: FormData) {
   const user = await requireUser();
   const title = getFormValue(formData, "title");
@@ -17,6 +27,7 @@ export async function createProject(formData: FormData) {
   const { error } = await supabase.from("projects").insert({
     owner_id: user.id,
     title,
+    slug: `${slugify(title)}-${crypto.randomUUID().slice(0, 8)}`,
     summary: getOptionalFormValue(formData, "summary"),
     project_type: getOptionalFormValue(formData, "project_type"),
     status: getOptionalFormValue(formData, "status") ?? "active",

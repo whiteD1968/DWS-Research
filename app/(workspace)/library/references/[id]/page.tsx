@@ -14,7 +14,7 @@ type ReferenceDetail = {
   location: string | null;
   description: string | null;
   why_saved: string | null;
-  source_url: string | null;
+  primary_source_id: string | null;
   created_at: string;
 };
 
@@ -34,6 +34,12 @@ type Relationship = {
 type Project = {
   id: string;
   title: string;
+};
+
+type Source = {
+  id: string;
+  url: string | null;
+  title: string | null;
 };
 
 export default async function ReferenceDetailPage({
@@ -60,8 +66,8 @@ export default async function ReferenceDetailPage({
   const { data: collectionItems } = await supabase
     .from("collection_items")
     .select("collection_id")
-    .eq("item_type", "reference")
-    .eq("item_id", id)
+    .eq("record_type", "reference")
+    .eq("record_id", id)
     .returns<CollectionItem[]>();
 
   const collectionIds = collectionItems?.map((item) => item.collection_id) ?? [];
@@ -82,6 +88,14 @@ export default async function ReferenceDetailPage({
   const { data: projects } = projectIds.length
     ? await supabase.from("projects").select("id,title").in("id", projectIds).returns<Project[]>()
     : { data: [] as Project[] };
+
+  const { data: source } = reference.primary_source_id
+    ? await supabase
+        .from("sources")
+        .select("id,title,url")
+        .eq("id", reference.primary_source_id)
+        .single<Source>()
+    : { data: null };
 
   return (
     <>
@@ -127,9 +141,9 @@ export default async function ReferenceDetailPage({
             <div>
               <dt>Source URL</dt>
               <dd>
-                {reference.source_url ? (
-                  <a href={reference.source_url} rel="noreferrer" target="_blank">
-                    {reference.source_url}
+                {source?.url ? (
+                  <a href={source.url} rel="noreferrer" target="_blank">
+                    {source.url}
                   </a>
                 ) : (
                   "Not recorded"

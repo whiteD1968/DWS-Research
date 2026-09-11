@@ -35,6 +35,13 @@ Reference -> Collection -> Project
 
 A reference is stored once in `references`. It can appear in the Library, one or more Collections through `collection_items`, and one or more Projects through `relationships`.
 
+Collection links use:
+
+```text
+record_type = reference
+record_id = reference.id
+```
+
 Project links use:
 
 ```text
