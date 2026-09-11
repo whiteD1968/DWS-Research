@@ -20,13 +20,13 @@ create table public.profiles (
 
 create table public.sources (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  source_type text not null,
-  title text not null,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  source_type text not null default 'web',
+  title text,
   url text,
   creator text,
   publication text,
-  published_at text,
+  published_at date,
   doi text,
   zotero_item_key text,
   notes text,
@@ -37,11 +37,11 @@ create table public.sources (
 
 create table public.media (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   media_type text not null,
   title text,
-  bucket text not null,
-  storage_path text not null,
+  bucket text not null default 'research-media',
+  storage_path text,
   original_filename text,
   mime_type text,
   byte_size bigint,
@@ -51,7 +51,7 @@ create table public.media (
   sha256 text,
   perceptual_hash text,
   source_id uuid references public.sources(id) on delete set null,
-  source_page text,
+  source_page integer,
   source_url text,
   alt_text text,
   caption text,
@@ -62,9 +62,9 @@ create table public.media (
 
 create table public.projects (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   title text not null,
-  slug text not null,
+  slug text,
   summary text,
   project_type text,
   status text not null default 'active',
@@ -79,7 +79,7 @@ create table public.projects (
 
 create table public.research_threads (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   title text not null,
   summary text,
   question text,
@@ -91,9 +91,9 @@ create table public.research_threads (
 
 create table public."references" (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   title text not null,
-  reference_type text not null,
+  reference_type text not null default 'precedent',
   creator text,
   project_name text,
   reference_date text,
@@ -110,7 +110,7 @@ create table public."references" (
 
 create table public.collections (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   title text not null,
   description text,
   cover_media_id uuid references public.media(id) on delete set null,
@@ -122,11 +122,11 @@ create table public.collections (
 
 create table public.collection_items (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   collection_id uuid not null references public.collections(id) on delete cascade,
   record_type text not null,
   record_id uuid not null,
-  sort_order integer not null default 0,
+  sort_order integer,
   note text,
   created_at timestamptz not null default now(),
   unique (collection_id, record_type, record_id)
@@ -134,7 +134,7 @@ create table public.collection_items (
 
 create table public.materials (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   category text,
   description text,
@@ -146,7 +146,7 @@ create table public.materials (
 
 create table public.processes (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   category text,
   description text,
@@ -158,7 +158,7 @@ create table public.processes (
 
 create table public.experiments (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   project_id uuid references public.projects(id) on delete set null,
   research_thread_id uuid references public.research_threads(id) on delete set null,
   title text not null,
@@ -175,13 +175,13 @@ create table public.experiments (
 
 create table public.boards (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   project_id uuid references public.projects(id) on delete set null,
   research_thread_id uuid references public.research_threads(id) on delete set null,
   title text not null,
   description text,
-  board_type text,
-  snapshot jsonb not null default '{}'::jsonb,
+  board_type text not null default 'freeform',
+  snapshot jsonb,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -189,18 +189,18 @@ create table public.boards (
 
 create table public.board_items (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   board_id uuid not null references public.boards(id) on delete cascade,
   shape_id text,
   record_type text,
   record_id uuid,
-  item_type text not null,
-  x numeric not null default 0,
-  y numeric not null default 0,
-  width numeric,
-  height numeric,
-  rotation numeric not null default 0,
-  z_index integer not null default 0,
+  item_type text not null default 'record',
+  x double precision,
+  y double precision,
+  width double precision,
+  height double precision,
+  rotation double precision not null default 0,
+  z_index integer,
   state jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -208,11 +208,11 @@ create table public.board_items (
 
 create table public.notes (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   title text,
   parent_type text,
   parent_id uuid,
-  content jsonb not null default '{}'::jsonb,
+  content jsonb not null default '[]'::jsonb,
   plain_text text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -221,7 +221,7 @@ create table public.notes (
 
 create table public.lineage_graphs (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   project_id uuid references public.projects(id) on delete set null,
   research_thread_id uuid references public.research_threads(id) on delete set null,
   title text not null,
@@ -233,14 +233,14 @@ create table public.lineage_graphs (
 
 create table public.lineage_nodes (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   graph_id uuid not null references public.lineage_graphs(id) on delete cascade,
   record_type text,
   record_id uuid,
-  node_type text,
+  node_type text not null default 'record',
   label text,
-  x numeric not null default 0,
-  y numeric not null default 0,
+  x double precision,
+  y double precision,
   state jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -248,11 +248,11 @@ create table public.lineage_nodes (
 
 create table public.lineage_edges (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   graph_id uuid not null references public.lineage_graphs(id) on delete cascade,
   source_node_id uuid not null references public.lineage_nodes(id) on delete cascade,
   target_node_id uuid not null references public.lineage_nodes(id) on delete cascade,
-  relationship_type text not null,
+  relationship_type text,
   label text,
   state jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
@@ -260,16 +260,16 @@ create table public.lineage_edges (
 
 create table public.tags (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
-  slug text not null,
+  slug text,
   created_at timestamptz not null default now(),
-  unique (owner_id, slug)
+  unique (owner_id, name)
 );
 
 create table public.record_tags (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   record_type text not null,
   record_id uuid not null,
   tag_id uuid not null references public.tags(id) on delete cascade,
@@ -279,7 +279,7 @@ create table public.record_tags (
 
 create table public.relationships (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   source_type text not null,
   source_id uuid not null,
   relationship_type text not null,
