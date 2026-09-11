@@ -1,9 +1,12 @@
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { requireUser } from "@/lib/auth";
 
-export default function WorkspaceLayout({
+export default async function WorkspaceLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <WorkspaceShell>{children}</WorkspaceShell>;
+  const user = await requireUser();
+
+  return <WorkspaceShell userEmail={user.email}>{children}</WorkspaceShell>;
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "@/app/actions/auth";
 
 const navItems = [
   { href: "/", label: "Today" },
@@ -13,7 +14,13 @@ const navItems = [
   { href: "/library", label: "Library" },
 ];
 
-export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+export function WorkspaceShell({
+  children,
+  userEmail,
+}: {
+  children: React.ReactNode;
+  userEmail?: string;
+}) {
   const pathname = usePathname();
 
   return (
@@ -43,7 +50,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
-          Initial workspace shell. Supabase clients are wired for browser and server use.
+          <span>{userEmail ?? "Authenticated workspace"}</span>
+          <form action={signOut}>
+            <button className="text-button" type="submit">
+              Sign out
+            </button>
+          </form>
         </div>
       </aside>
 
@@ -54,9 +66,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <button className="button" type="button">
               Ask
             </button>
-            <button className="button button-primary" type="button">
+            <Link className="button button-primary" href="/library/references">
               + Capture
-            </button>
+            </Link>
           </div>
         </header>
 

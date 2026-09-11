@@ -1,0 +1,12 @@
+project_id = "bpobtbiuyfmqziidvgnm"
+
+[api]
+enabled = true
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+
+[auth]
+enabled = true
+
+[storage]
+enabled = true

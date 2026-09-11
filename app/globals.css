@@ -48,6 +48,29 @@ button {
   cursor: pointer;
 }
 
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 10px 11px;
+  font-size: 14px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(23, 23, 23, 0.08);
+}
+
 .workspace-shell {
   display: grid;
   min-height: 100vh;
@@ -112,6 +135,8 @@ button {
 }
 
 .sidebar-footer {
+  display: grid;
+  gap: 10px;
   border-top: 1px solid var(--border);
   color: var(--text-soft);
   font-size: 12px;
@@ -178,6 +203,15 @@ button {
 
 .button-primary:hover {
   background: #3a3a38;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .content-wrap {
@@ -305,6 +339,195 @@ button {
   line-height: 1.55;
 }
 
+.login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(100%, 460px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 32px;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 620;
+  line-height: 1;
+}
+
+.login-copy {
+  margin: 14px 0 24px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.form-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notice {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.notice-success {
+  background: #f4f7f1;
+  color: #2f4f26;
+}
+
+.notice-error {
+  background: #fbf2f1;
+  color: #7c2d24;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.stack {
+  display: grid;
+  gap: 20px;
+}
+
+.record-list {
+  display: grid;
+  gap: 14px;
+}
+
+.record-card,
+.empty-state {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.record-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.record-type,
+.record-date,
+.record-meta {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.record-type {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.record-card h2,
+.empty-state h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 620;
+}
+
+.record-card p,
+.empty-state p {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.detail-panel {
+  overflow-wrap: anywhere;
+}
+
+.detail-list {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+
+.detail-list div {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+
+.detail-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.detail-list dt {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.detail-list dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.simple-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.simple-list span {
+  color: var(--text-soft);
+}
+
+.spaced-title {
+  margin-top: 28px;
+}
+
+.section-actions {
+  margin-top: 20px;
+}
+
 @media (max-width: 900px) {
   .workspace-shell {
     display: block;
@@ -361,6 +584,10 @@ button {
   .workspace-grid {
     grid-template-columns: 1fr;
   }
+
+  .two-column {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -380,5 +607,9 @@ button {
   .placeholder-row {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
