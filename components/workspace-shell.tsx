@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
+import { CapturePanel } from "@/components/capture-panel";
 
 const navItems = [
   { href: "/", label: "Today" },
@@ -66,9 +67,7 @@ export function WorkspaceShell({
             <button className="button" type="button">
               Ask
             </button>
-            <Link className="button button-primary" href="/library/references">
-              + Capture
-            </Link>
+            <CapturePanel />
           </div>
         </header>
 

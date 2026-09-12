@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getFormValue, getOptionalFormValue, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildStoragePath,
+  createMediaFromFile,
+  getImageFiles,
+  linkMediaToRecord,
+} from "@/lib/media-upload";
 
 function slugify(value: string) {
   const slug = value
@@ -109,4 +115,72 @@ export async function linkReferenceToProject(formData: FormData) {
   }
 
   redirect("/projects?linked=reference");
+}
+
+export async function uploadProjectImages(formData: FormData) {
+  const user = await requireUser();
+  const projectId = getFormValue(formData, "project_id");
+  const files = getImageFiles(formData);
+
+  if (!projectId || files.length === 0) {
+    redirect("/projects?error=image-required");
+  }
+
+  const supabase = await createClient();
+  let firstMediaId: string | null = null;
+
+  try {
+    for (const [index, file] of files.entries()) {
+      const mediaId = await createMediaFromFile({
+        ownerId: user.id,
+        file,
+        storagePath: buildStoragePath({
+          ownerId: user.id,
+          recordType: "projects",
+          recordId: projectId,
+          fileName: file.name,
+        }),
+      });
+
+      firstMediaId ??= mediaId;
+      await linkMediaToRecord({
+        ownerId: user.id,
+        mediaId,
+        recordType: "project",
+        recordId: projectId,
+        sortOrder: index,
+      });
+    }
+  } catch (error) {
+    redirect(`/projects/${projectId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Upload failed")}`);
+  }
+
+  if (firstMediaId) {
+    await supabase.from("projects").update({ cover_media_id: firstMediaId }).eq("id", projectId);
+  }
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}?uploaded=images`);
+}
+
+export async function setProjectCoverMedia(formData: FormData) {
+  await requireUser();
+  const projectId = getFormValue(formData, "project_id");
+  const mediaId = getFormValue(formData, "media_id");
+
+  if (!projectId || !mediaId) {
+    redirect("/projects?error=missing-media");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("projects").update({ cover_media_id: mediaId }).eq("id", projectId);
+
+  if (error) {
+    redirect(`/projects/${projectId}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}?updated=cover`);
 }

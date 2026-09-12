@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   addReferenceToCollection,
+  moveCollectionItem,
   removeReferenceFromCollection,
+  setCollectionCover,
   updateCollection,
 } from "../actions";
 import { createClient } from "@/lib/supabase/server";
@@ -17,6 +19,7 @@ type Collection = {
 
 type CollectionItem = {
   record_id: string;
+  sort_order: number | null;
 };
 
 type ReferenceRecord = {
@@ -54,7 +57,7 @@ export default async function CollectionDetailPage({
   const [{ data: items }, { data: allReferences }] = await Promise.all([
     supabase
       .from("collection_items")
-      .select("record_id")
+      .select("record_id,sort_order")
       .eq("collection_id", id)
       .eq("record_type", "reference")
       .returns<CollectionItem[]>(),
@@ -65,8 +68,15 @@ export default async function CollectionDetailPage({
       .returns<ReferenceRecord[]>(),
   ]);
 
+  const itemByReferenceId = new Map((items ?? []).map((item) => [item.record_id, item]));
   const linkedIds = new Set((items ?? []).map((item) => item.record_id));
-  const references = (allReferences ?? []).filter((reference) => linkedIds.has(reference.id));
+  const references = (allReferences ?? [])
+    .filter((reference) => linkedIds.has(reference.id))
+    .sort(
+      (a, b) =>
+        (itemByReferenceId.get(a.id)?.sort_order ?? 0) -
+        (itemByReferenceId.get(b.id)?.sort_order ?? 0),
+    );
   const availableReferences = (allReferences ?? []).filter((reference) => !linkedIds.has(reference.id));
   const mediaIds = references
     .map((reference) => reference.primary_media_id)
@@ -180,6 +190,43 @@ export default async function CollectionDetailPage({
                       Remove
                     </button>
                   </form>
+                  <div className="card-action-row split-actions">
+                    <form action={moveCollectionItem}>
+                      <input name="collection_id" type="hidden" value={collection.id} />
+                      <input name="reference_id" type="hidden" value={reference.id} />
+                      <input
+                        name="sort_order"
+                        type="hidden"
+                        value={itemByReferenceId.get(reference.id)?.sort_order ?? 0}
+                      />
+                      <input name="direction" type="hidden" value="up" />
+                      <button className="text-button" type="submit">
+                        Up
+                      </button>
+                    </form>
+                    <form action={moveCollectionItem}>
+                      <input name="collection_id" type="hidden" value={collection.id} />
+                      <input name="reference_id" type="hidden" value={reference.id} />
+                      <input
+                        name="sort_order"
+                        type="hidden"
+                        value={itemByReferenceId.get(reference.id)?.sort_order ?? 0}
+                      />
+                      <input name="direction" type="hidden" value="down" />
+                      <button className="text-button" type="submit">
+                        Down
+                      </button>
+                    </form>
+                    {mediaItem ? (
+                      <form action={setCollectionCover}>
+                        <input name="collection_id" type="hidden" value={collection.id} />
+                        <input name="media_id" type="hidden" value={mediaItem.id} />
+                        <button className="text-button" type="submit">
+                          Set cover
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
                 </article>
               );
             })

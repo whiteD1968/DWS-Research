@@ -1,8 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { linkReferenceToProject, setProjectCoverMedia, uploadProjectImages } from "../actions";
+import { MediaLightbox } from "@/components/media-lightbox";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/dates";
-import { getSignedMediaUrl, type MediaRecord } from "@/lib/media";
+import {
+  getRelationshipSortOrder,
+  getSignedMediaUrl,
+  getSignedMediaUrlMap,
+  type MediaRecord,
+  type MediaRelationship,
+  type SignedMediaItem,
+} from "@/lib/media";
 import { getSearchParam, type PageSearchParams } from "@/lib/search-params";
 
 type Project = {
@@ -107,6 +116,49 @@ export default async function ProjectDetailPage({
 
   const coverUrl = await getSignedMediaUrl(coverMedia);
 
+  const { data: mediaRelationships } = await supabase
+    .from("relationships")
+    .select("target_id,metadata")
+    .eq("source_type", "project")
+    .eq("source_id", id)
+    .eq("relationship_type", "has_media")
+    .eq("target_type", "media")
+    .returns<MediaRelationship[]>();
+
+  const projectMediaIds = Array.from(
+    new Set([
+      ...((mediaRelationships ?? []).map((relationship) => relationship.target_id)),
+      ...(project.cover_media_id ? [project.cover_media_id] : []),
+    ]),
+  );
+  const { data: projectMedia } = projectMediaIds.length
+    ? await supabase
+        .from("media")
+        .select("id,title,bucket,storage_path,original_filename,mime_type,byte_size,alt_text,caption,metadata")
+        .in("id", projectMediaIds)
+        .returns<MediaRecord[]>()
+    : { data: [] as MediaRecord[] };
+
+  const projectSignedUrls = await getSignedMediaUrlMap(projectMedia ?? []);
+  const relationshipByMediaId = new Map(
+    (mediaRelationships ?? []).map((relationship) => [relationship.target_id, relationship]),
+  );
+  const projectMediaItems: SignedMediaItem[] = (projectMedia ?? [])
+    .map((item) => ({
+      ...item,
+      signedUrl: projectSignedUrls.get(item.id) ?? null,
+      sortOrder: getRelationshipSortOrder(relationshipByMediaId.get(item.id) ?? { target_id: item.id, metadata: null }),
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const { data: allReferences } = await supabase
+    .from("references")
+    .select("id,title")
+    .order("updated_at", { ascending: false })
+    .returns<Array<{ id: string; title: string }>>();
+  const linkedReferenceIds = new Set(referenceIds);
+  const availableReferences = (allReferences ?? []).filter((reference) => !linkedReferenceIds.has(reference.id));
+
   return (
     <>
       <section className="breadcrumb-row">
@@ -136,6 +188,64 @@ export default async function ProjectDetailPage({
           ) : (
             <span>No cover image</span>
           )}
+        </div>
+      </section>
+
+      <section className="workspace-grid">
+        <form action={uploadProjectImages} className="panel form-stack">
+          <p className="panel-kicker">Project images</p>
+          <input name="project_id" type="hidden" value={project.id} />
+          <label className="drop-field">
+            <span>Drop or select multiple project images</span>
+            <input accept="image/jpeg,image/png,image/webp" multiple name="images" required type="file" />
+          </label>
+          <button className="button" type="submit">
+            Add images
+          </button>
+        </form>
+        <form action={linkReferenceToProject} className="panel form-stack">
+          <p className="panel-kicker">+ Add reference</p>
+          <input name="project_id" type="hidden" value={project.id} />
+          <input name="redirect_to" type="hidden" value={`/projects/${project.id}`} />
+          <label className="field">
+            <span>Existing reference</span>
+            <select name="reference_id" required>
+              <option value="">Select a reference</option>
+              {availableReferences.map((reference) => (
+                <option key={reference.id} value={reference.id}>
+                  {reference.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="button button-primary" type="submit">
+            Link reference
+          </button>
+        </form>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <h2>Visual field</h2>
+          <span className="record-meta">{projectMediaItems.length} images</span>
+        </div>
+        <MediaLightbox items={projectMediaItems} />
+        <div className="media-manage-grid">
+          {projectMediaItems.map((item) => (
+            <article className="panel media-edit-card" key={item.id}>
+              <div className="meta-row">
+                <span>{item.mime_type ?? "image"}</span>
+                <span>{item.original_filename ?? "file"}</span>
+              </div>
+              <form action={setProjectCoverMedia}>
+                <input name="project_id" type="hidden" value={project.id} />
+                <input name="media_id" type="hidden" value={item.id} />
+                <button className="text-button" type="submit">
+                  Set cover
+                </button>
+              </form>
+            </article>
+          ))}
         </div>
       </section>
 

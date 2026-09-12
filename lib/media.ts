@@ -4,8 +4,13 @@ export type MediaRecord = {
   id: string;
   bucket: string;
   storage_path: string | null;
+  title?: string | null;
+  original_filename?: string | null;
+  mime_type?: string | null;
+  byte_size?: number | null;
   alt_text?: string | null;
   caption?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export async function getSignedMediaUrl(media: MediaRecord | null | undefined) {
@@ -35,4 +40,19 @@ export async function getSignedMediaUrlMap(media: MediaRecord[]) {
 
 export function getImageAlt(media: Pick<MediaRecord, "alt_text" | "caption"> | null | undefined) {
   return media?.alt_text ?? media?.caption ?? "";
+}
+
+export type MediaRelationship = {
+  target_id: string;
+  metadata: Record<string, unknown> | null;
+};
+
+export type SignedMediaItem = MediaRecord & {
+  signedUrl: string | null;
+  sortOrder: number;
+};
+
+export function getRelationshipSortOrder(relationship: MediaRelationship) {
+  const sortOrder = relationship.metadata?.sort_order;
+  return typeof sortOrder === "number" ? sortOrder : 0;
 }

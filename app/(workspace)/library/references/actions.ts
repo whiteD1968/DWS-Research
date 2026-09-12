@@ -4,15 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getFormValue, getOptionalFormValue, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-
-const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-function sanitizeFileName(fileName: string) {
-  return fileName
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+import {
+  buildStoragePath,
+  createMediaFromFile,
+  getImageFiles,
+  linkMediaToRecord,
+} from "@/lib/media-upload";
 
 async function upsertSourceUrl({
   ownerId,
@@ -179,62 +176,128 @@ export async function updateReference(formData: FormData) {
 export async function uploadReferenceImage(formData: FormData) {
   const user = await requireUser();
   const referenceId = getFormValue(formData, "reference_id");
-  const file = formData.get("image");
+  const files = getImageFiles(formData, "images");
 
-  if (!referenceId || !(file instanceof File) || file.size === 0) {
+  if (!referenceId || files.length === 0) {
     redirect("/library/references?error=image-required");
   }
 
-  if (!allowedImageTypes.has(file.type)) {
-    redirect(`/library/references/${referenceId}?error=unsupported-image`);
-  }
-
   const supabase = await createClient();
-  const fileName = sanitizeFileName(file.name) || "image";
-  const storagePath = `${user.id}/references/${referenceId}/${crypto.randomUUID()}-${fileName}`;
+  let firstMediaId: string | null = null;
 
-  const { error: uploadError } = await supabase.storage
-    .from("research-media")
-    .upload(storagePath, file, {
-      contentType: file.type,
-      upsert: false,
-    });
+  try {
+    for (const [index, file] of files.entries()) {
+      const mediaId = await createMediaFromFile({
+        ownerId: user.id,
+        file,
+        storagePath: buildStoragePath({
+          ownerId: user.id,
+          recordType: "references",
+          recordId: referenceId,
+          fileName: file.name,
+        }),
+      });
 
-  if (uploadError) {
-    redirect(`/library/references/${referenceId}?error=${encodeURIComponent(uploadError.message)}`);
+      firstMediaId ??= mediaId;
+      await linkMediaToRecord({
+        ownerId: user.id,
+        mediaId,
+        recordType: "reference",
+        recordId: referenceId,
+        sortOrder: index,
+      });
+    }
+  } catch (error) {
+    redirect(`/library/references/${referenceId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Upload failed")}`);
   }
 
-  const { data: media, error: mediaError } = await supabase
-    .from("media")
-    .insert({
-      owner_id: user.id,
-      media_type: "image",
-      title: fileName,
-      bucket: "research-media",
-      storage_path: storagePath,
-      original_filename: file.name,
-      mime_type: file.type,
-      byte_size: file.size,
-    })
-    .select("id")
-    .single();
-
-  if (mediaError || !media) {
-    redirect(
-      `/library/references/${referenceId}?error=${encodeURIComponent(mediaError?.message ?? "Unable to create media record")}`,
-    );
-  }
-
-  const { error: referenceError } = await supabase
-    .from("references")
-    .update({ primary_media_id: media.id })
-    .eq("id", referenceId);
-
-  if (referenceError) {
-    redirect(`/library/references/${referenceId}?error=${encodeURIComponent(referenceError.message)}`);
+  if (firstMediaId) {
+    await supabase.from("references").update({ primary_media_id: firstMediaId }).eq("id", referenceId);
   }
 
   revalidatePath("/library/references");
   revalidatePath(`/library/references/${referenceId}`);
-  redirect(`/library/references/${referenceId}?uploaded=image`);
+  redirect(`/library/references/${referenceId}?uploaded=images`);
+}
+
+export async function setReferencePrimaryMedia(formData: FormData) {
+  await requireUser();
+  const referenceId = getFormValue(formData, "reference_id");
+  const mediaId = getFormValue(formData, "media_id");
+
+  if (!referenceId || !mediaId) {
+    redirect("/library/references?error=missing-media");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("references").update({ primary_media_id: mediaId }).eq("id", referenceId);
+
+  if (error) {
+    redirect(`/library/references/${referenceId}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(`/library/references/${referenceId}`);
+  revalidatePath("/library/references");
+  redirect(`/library/references/${referenceId}?updated=primary`);
+}
+
+export async function unlinkReferenceMedia(formData: FormData) {
+  await requireUser();
+  const referenceId = getFormValue(formData, "reference_id");
+  const mediaId = getFormValue(formData, "media_id");
+
+  if (!referenceId || !mediaId) {
+    redirect("/library/references?error=missing-media");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("relationships")
+    .delete()
+    .eq("source_type", "reference")
+    .eq("source_id", referenceId)
+    .eq("relationship_type", "has_media")
+    .eq("target_type", "media")
+    .eq("target_id", mediaId);
+
+  if (error) {
+    redirect(`/library/references/${referenceId}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(`/library/references/${referenceId}`);
+  redirect(`/library/references/${referenceId}?removed=media`);
+}
+
+export async function updateMediaDetails(formData: FormData) {
+  await requireUser();
+  const returnTo = getFormValue(formData, "return_to") ?? "/library/references";
+  const mediaId = getFormValue(formData, "media_id");
+  const title = getOptionalFormValue(formData, "title");
+  const caption = getOptionalFormValue(formData, "caption");
+  const visualType = getOptionalFormValue(formData, "visual_type");
+  const drawingType = getOptionalFormValue(formData, "drawing_type");
+
+  if (!mediaId) {
+    redirect(`${returnTo}?error=missing-media`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("media")
+    .update({
+      title,
+      caption,
+      metadata: {
+        visual_type: visualType,
+        drawing_type: drawingType,
+      },
+    })
+    .eq("id", mediaId);
+
+  if (error) {
+    redirect(`${returnTo}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(returnTo);
+  redirect(`${returnTo}?updated=media`);
 }

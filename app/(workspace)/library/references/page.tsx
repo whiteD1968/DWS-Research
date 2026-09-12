@@ -30,6 +30,7 @@ export default async function ReferencesPage({
   const supabase = await createClient();
   const created = await getSearchParam(searchParams, "created");
   const error = await getSearchParam(searchParams, "error");
+  const view = (await getSearchParam(searchParams, "view")) ?? "grid";
 
   const { data: references } = await supabase
     .from("references")
@@ -67,6 +68,18 @@ export default async function ReferencesPage({
 
       {created ? <p className="notice notice-success">Reference saved.</p> : null}
       {error ? <p className="notice notice-error">{error}</p> : null}
+
+      <div className="view-switcher" aria-label="Reference view mode">
+        <Link className={view === "grid" ? "button button-primary" : "button"} href="/library/references?view=grid">
+          Grid
+        </Link>
+        <Link className={view === "contact" ? "button button-primary" : "button"} href="/library/references?view=contact">
+          Contact Sheet
+        </Link>
+        <Link className={view === "list" ? "button button-primary" : "button"} href="/library/references?view=list">
+          Compact List
+        </Link>
+      </div>
 
       <details className="panel disclosure-panel">
         <summary>Create reference</summary>
@@ -119,7 +132,16 @@ export default async function ReferencesPage({
         </form>
       </details>
 
-      <section className="visual-grid reference-grid" aria-label="References">
+      <section
+        className={
+          view === "list"
+            ? "visual-grid reference-grid reference-list-view"
+            : view === "contact"
+              ? "visual-grid reference-grid reference-contact-view"
+              : "visual-grid reference-grid"
+        }
+        aria-label="References"
+      >
         {references && references.length > 0 ? (
           references.map((reference) => {
             const mediaItem = reference.primary_media_id

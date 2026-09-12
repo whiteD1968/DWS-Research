@@ -1,10 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { linkReferenceToProject } from "@/app/(workspace)/projects/actions";
-import { uploadReferenceImage } from "../actions";
+import {
+  setReferencePrimaryMedia,
+  unlinkReferenceMedia,
+  updateMediaDetails,
+  uploadReferenceImage,
+} from "../actions";
+import { MediaLightbox } from "@/components/media-lightbox";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/dates";
-import { getSignedMediaUrl, type MediaRecord } from "@/lib/media";
+import {
+  getRelationshipSortOrder,
+  getSignedMediaUrlMap,
+  type MediaRecord,
+  type MediaRelationship,
+  type SignedMediaItem,
+} from "@/lib/media";
 import { getSearchParam, type PageSearchParams } from "@/lib/search-params";
 
 type ReferenceDetail = {
@@ -76,7 +88,7 @@ export default async function ReferenceDetailPage({
     { data: relationships },
     { data: projectsForPicker },
     sourceResult,
-    mediaResult,
+    { data: mediaRelationships },
   ] = await Promise.all([
     supabase
       .from("collection_items")
@@ -96,13 +108,14 @@ export default async function ReferenceDetailPage({
     reference.primary_source_id
       ? supabase.from("sources").select("id,title,url").eq("id", reference.primary_source_id).single<Source>()
       : Promise.resolve({ data: null }),
-    reference.primary_media_id
-      ? supabase
-          .from("media")
-          .select("id,bucket,storage_path,alt_text,caption")
-          .eq("id", reference.primary_media_id)
-          .single<MediaRecord>()
-      : Promise.resolve({ data: null }),
+    supabase
+      .from("relationships")
+      .select("target_id,metadata")
+      .eq("source_type", "reference")
+      .eq("source_id", id)
+      .eq("relationship_type", "has_media")
+      .eq("target_type", "media")
+      .returns<MediaRelationship[]>(),
   ]);
 
   const collectionIds = collectionItems?.map((item) => item.collection_id) ?? [];
@@ -115,7 +128,34 @@ export default async function ReferenceDetailPage({
     ? await supabase.from("projects").select("id,title").in("id", projectIds).returns<Project[]>()
     : { data: [] as Project[] };
 
-  const imageUrl = await getSignedMediaUrl(mediaResult.data);
+  const mediaIds = Array.from(
+    new Set([
+      ...((mediaRelationships ?? []).map((relationship) => relationship.target_id)),
+      ...(reference.primary_media_id ? [reference.primary_media_id] : []),
+    ]),
+  );
+  const { data: media } = mediaIds.length
+    ? await supabase
+        .from("media")
+        .select("id,title,bucket,storage_path,original_filename,mime_type,byte_size,alt_text,caption,metadata")
+        .in("id", mediaIds)
+        .returns<MediaRecord[]>()
+    : { data: [] as MediaRecord[] };
+
+  const signedUrlMap = await getSignedMediaUrlMap(media ?? []);
+  const relationshipByMediaId = new Map(
+    (mediaRelationships ?? []).map((relationship) => [relationship.target_id, relationship]),
+  );
+  const mediaItems: SignedMediaItem[] = (media ?? [])
+    .map((item) => ({
+      ...item,
+      signedUrl: signedUrlMap.get(item.id) ?? null,
+      sortOrder: getRelationshipSortOrder(relationshipByMediaId.get(item.id) ?? { target_id: item.id, metadata: null }),
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const primaryMedia =
+    mediaItems.find((item) => item.id === reference.primary_media_id) ?? mediaItems[0] ?? null;
 
   return (
     <>
@@ -134,9 +174,9 @@ export default async function ReferenceDetailPage({
 
       <section className="workspace-hero reference-hero">
         <div className="image-frame hero-image">
-          {imageUrl ? (
+          {primaryMedia?.signedUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img alt={mediaResult.data?.alt_text ?? reference.title} src={imageUrl} />
+            <img alt={primaryMedia.alt_text ?? reference.title} src={primaryMedia.signedUrl} />
           ) : (
             <span>No primary image</span>
           )}
@@ -201,14 +241,14 @@ export default async function ReferenceDetailPage({
 
         <section className="stack">
           <form action={uploadReferenceImage} className="panel form-stack">
-            <p className="panel-kicker">Primary image</p>
+            <p className="panel-kicker">Add images</p>
             <input name="reference_id" type="hidden" value={reference.id} />
-            <label className="field">
-              <span>Upload jpg, png, or webp</span>
-              <input accept="image/jpeg,image/png,image/webp" name="image" required type="file" />
+            <label className="drop-field">
+              <span>Drop or select jpg, png, or webp images</span>
+              <input accept="image/jpeg,image/png,image/webp" multiple name="images" required type="file" />
             </label>
             <button className="button" type="submit">
-              Upload image
+              Upload images
             </button>
           </form>
 
@@ -232,6 +272,87 @@ export default async function ReferenceDetailPage({
             </button>
           </form>
         </section>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <h2>Media</h2>
+          <span className="record-meta">{mediaItems.length} images</span>
+        </div>
+        <MediaLightbox items={mediaItems} />
+        <div className="media-manage-grid">
+          {mediaItems.map((item) => (
+            <article className="panel media-edit-card" key={item.id}>
+              <div className="meta-row">
+                <span>{item.mime_type ?? "image"}</span>
+                <span>{item.original_filename ?? "file"}</span>
+              </div>
+              <form action={updateMediaDetails} className="form-stack">
+                <input name="media_id" type="hidden" value={item.id} />
+                <input name="return_to" type="hidden" value={`/library/references/${reference.id}`} />
+                <label className="field">
+                  <span>Title</span>
+                  <input defaultValue={item.title ?? ""} name="title" />
+                </label>
+                <label className="field">
+                  <span>Caption</span>
+                  <textarea defaultValue={item.caption ?? ""} name="caption" rows={2} />
+                </label>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Visual type</span>
+                    <select defaultValue={(item.metadata?.visual_type as string | undefined) ?? ""} name="visual_type">
+                      <option value="">Unclassified</option>
+                      <option value="photograph">Photograph</option>
+                      <option value="drawing">Drawing</option>
+                      <option value="diagram">Diagram</option>
+                      <option value="sketch">Sketch</option>
+                      <option value="render">Render</option>
+                      <option value="screenshot">Screenshot</option>
+                      <option value="material">Material</option>
+                      <option value="fabrication">Fabrication</option>
+                      <option value="scan">Scan</option>
+                      <option value="generated">Generated</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Drawing type</span>
+                    <select defaultValue={(item.metadata?.drawing_type as string | undefined) ?? ""} name="drawing_type">
+                      <option value="">None</option>
+                      <option value="plan">Plan</option>
+                      <option value="section">Section</option>
+                      <option value="elevation">Elevation</option>
+                      <option value="axonometric">Axonometric</option>
+                      <option value="detail">Detail</option>
+                      <option value="diagram">Diagram</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                </div>
+                <button className="button" type="submit">
+                  Save media
+                </button>
+              </form>
+              <div className="inline-actions">
+                <form action={setReferencePrimaryMedia}>
+                  <input name="reference_id" type="hidden" value={reference.id} />
+                  <input name="media_id" type="hidden" value={item.id} />
+                  <button className="text-button" type="submit">
+                    Set primary
+                  </button>
+                </form>
+                <form action={unlinkReferenceMedia}>
+                  <input name="reference_id" type="hidden" value={reference.id} />
+                  <input name="media_id" type="hidden" value={item.id} />
+                  <button className="text-button" type="submit">
+                    Unlink
+                  </button>
+                </form>
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="workspace-grid section-block">
