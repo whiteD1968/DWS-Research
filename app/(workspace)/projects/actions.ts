@@ -184,3 +184,109 @@ export async function setProjectCoverMedia(formData: FormData) {
   revalidatePath(`/projects/${projectId}`);
   redirect(`/projects/${projectId}?updated=cover`);
 }
+
+export async function updateProjectDocumentDetails(formData: FormData) {
+  await requireUser();
+  const projectId = getFormValue(formData, "project_id");
+  const mediaId = getFormValue(formData, "media_id");
+  const returnTo = getOptionalFormValue(formData, "return_to") ?? (projectId ? `/projects/${projectId}?mode=documents` : "/projects");
+
+  if (!projectId || !mediaId) {
+    redirect("/projects?error=missing-document");
+  }
+
+  const metadata = {
+    document_type: getOptionalFormValue(formData, "document_type"),
+    author: getOptionalFormValue(formData, "author"),
+    publication: getOptionalFormValue(formData, "publication"),
+    published_date: getOptionalFormValue(formData, "published_date"),
+    doi: getOptionalFormValue(formData, "doi"),
+    source_url: getOptionalFormValue(formData, "source_url"),
+    why_saved: getOptionalFormValue(formData, "why_saved"),
+  };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("media")
+    .update({
+      title: getOptionalFormValue(formData, "title"),
+      source_url: metadata.source_url,
+      caption: metadata.why_saved,
+      metadata,
+    })
+    .eq("id", mediaId)
+    .eq("media_type", "document");
+
+  if (error) {
+    redirect(`${returnTo}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/documents/${mediaId}`);
+  redirect(`${returnTo}?updated=document`);
+}
+
+export async function unlinkProjectDocument(formData: FormData) {
+  await requireUser();
+  const projectId = getFormValue(formData, "project_id");
+  const mediaId = getFormValue(formData, "media_id");
+
+  if (!projectId || !mediaId) {
+    redirect("/projects?error=missing-document");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("relationships")
+    .delete()
+    .eq("source_type", "project")
+    .eq("source_id", projectId)
+    .eq("relationship_type", "has_document")
+    .eq("target_type", "media")
+    .eq("target_id", mediaId);
+
+  if (error) {
+    redirect(`/projects/${projectId}?mode=documents&error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}?mode=documents&removed=document`);
+}
+
+export async function linkDocumentToReference(formData: FormData) {
+  const user = await requireUser();
+  const projectId = getFormValue(formData, "project_id");
+  const mediaId = getFormValue(formData, "media_id");
+  const referenceId = getFormValue(formData, "reference_id");
+  const returnTo = getOptionalFormValue(formData, "return_to") ?? (projectId ? `/projects/${projectId}/documents/${mediaId}` : "/projects");
+
+  if (!mediaId || !referenceId) {
+    redirect(`${returnTo}?error=missing-reference`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("relationships").upsert(
+    {
+      owner_id: user.id,
+      source_type: "media",
+      source_id: mediaId,
+      relationship_type: "supports_reference",
+      target_type: "reference",
+      target_id: referenceId,
+    },
+    {
+      onConflict: "source_type,source_id,relationship_type,target_type,target_id",
+    },
+  );
+
+  if (error) {
+    redirect(`${returnTo}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  if (projectId) {
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath(`/projects/${projectId}/documents/${mediaId}`);
+  }
+
+  redirect(`${returnTo}?linked=reference`);
+}

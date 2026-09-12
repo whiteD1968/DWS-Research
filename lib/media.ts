@@ -11,6 +11,8 @@ export type MediaRecord = {
   alt_text?: string | null;
   caption?: string | null;
   metadata?: Record<string, unknown> | null;
+  source_url?: string | null;
+  created_at?: string | null;
 };
 
 export async function getSignedMediaUrl(media: MediaRecord | null | undefined) {
