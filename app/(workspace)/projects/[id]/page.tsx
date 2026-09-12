@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { linkReferenceToProject, setProjectCoverMedia, uploadProjectImages } from "../actions";
+import { linkReferenceToProject, setProjectCoverMedia } from "../actions";
 import { MediaLightbox } from "@/components/media-lightbox";
+import { MediaUploadPanel } from "@/components/media-upload-panel";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/dates";
 import {
@@ -192,17 +193,7 @@ export default async function ProjectDetailPage({
       </section>
 
       <section className="workspace-grid">
-        <form action={uploadProjectImages} className="panel form-stack">
-          <p className="panel-kicker">Project images</p>
-          <input name="project_id" type="hidden" value={project.id} />
-          <label className="drop-field">
-            <span>Drop or select multiple project images</span>
-            <input accept="image/jpeg,image/png,image/webp" multiple name="images" required type="file" />
-          </label>
-          <button className="button" type="submit">
-            Add images
-          </button>
-        </form>
+        <MediaUploadPanel hasPrimaryImage={Boolean(project.cover_media_id)} recordId={project.id} recordKind="project" />
         <form action={linkReferenceToProject} className="panel form-stack">
           <p className="panel-kicker">+ Add reference</p>
           <input name="project_id" type="hidden" value={project.id} />
@@ -241,7 +232,7 @@ export default async function ProjectDetailPage({
                 <input name="project_id" type="hidden" value={project.id} />
                 <input name="media_id" type="hidden" value={item.id} />
                 <button className="text-button" type="submit">
-                  Set cover
+                  Set as cover
                 </button>
               </form>
             </article>

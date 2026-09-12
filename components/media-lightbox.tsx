@@ -65,16 +65,24 @@ export function MediaLightbox({ items }: MediaLightboxProps) {
 
   return (
     <>
-      <div className="media-strip" aria-label="Linked media">
+      <div className="media-contact-sheet" aria-label="Linked media">
         {visibleItems.map((item, index) => (
           <button
-            className="media-strip-item"
+            className={isDrawing(item) ? "media-contact-item media-contact-item-wide" : "media-contact-item"}
             key={item.id}
             onClick={() => setActiveIndex(index)}
             type="button"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt={item.alt_text ?? item.caption ?? item.title ?? ""} src={item.signedUrl ?? ""} />
+            <img
+              alt={item.alt_text ?? item.caption ?? item.title ?? item.original_filename ?? ""}
+              loading="lazy"
+              src={item.signedUrl ?? ""}
+            />
+            <span className="media-contact-meta">
+              <span>{item.caption ?? item.title ?? item.original_filename ?? "Untitled image"}</span>
+              <span>{getMediaTypeLabel(item)}</span>
+            </span>
           </button>
         ))}
       </div>
@@ -117,4 +125,15 @@ export function MediaLightbox({ items }: MediaLightboxProps) {
       ) : null}
     </>
   );
+}
+
+function isDrawing(item: SignedMediaItem) {
+  return item.metadata?.visual_type === "drawing" || Boolean(item.metadata?.drawing_type);
+}
+
+function getMediaTypeLabel(item: SignedMediaItem) {
+  const visualType = typeof item.metadata?.visual_type === "string" ? item.metadata.visual_type : null;
+  const drawingType = typeof item.metadata?.drawing_type === "string" ? item.metadata.drawing_type : null;
+
+  return drawingType || visualType || item.mime_type || "image";
 }

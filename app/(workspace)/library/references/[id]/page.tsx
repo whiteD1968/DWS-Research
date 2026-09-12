@@ -5,9 +5,9 @@ import {
   setReferencePrimaryMedia,
   unlinkReferenceMedia,
   updateMediaDetails,
-  uploadReferenceImage,
 } from "../actions";
 import { MediaLightbox } from "@/components/media-lightbox";
+import { MediaUploadPanel } from "@/components/media-upload-panel";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/dates";
 import {
@@ -240,17 +240,11 @@ export default async function ReferenceDetailPage({
         </article>
 
         <section className="stack">
-          <form action={uploadReferenceImage} className="panel form-stack">
-            <p className="panel-kicker">Add images</p>
-            <input name="reference_id" type="hidden" value={reference.id} />
-            <label className="drop-field">
-              <span>Drop or select jpg, png, or webp images</span>
-              <input accept="image/jpeg,image/png,image/webp" multiple name="images" required type="file" />
-            </label>
-            <button className="button" type="submit">
-              Upload images
-            </button>
-          </form>
+          <MediaUploadPanel
+            hasPrimaryImage={Boolean(reference.primary_media_id)}
+            recordId={reference.id}
+            recordKind="reference"
+          />
 
           <form action={linkReferenceToProject} className="panel form-stack">
             <p className="panel-kicker">Project link</p>
@@ -276,7 +270,7 @@ export default async function ReferenceDetailPage({
 
       <section className="section-block">
         <div className="section-heading">
-          <h2>Media</h2>
+          <h2>Gallery media</h2>
           <span className="record-meta">{mediaItems.length} images</span>
         </div>
         <MediaLightbox items={mediaItems} />
@@ -339,7 +333,7 @@ export default async function ReferenceDetailPage({
                   <input name="reference_id" type="hidden" value={reference.id} />
                   <input name="media_id" type="hidden" value={item.id} />
                   <button className="text-button" type="submit">
-                    Set primary
+                    Set as cover
                   </button>
                 </form>
                 <form action={unlinkReferenceMedia}>
