@@ -13,6 +13,7 @@ The application is intentionally restrained: white and light neutral surfaces, d
 - Supabase browser and server clients in `lib/supabase`.
 - Supabase session refresh proxy in `proxy.ts` and `lib/supabase/proxy.ts`.
 - Initial Supabase schema migration in `supabase/migrations`.
+- Initial Vercel production deployment is configured.
 
 Primary routes:
 
