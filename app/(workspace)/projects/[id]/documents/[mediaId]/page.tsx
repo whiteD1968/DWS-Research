@@ -26,10 +26,10 @@ export default async function ProjectDocumentPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ projectId: string; mediaId: string }>;
+  params: Promise<{ id: string; mediaId: string }>;
   searchParams?: PageSearchParams;
 }) {
-  const { projectId, mediaId } = await params;
+  const { id: projectId, mediaId } = await params;
   const supabase = await createClient();
   const updated = await getSearchParam(searchParams, "updated");
   const linked = await getSearchParam(searchParams, "linked");

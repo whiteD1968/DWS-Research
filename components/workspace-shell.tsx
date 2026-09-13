@@ -7,6 +7,7 @@ import { CapturePanel } from "@/components/capture-panel";
 
 const navItems = [
   { href: "/", label: "Today" },
+  { href: "/discover", label: "Discover" },
   { href: "/projects", label: "Projects" },
   { href: "/research", label: "Research" },
   { href: "/atlas", label: "Atlas" },
