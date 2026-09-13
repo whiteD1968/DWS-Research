@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { runDiscover, importDiscover } from "@/app/(workspace)/discover/actions";
 import type { DiscoverFilters, ResearchSession } from "@/lib/discover/types";
+import { discoverMode, rankDiscoverResults } from "@/lib/discover/rank";
+import { DiscoverResultCard } from "@/components/discover-result-card";
 
 export function DiscoverWorkspace({ initial, collections, matches = {} }: {
   initial?: ResearchSession; collections: { id: string; title: string }[]; matches?: Record<string, string>;
@@ -21,7 +23,12 @@ export function DiscoverWorkspace({ initial, collections, matches = {} }: {
   const [collectionId, setCollectionId] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [destination, setDestination] = useState<string | null>(null);
-  const results = initial?.result_snapshot ?? [];
+  const mode = discoverMode(filters.contentType);
+  const results = useMemo(() => {
+    if (!initial) return [];
+    // Reopening preserves the snapshot; changing mode locally previews a different order.
+    return mode === discoverMode(initial.filters.contentType) ? initial.result_snapshot : rankDiscoverResults(initial.result_snapshot, initial.query, mode);
+  }, [initial, mode]);
 
   function save(toCollection: boolean) {
     if (!initial) return;
@@ -53,13 +60,17 @@ export function DiscoverWorkspace({ initial, collections, matches = {} }: {
       <label htmlFor="research-question">Research question</label>
       <textarea id="research-question" required maxLength={400} value={query} onChange={event => setQuery(event.target.value)}
         placeholder="Find architectural projects using robotic 3D printing with stone, concrete, clay, or bio-based materials..." />
+      <div className="discover-modes" role="group" aria-label="Content mode">
+        {[["all", "All"], ["project", "Projects"], ["paper", "Papers"], ["lab", "Labs"], ["video", "Videos"]].map(([value, label]) =>
+          <button type="button" key={value} aria-pressed={mode === value} disabled={pending}
+            onClick={() => setFilters({ ...filters, contentType: value })}>{label}</button>)}
+      </div>
       <div className="discover-query-footer"><div className="discover-filters">
-        <label>Date range<select value={filters.freshness} onChange={event => setFilters({ ...filters, freshness: event.target.value })}>
+        <label>Date range<select disabled={Boolean(filters.yearFrom || filters.yearTo)} value={filters.freshness} onChange={event => setFilters({ ...filters, freshness: event.target.value })}>
           <option value="">Any time</option><option value="pd">Past day</option><option value="pw">Past week</option><option value="pm">Past month</option><option value="py">Past year</option>
         </select></label>
-        <label>Content<select value={filters.contentType} onChange={event => setFilters({ ...filters, contentType: event.target.value })}>
-          <option value="">All content</option>{["project", "paper", "studio", "lab", "video", "image"].map(value => <option key={value} value={value}>{value}</option>)}
-        </select></label>
+        <label>From year<input type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearFrom ?? ""} onChange={event => setFilters({ ...filters, yearFrom: event.target.value })} /></label>
+        <label>To year<input type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearTo ?? ""} onChange={event => setFilters({ ...filters, yearTo: event.target.value })} /></label>
         <label>Focus<select value={filters.topic} onChange={event => setFilters({ ...filters, topic: event.target.value })}>
           <option value="">All disciplines</option>{["architecture", "fabrication", "materials"].map(value => <option key={value}>{value}</option>)}
         </select></label>
@@ -77,6 +88,7 @@ export function DiscoverWorkspace({ initial, collections, matches = {} }: {
         <strong>{selected.length} selected</strong>
         <button className="button" disabled={pending} onClick={() => save(false)}>Save as references</button>
         <button className="button" disabled={pending} onClick={() => setCollectionMode(!collectionMode)}>Add to collection</button>
+        <button className="text-button" disabled={pending} onClick={() => setSelected([])}>Clear</button>
         {collectionMode && <div className="discover-collection">
           <label>Collection<select value={collectionId} onChange={event => setCollectionId(event.target.value)}>
             <option value="">Create new collection</option>{collections.map(collection => <option key={collection.id} value={collection.id}>{collection.title}</option>)}
@@ -85,22 +97,9 @@ export function DiscoverWorkspace({ initial, collections, matches = {} }: {
           <button className="button" disabled={pending} onClick={() => save(true)}>Save to collection</button>
         </div>}
       </div>}
-      <div className="discover-grid">{results.map(result => <article key={result.id} className={selected.includes(result.id) ? "discover-result is-selected" : "discover-result"}>
-        <div className="discover-image">
-          {(result.thumbnailUrl || result.imageUrl) ?
-            // External previews are never promoted to stored library media.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={result.thumbnailUrl || result.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = "none"; }} /> : <span>{result.sourceName || "No image"}</span>}
-          <label className="discover-check"><input type="checkbox" aria-label={`Select ${result.title}`} checked={selected.includes(result.id)} disabled={pending}
-            onChange={event => setSelected(previous => event.target.checked ? [...previous, result.id] : previous.filter(id => id !== result.id))} /></label>
-        </div>
-        <div className="discover-result-body"><small>{result.sourceName} &middot; {result.resultType}{result.publishedAt ? ` · ${result.publishedAt.slice(0, 10)}` : ""}</small>
-          <h3><a href={result.url} target="_blank" rel="noopener noreferrer">{result.title}</a></h3>
-          {result.creator && <p>{result.creator}</p>}{result.summary && <p className="discover-summary">{result.summary}</p>}
-          {result.relevanceReason && <p className="discover-relevance">{result.relevanceReason}</p>}
-          {saved[result.id] && <Link className="discover-existing" href={`/library/references/${saved[result.id]}`}>Already in library</Link>}
-        </div>
-      </article>)}</div>
+      <div className="discover-grid">{results.map(result => <DiscoverResultCard key={result.id} result={result}
+        selected={selected.includes(result.id)} disabled={pending} referenceId={saved[result.id]}
+        onSelect={checked => setSelected(previous => checked ? [...previous, result.id] : previous.filter(id => id !== result.id))} />)}</div>
     </>}
   </>;
 }

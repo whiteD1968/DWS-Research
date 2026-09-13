@@ -1,5 +1,6 @@
 import type { DiscoverFilters, DiscoverResult, SearchProvider } from "../types";
 import { normalizeUrl } from "../normalize";
+import { buildDiscoverQuery, discoverFreshness } from "../query";
 
 type WebResult = { title?: string; url?: string; description?: string; page_age?: string;
   profile?: { name?: string }; thumbnail?: { src?: string; original?: string } };
@@ -10,10 +11,11 @@ export class BraveSearchProvider implements SearchProvider {
     const key = process.env.BRAVE_SEARCH_API_KEY;
     if (!key) throw new Error("Web search is not configured. Ask the workspace administrator to configure the search provider.");
     const endpoint = new URL("https://api.search.brave.com/res/v1/web/search");
-    endpoint.searchParams.set("q", [query, filters.topic, filters.contentType].filter(Boolean).join(" "));
+    endpoint.searchParams.set("q", buildDiscoverQuery(query, filters));
     endpoint.searchParams.set("count", "20");
     endpoint.searchParams.set("text_decorations", "false");
-    if (filters.freshness) endpoint.searchParams.set("freshness", filters.freshness);
+    const freshness = discoverFreshness(filters);
+    if (freshness) endpoint.searchParams.set("freshness", freshness);
     const response = await fetch(endpoint, { headers: { "X-Subscription-Token": key }, cache: "no-store", signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(response.status === 429 ? "Search is busy. Please try again shortly." : "The search provider could not complete this search. Please try again.");
     const body = await response.json() as { web?: { results?: WebResult[] } };

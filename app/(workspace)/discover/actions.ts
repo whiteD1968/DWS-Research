@@ -6,6 +6,7 @@ import { searchDiscover } from "@/lib/discover/search";
 import type { DiscoverFilters, ResearchSession } from "@/lib/discover/types";
 import { revalidatePath } from "next/cache";
 import { normalizeUrl } from "@/lib/discover/normalize";
+import { createDiscoverSnapshot } from "@/lib/discover/snapshot";
 
 export async function runDiscover(query: string, filters: DiscoverFilters): Promise<{ session?: ResearchSession; error?: string }> {
   const user = await requireUser();
@@ -13,7 +14,7 @@ export async function runDiscover(query: string, filters: DiscoverFilters): Prom
     const results = await searchDiscover(query, filters);
     const db = await createClient();
     const { data, error } = await db.from("research_sessions").insert({ owner_id: user.id,
-      title: query.trim().slice(0, 120), query: query.trim(), filters, result_snapshot: results }).select().single();
+      title: query.trim().slice(0, 120), query: query.trim(), filters, result_snapshot: createDiscoverSnapshot(results) }).select().single();
     if (error) return { error: "Search completed, but the session could not be saved. Check that the Discover migration is installed and retry." };
     revalidatePath("/discover");
     return { session: data as ResearchSession };

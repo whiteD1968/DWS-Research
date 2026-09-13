@@ -1387,22 +1387,35 @@ select:focus {
 .discover-query-footer, .discover-filters, .discover-result-heading, .discover-selection, .discover-collection { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
 .discover-query-footer, .discover-result-heading { justify-content: space-between; margin-top: 20px; }
 .discover-filters label, .discover-collection label { display: grid; gap: 6px; font-size: 12px; color: #555; }
-.discover-filters select, .discover-collection select, .discover-collection input { max-width: 100%; border: 1px solid #ddd; background: white; padding: 8px; font: inherit; color: #222; }
+.discover-filters select, .discover-filters input, .discover-collection select, .discover-collection input { max-width: 100%; border: 1px solid #ddd; background: white; padding: 8px; font: inherit; color: #222; }
+.discover-filters input { width: 88px; }
+.discover-modes { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 20px; border-bottom: 1px solid #ddd; }
+.discover-modes button { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 0; color: #666; font: inherit; cursor: pointer; }
+.discover-modes button[aria-pressed="true"] { border-bottom-color: #222; color: #171717; }
 .discover-result-heading h2 { font-size: 18px; }
 .discover-result-heading button { margin-left: 16px; }
-.discover-selection { position: sticky; top: 0; z-index: 5; padding: 16px; background: #f1f4f1; border: 1px solid #c6cfc6; margin: 20px 0; }
+.discover-selection { position: sticky; top: 0; z-index: 5; padding: 10px 0; background: #fafafa; border-block: 1px solid #ddd; margin: 16px 0; font-size: 13px; }
 .discover-collection { flex-basis: 100%; }
-.discover-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; margin-top: 24px; }
-.discover-result { min-width: 0; outline: 1px solid #e3e3e3; }
+.discover-selection > .button { width: auto; min-height: 34px; padding: 6px 10px; }
+.discover-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 28px; margin-top: 24px; align-items: start; }
+.discover-result { min-width: 0; }
 .discover-result.is-selected { outline: 2px solid #365b46; }
-.discover-image { aspect-ratio: 4 / 3; position: relative; background: #eef0ee; display: grid; place-items: center; overflow: hidden; color: #727872; }
-.discover-image img { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+.discover-image { height: 290px; position: relative; background: #f0f1f0; display: grid; place-items: center; overflow: hidden; color: #727872; }
+.discover-image img { width: 100%; height: 100%; object-fit: contain; position: absolute; }
 .discover-check { position: absolute; top: 12px; left: 12px; padding: 5px; background: white; display: flex; }
 .discover-check input { width: 20px; height: 20px; margin: 0; accent-color: #365b46; }
-.discover-result-body { padding: 18px; overflow-wrap: anywhere; }
+.discover-result-body { padding: 16px 2px; overflow-wrap: anywhere; }
 .discover-result h3 { font-size: 20px; line-height: 1.35; margin: 12px 0; }
 .discover-result small, .discover-relevance { color: #666; font-size: 12px; }
-.discover-summary { font-size: 14px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.discover-summary { font-size: 13px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #666; }
+.discover-source { font-size: 13px; margin: 8px 0; }
+.discover-kind { text-transform: uppercase; }
+.discover-details { margin-top: 14px; font-size: 13px; line-height: 1.6; }
+.discover-details summary { cursor: pointer; color: #555; }
+.discover-details dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; }
+.discover-details dd { margin: 0; }
+.discover-details a { text-decoration: underline; }
+.discover-details pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
 .discover-existing { display: inline-block; margin-top: 12px; color: #365b46; font-size: 13px; }
 .discover-error { padding: 16px; background: #fff1f0; color: #852d29; }
 .discover-history { margin-top: 48px; }

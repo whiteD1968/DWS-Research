@@ -145,10 +145,41 @@ id, provider, origin, resultType, title, URL, optional subtitle, summary,
 sourceName, publishedAt, creator, location, imageUrl, thumbnailUrl,
 relevanceReason, and extensible metadata. The Brave adapter uses the documented
 [Web Search API](https://api-dashboard.search.brave.com/app/documentation/web-search/get-started).
-Content/discipline filters refine query terms, rather than guaranteeing a typed
-vertical search. Web pages are conservatively classified as articles; creator
-and publication details are left absent unless supplied. Relevance reflects
-provider ranking, not AI analysis. At most 20 results are returned per search.
+All, Projects, Papers, Labs, and Videos modes append a short OR-group to the
+original question and influence deterministic ranking. Topic adds a discipline
+term. Optional year bounds use Brave's custom freshness range and take precedence
+over relative freshness; this is provider page freshness, not verified publication
+year. At most 20 results are returned per search. No specialized image search is used.
+
+`rankDiscoverResults(results, query, mode)` separates classification/ranking from
+the provider and leaves a boundary for an optional future reranker. Classification
+checks video URLs, commercial paths/sales language, scholarly domains/publication
+language, project paths/case-study language, lab identity, vendors, and direct image
+URLs, in that order. General pages fall back to article or other. Legacy studio
+filters map to Labs and old sessions remain readable.
+
+Scores sum title/snippet query overlap (up to 45), architectural terms (12),
+fabrication terms (15), materials (10), project evidence (12), and modest source
+preferences (8). Mode adds 120 points for the preferred class, decreasing by 30
+per class tier. Projects favors project/lab/paper/article; Papers favors
+paper/lab/article/project; Labs favors lab/project/paper; Videos favors video.
+Each commercial, generic guide, consumer-printing, or weak-query signal subtracts
+12. Scores are ranking weights, not percentages or confidence estimates. Ties
+retain provider order. Metadata records the breakdown, evidence, source type,
+penalties, and ranking version. Source indicators and classifications are
+heuristic, not verified authority or AI analysis.
+
+Mode changes reorder the current review set locally without a provider call or
+clearing selection. Search again stores a new snapshot using that mode. Reopening
+an existing session preserves its stored order and import mapping. Cards use a
+290px neutral image area with `object-fit: contain`, original-image preference,
+thumbnail fallback, two-line snippets, short relevance signals, and native
+expandable detail/metadata sections.
+
+`createDiscoverSnapshot` explicitly allowlists normalized fields and scoring
+metadata at the storage boundary; raw provider payloads are excluded. This is the
+place to reduce retained data if provider terms change. No session schema or
+import RPC changes are required for this milestone.
 
 Sessions store the original query, filters, normalized results, timestamps,
 status, and a result-ID-to-reference-ID map. They have owner-scoped RLS and an
@@ -170,7 +201,10 @@ No remote images are fetched by the server or copied into Storage.
 
 Validation: `node --test --test-isolation=none tests/discover.cjs` exercises URL
 normalization, filter validation, partial provider records, duplicates, missing
-keys, and provider failures with fixture responses. Live search requires a Brave
+keys, provider failures, classification, mode ranking, and snapshot filtering with
+fixture responses. Fixtures for the five milestone queries show projects ahead of
+printer guides, papers first in Papers, and labs first in Labs. These are not live
+Brave quality measurements. Live search requires a Brave
 key; authenticated persistence/import checks require the migration and a signed-in
 test account. Run install, lint, typecheck, and build as above.
 
