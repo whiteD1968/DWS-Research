@@ -15,6 +15,6 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const library = await discoverLibrary(user.id, session.result_snapshot);
   return <div className="discover-page"><Link href="/discover">Discover</Link><h1>Research session</h1>
     <p>{new Date(session.created_at).toLocaleString("en-US")}</p>
-    <DiscoverWorkspace key={id} initial={session} collections={library.collections} matches={library.matches} />
+    <DiscoverWorkspace key={id} initial={session} collections={library.collections} matches={library.matches} topics={library.topics} />
   </div>;
 }

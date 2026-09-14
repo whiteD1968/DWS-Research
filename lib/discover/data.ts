@@ -5,6 +5,7 @@ import type { DiscoverResult } from "./types";
 export async function discoverLibrary(ownerId: string, results: DiscoverResult[] = []) {
   const db = await createClient();
   const { data: collections, error } = await db.from("collections").select("id,title").eq("owner_id", ownerId).order("title");
+  const { data: topics } = await db.from("research_threads").select("id,title").eq("owner_id", ownerId).order("title");
   // Exact normalized titles and canonical URLs deliberately avoid fuzzy false positives.
   const matches: Record<string, string> = {};
   if (results.length) {
@@ -24,5 +25,5 @@ export async function discoverLibrary(ownerId: string, results: DiscoverResult[]
       offset += 500;
     }
   }
-  return { collections: collections ?? [], matches, error: error ? "Collections could not be loaded." : undefined };
+  return { collections: collections ?? [], topics: topics ?? [], matches, error: error ? "Collections could not be loaded." : undefined };
 }

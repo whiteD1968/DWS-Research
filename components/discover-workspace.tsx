@@ -7,9 +7,10 @@ import { runDiscover, importDiscover } from "@/app/(workspace)/discover/actions"
 import type { DiscoverFilters, ResearchSession } from "@/lib/discover/types";
 import { discoverMode, rankDiscoverResults } from "@/lib/discover/rank";
 import { DiscoverResultCard } from "@/components/discover-result-card";
+import { DiscoverTopicAction } from "@/components/discover-topic-action";
 
-export function DiscoverWorkspace({ initial, collections, matches = {} }: {
-  initial?: ResearchSession; collections: { id: string; title: string }[]; matches?: Record<string, string>;
+export function DiscoverWorkspace({ initial, collections, matches = {}, topics = [] }: {
+  initial?: ResearchSession; collections: { id: string; title: string }[]; matches?: Record<string, string>; topics?: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState(initial?.query ?? "");
@@ -79,6 +80,7 @@ export function DiscoverWorkspace({ initial, collections, matches = {} }: {
     {error && <p className="discover-error" role="alert">{error}</p>}
     {message && <p role="status">{message} {destination && <Link href={`/collections/${destination}`}>Open collection</Link>}</p>}
     {initial && <>
+      <DiscoverTopicAction sessionId={initial.id} selected={selected} topics={topics} onSaved={items => setSaved(previous => ({ ...previous, ...items }))} />
       <div className="discover-result-heading"><h2>{results.length} results</h2><div>
         <button className="text-button" disabled={pending} onClick={() => setSelected(results.map(result => result.id))}>Select all</button>
         <button className="text-button" disabled={pending} onClick={() => setSelected([])}>Clear selection</button>

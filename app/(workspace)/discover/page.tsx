@@ -10,7 +10,7 @@ export default async function DiscoverPage() {
   const { data, error } = await db.from("research_sessions").select("id,title,created_at,result_snapshot,saved_items")
     .eq("owner_id", user.id).order("created_at", { ascending: false }).limit(12);
   const library = await discoverLibrary(user.id);
-  return <div className="discover-page"><h1>Discover</h1><DiscoverWorkspace collections={library.collections} />
+  return <div className="discover-page"><h1>Discover</h1><DiscoverWorkspace collections={library.collections} topics={library.topics} />
     {(error || library.error) && <p role="status">Research history is unavailable. Check the Discover migration and connection.</p>}
     <section className="discover-history"><h2>Recent research</h2>
       {!error && !data?.length && <p>No research sessions yet.</p>}

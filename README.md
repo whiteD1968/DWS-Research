@@ -213,6 +213,75 @@ introduce opt-in enrichment jobs storing versioned output in metadata; pass the
 session's saved reference IDs to a future board creation action. AI enrichment,
 semantic search, remote image import, pagination, and board generation are deferred.
 
+## Research Topics
+
+Research Topics use `research_threads`, separate from design Projects. Routes:
+`/research`, `/research/[id]`, and `/research/[id]/edit`. The index shows current
+topics and offers an archived view. Title, central question, scope, and status
+are editable; no migration or new environment variables are required.
+
+The workspace has Overview, Discover, Literature, Precedents, Notes, Themes,
+Collections, Boards, and Linked Projects views. Existing records are linked,
+never copied. Literature uses scholarly/documentary reference types and PDFs;
+remaining references appear in Precedents. Mark an item `key_source` in its
+review to feature it on Overview. Library primary images provide visual previews.
+
+Relationships originate at `source_type='research_thread'` and the topic ID:
+
+- `has_reference` targets `reference`.
+- `has_document` targets PDF `media`.
+- `has_discover_session` targets `research_session`.
+- `informs_project` targets `project`, also surfaced on Project detail.
+- `has_collection` / `has_board` target their existing records.
+- `has_theme` targets a reusable `tag`; its `note` stores the topic-specific
+  theme description. The tag's name supplies the theme title.
+
+Literature review fields live in the topic-to-reference/document relationship's
+metadata: `review_status`, `relevance_note`, `key_argument`, `methodology`,
+`findings`, `limitations`, `research_gap`, and `reviewed_at`. Global reference
+fields are untouched, so interpretations remain independent across topics.
+
+Theme members originate at `source_type='research_topic_theme'` with the
+topic-to-tag relationship ID, using `includes` to target references, PDFs,
+Projects, or topic notes. This keeps theme membership separate even when two
+topics use the same tag name. Unlinking topic records also removes their theme
+memberships within that topic. Unlinking never deletes the source record or tag.
+
+Notes use `parent_type='research_thread'` and `parent_id=topic.id`. Plain text is
+the current editing surface; existing content JSONB is retained for a future rich
+editor. Note deletion is explicit and also removes theme links to that note.
+
+Discover's Add to Research Topic accepts an existing topic or creates a new one.
+With no selection it links the session; with selected results it invokes the
+existing deduplicating import RPC and then links the imported references plus
+the session. Import and topic linking are separate writes: a linking failure
+leaves imported library records intact and reports a retryable error. The UI
+retains a newly created topic ID for retry. Unique relationships prevent repeated
+membership links. Original session provenance and saved-reference mapping remain.
+
+Security: all new reads/writes use the signed-in Supabase client and explicit
+owner filters. Link actions validate both topic and target ownership; theme
+membership also requires topic membership. Read-only live policy inspection on
+2026-09-14 confirmed owner-scoped RLS on research_threads, relationships, notes,
+tags, and research_sessions, including UPDATE ownership checks. No live database
+data or schema was changed by development validation.
+
+`node --test --test-isolation=none tests/research.cjs tests/discover.cjs` tests the
+server actions against an in-memory client, including ownership rejection,
+deduplication, review isolation, rich note retention, theme cleanup, and Discover
+retry behavior. This is not a substitute for authenticated live persistence tests.
+Local fixture rendering verifies workspace and review controls; the temporary
+fixture route is not shipped. Local Supabase credentials are still needed for
+end-to-end authenticated create/link/reload testing.
+
+Current limits: selectors load owner records in batches rather than searchable
+server-side pagination; recent activity lists membership creation rather than a
+complete audit trail; themes share tag titles but have topic-specific descriptions;
+board association opens the existing Boards area. Multi-step writes are not one
+transaction. No AI synthesis, clustering, rich editor, or Board generation is added.
+Next: validate real topic workflows, then add literature comparison/export and
+searchable record pickers before opt-in, versioned AI synthesis.
+
 ## Deferred Packages
 
 This milestone intentionally does not include tldraw, BlockNote, React Flow, PDF.js, Uppy, or AI packages.

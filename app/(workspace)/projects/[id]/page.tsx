@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProjectResearchTopics } from "@/components/project-research-topics";
 import { notFound } from "next/navigation";
 import {
   linkReferenceToProject,
@@ -247,6 +248,7 @@ export default async function ProjectDetailPage({
         </div>
       </section>
 
+      <ProjectResearchTopics projectId={project.id} />
       <nav className="mode-tabs" aria-label="Project working modes">
         {projectModes.map((item) => (
           <Link
