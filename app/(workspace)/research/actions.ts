@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser, getFormValue } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { topicLinks, topicModes, topicStatuses, reviewFields, type TopicRecordType } from "@/lib/research";
+import { researchTypes } from "@/lib/research-organization";
 
 export async function manageTopic(form: FormData) {
   const user = await requireUser();
@@ -26,17 +27,29 @@ export async function manageTopic(form: FormData) {
       const status = getFormValue(form, "status") ?? "active";
       if (!title || title.length > 200 || !topicStatuses.includes(status)) throw new Error("Enter a title and valid status.");
       const values = { title, question: getFormValue(form, "question"), summary: getFormValue(form, "summary"), status };
+      const researchType = getFormValue(form, "research_type") ?? "Other";
+      const researchArea = getFormValue(form, "research_area");
+      if (!researchTypes.includes(researchType) || (researchArea?.length ?? 0) > 160) throw new Error("Choose a valid Research Type and Area.");
+      const organization = { research_area: researchArea, research_type: researchType };
       if (op === "create") {
-        const { data, error } = await db.from("research_threads").insert({ ...values, owner_id: user.id }).select("id").single();
+        const { data, error } = await db.from("research_threads").insert({ ...values, metadata: organization, owner_id: user.id }).select("id").single();
         if (error || !data) throw new Error("Unable to create topic.");
         topicId = data.id;
       } else {
-        await owned("research_threads", topicId);
-        checked(await db.from("research_threads").update(values).eq("id", topicId).eq("owner_id", user.id));
+        const current = await owned("research_threads", topicId);
+        checked(await db.from("research_threads").update({ ...values, metadata: { ...current.metadata, ...organization } }).eq("id", topicId).eq("owner_id", user.id));
       }
     } else {
       await owned("research_threads", topicId);
-      if (op === "link") {
+      if (op === "document-edit") {
+        const link = await owned("relationships", getFormValue(form, "link_id"));
+        if (link.source_type !== "research_thread" || link.source_id !== topicId || link.relationship_type !== "has_document" || link.target_type !== "media") throw new Error("Document link unavailable.");
+        const media = await owned("media", link.target_id);
+        const title = getFormValue(form, "title");
+        if (!title || title.length > 200 || media.mime_type !== "application/pdf") throw new Error("Enter a document title.");
+        checked(await db.from("media").update({ title, metadata: { ...media.metadata, document_type: getFormValue(form, "document_type") } }).eq("id", media.id).eq("owner_id", user.id));
+        revalidatePath("/library");
+      } else if (op === "link") {
         const type = getFormValue(form, "record_type") as TopicRecordType;
         if (!Object.hasOwn(topicLinks, type)) throw new Error("Unsupported record type.");
         const target = await owned(topicLinks[type].table, getFormValue(form, "record_id"));

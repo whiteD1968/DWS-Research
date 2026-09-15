@@ -14,7 +14,7 @@ export const topicLinks = {
 export type TopicRecordType = keyof typeof topicLinks;
 export type Topic = { id: string; title: string; question: string | null; summary: string | null; status: string; updated_at: string; metadata: Record<string, unknown> };
 export type TopicLink = { id: string; source_id: string; source_type: string; target_id: string; target_type: string; relationship_type: string; note: string | null; metadata: Record<string, unknown>; created_at: string };
-export type ResearchRecord = { id: string; title: string | null; name?: string; reference_type?: string; media_type?: string; mime_type?: string; primary_media_id?: string; cover_media_id?: string; bucket?: string; storage_path?: string; plain_text?: string; parent_type?: string; parent_id?: string; query?: string; created_at?: string; filters?: { contentType?: string }; result_snapshot?: unknown[]; saved_items?: Record<string, string> };
+export type ResearchRecord = { id: string; title: string | null; name?: string; reference_type?: string; media_type?: string; mime_type?: string; original_filename?: string; byte_size?: number; metadata?: Record<string, unknown>; primary_media_id?: string; cover_media_id?: string; bucket?: string; storage_path?: string; plain_text?: string; parent_type?: string; parent_id?: string; query?: string; created_at?: string; filters?: { contentType?: string }; result_snapshot?: unknown[]; saved_items?: Record<string, string> };
 
 export async function ownerRows<T>(table: string, ownerId: string): Promise<T[]> {
   const db = await createClient();

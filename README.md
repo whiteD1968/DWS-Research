@@ -220,6 +220,44 @@ Research Topics use `research_threads`, separate from design Projects. Routes:
 topics and offers an archived view. Title, central question, scope, and status
 are editable; no migration or new environment variables are required.
 
+Research Area (broad family) and Research Type (kind of inquiry) are stored in
+`research_threads.metadata.research_area` and `research_type`. Topic edits merge
+these keys while preserving other metadata. The nine Type choices are Fabrication,
+Materials, Computation / AI, Historical / Theoretical, Structural / Geometric,
+Product / Tool Development, Teaching / Pedagogy, Literature Review, and Other.
+The Research index groups by Area with lightweight Status/Area/Type filters.
+Unassigned topics remain visible under Unassigned area. Cards show Type, Status,
+the primary question, and counts. Topic headers show Area / Type / Status above
+the title and question; the full question remains available in Overview.
+
+Literature now has an in-place Upload PDF panel alongside existing record links.
+Files go directly from the authenticated browser to the private research-documents
+bucket at `<owner-id>/research/<topic-id>/<upload-uuid>-<sanitized-filename>`.
+No Project is required. Multiple files are staged with editable titles, sizes,
+per-file states, indeterminate upload/saving progress, and individual errors.
+The panel refreshes server data only after the batch, without a full-page reload.
+
+Server actions validate topic ownership and uploaded PDF MIME type, size, and
+header before creating media and has_document links. The upload UUID is also the
+media ID, so finalization retries reuse the same document. Empty titles derive
+from filenames. Files are limited to 20 MB each by the application. Phase status
+is shown rather than a fabricated byte percentage. Retry state survives the
+in-place refresh but not closing/reloading the browser tab. Abandoned uploads
+can leave private unlinked objects; no automatic deletion policy is introduced.
+
+Documents display title, filename, size, upload date, document type, and the
+topic-specific relevance note. Open PDF uses the existing expiring signed URL in
+a new tab, leaving the Topic open. Title/document type edits belong to the media
+record; review status and all literature-review fields remain on the topic link.
+Unlinking retains both media and its Storage object.
+
+Read-only inspection on 2026-09-15 confirmed research-documents is private and
+its Storage policies enforce the owner folder. No production schema changes were
+made. Tests cover organization metadata retention, PDF validation, multi-document
+finalization/retries, metadata editing, and unlink preservation using a mock
+client. Live authenticated upload/open/reload testing still requires local
+Supabase credentials. No new packages or environment variables were introduced.
+
 The workspace has Overview, Discover, Literature, Precedents, Notes, Themes,
 Collections, Boards, and Linked Projects views. Existing records are linked,
 never copied. Literature uses scholarly/documentary reference types and PDFs;

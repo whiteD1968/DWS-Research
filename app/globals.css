@@ -1457,3 +1457,16 @@ select:focus {
 .research-theme { border-top: 1px solid var(--border); padding-top: 20px; }
 @media (max-width: 1050px) { .research-index, .research-visual-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .research-index, .research-visual-grid { grid-template-columns: minmax(0, 1fr); } .research-tabs { gap: 12px; font-size: 13px; } .research-workspace .page-title { font-size: 28px; overflow-wrap: anywhere; } }
+.research-area-heading { text-transform: uppercase; font-size: 15px !important; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.topic-primary-question { font-size: 18px; max-width: 75ch; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.topic-documents { border-top: 2px solid var(--border); padding-top: 16px; }
+.topic-document-info { font-size: 13px; color: var(--text-muted); }
+.topic-document-info details { margin-block: 14px; }
+.topic-pdf-upload { max-width: 900px; }
+.topic-pdf-upload .drop-field { margin-block: 16px; }
+.topic-pdf-staged { padding: 14px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; flex-wrap: wrap; gap: 14px; overflow-wrap: anywhere; }
+.topic-pdf-staged > div { flex: 1 1 230px; min-width: 0; }
+.topic-pdf-staged small { display: block; margin-top: 5px; }
+.topic-pdf-staged label { display: grid; gap: 5px; max-width: 100%; font-size: 13px; }
+.topic-pdf-staged input { max-width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); }
+.topic-pdf-upload > button { margin-top: 14px; }

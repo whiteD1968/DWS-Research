@@ -2,6 +2,9 @@ import Link from "next/link";
 import { manageTopic } from "@/app/(workspace)/research/actions";
 import { isLiterature, reviewFields, topicLinks, topicModes, type Topic, type TopicLink, type ResearchRecord, type TopicRecordType, type topicContext } from "@/lib/research";
 import { getSignedMediaUrlMap } from "@/lib/media";
+import { researchArea, researchType } from "@/lib/research-organization";
+import { TopicPdfUpload } from "@/components/topic-pdf-upload";
+import { documentBytes } from "@/lib/topic-pdf";
 
 export async function ResearchTopicWorkspace({ topic, context, mode, error, saved }: {
   topic: Topic; context: Awaited<ReturnType<typeof topicContext>>; mode: string; error?: string; saved?: boolean;
@@ -38,6 +41,12 @@ export async function ResearchTopicWorkspace({ topic, context, mode, error, save
         <img src={image} alt="" /> : <span>{record.reference_type || "Reference"}</span>}</div>}
         <div className="research-item-heading"><div><small>{record.reference_type || link.target_type.replace("_", " ")}</small><h3>{href ? <a href={href} target={link.target_type === "media" ? "_blank" : undefined} rel="noreferrer">{record.title || record.query || "Untitled"}</a> : record.title}</h3></div>{unlink(link)}</div>
         {link.target_type === "research_session" && <p className="research-counts">{record.created_at?.slice(0, 10)} &middot; {record.filters?.contentType || "All"} &middot; {record.result_snapshot?.length ?? 0} results &middot; {Object.keys(record.saved_items ?? {}).length} saved</p>}
+        {link.target_type === "media" && <div className="topic-document-info"><p>{record.original_filename} &middot; {documentBytes(record.byte_size ?? 0)} &middot; {record.created_at?.slice(0, 10)}</p>
+          {typeof record.metadata?.document_type === "string" && <small>{record.metadata.document_type}</small>}
+          {typeof link.metadata.relevance_note === "string" && <p>{link.metadata.relevance_note}</p>}
+          {href ? <a className="text-button" href={href} target="_blank" rel="noreferrer">Open PDF</a> : <p>PDF link unavailable. Refresh to try again.</p>}
+          <details><summary>Edit metadata</summary><form action={manageTopic} className="form-stack research-form">{hidden("document-edit")}<input type="hidden" name="link_id" value={link.id} /><label className="field">Document title<input name="title" required maxLength={200} defaultValue={record.title ?? ""} /></label><label className="field">Document type<input name="document_type" defaultValue={typeof record.metadata?.document_type === "string" ? record.metadata.document_type : ""} placeholder="Paper, thesis, report..." /></label><button className="button">Save metadata</button></form></details>
+        </div>}
         {reviews && review(link)}
       </article>;
     })}{!items.length && <p>No linked records yet.</p>}</div>;
@@ -49,14 +58,14 @@ export async function ResearchTopicWorkspace({ topic, context, mode, error, save
   const literature = referenceLinks.filter(link => { const record = recordFor(link); return record && isLiterature(record); });
   const precedents = referenceLinks.filter(link => !literature.includes(link));
   const simpleType = ({ collections: "collection", boards: "board", projects: "project" } as Record<string, TopicRecordType>)[mode];
-  return <div className="research-workspace"><Link href="/research">Research</Link><header className="page-header"><div><p className="eyebrow">Research topic &middot; {topic.status}</p><h1 className="page-title">{topic.title}</h1></div><Link className="button" href={`/research/${topic.id}/edit`}>Edit topic</Link></header>
+  return <div className="research-workspace"><Link href="/research">Research</Link><header className="page-header"><div><p className="eyebrow">{researchArea(topic.metadata)} &middot; {researchType(topic.metadata)} &middot; {topic.status}</p><h1 className="page-title">{topic.title}</h1>{topic.question && <p className="topic-primary-question">{topic.question}</p>}</div><Link className="button" href={`/research/${topic.id}/edit`}>Edit topic</Link></header>
     {error && <p className="notice notice-error" role="alert">{error}</p>}{saved && <p className="notice notice-success" role="status">Saved.</p>}
     <nav className="research-tabs" aria-label="Topic views">{topicModes.map(tab => <Link key={tab} href={`/research/${topic.id}?mode=${tab}`} aria-current={mode === tab ? "page" : undefined}>{tab === "projects" ? "Linked Projects" : tab[0].toUpperCase() + tab.slice(1)}</Link>)}</nav>
     {mode === "overview" && <><section className="research-scope"><h2>{topic.question || "Research question"}</h2><p>{topic.summary || "No scope recorded yet."}</p><div className="research-counts"><span>{referenceLinks.length} references</span><span>{members("media").length} documents</span><span>{members("research_session").length} Discover sessions</span><span>{notes.length} notes</span></div></section>
       <section><h2>Key references and precedents</h2>{recordList(referenceLinks.filter(link => link.metadata.review_status === "key_source"), true)}</section><section><h2>Linked Projects</h2>{recordList(members("project"))}</section>
       <section><h2>Recent activity</h2><div className="research-list">{links.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8).map(link => <p key={link.id}>{recordFor(link)?.title || recordFor(link)?.name || "Record"} &middot; {link.relationship_type.replaceAll("_", " ")} &middot; {link.created_at.slice(0, 10)}</p>)}</div><small>Topic updated {new Date(topic.updated_at).toLocaleString("en-US")}</small></section></>}
     {mode === "discover" && <><Link className="button" href="/discover">New Discover search</Link>{addExisting("research_session")}{recordList(members("research_session"))}</>}
-    {mode === "literature" && <><div className="research-tools">{addExisting("reference", isLiterature)}{addExisting("media", record => record.mime_type === "application/pdf")}<Link href="/discover">Add from Discover</Link></div>{recordList(literature, false, true)}<h2>Documents</h2>{recordList(members("media"), false, true)}</>}
+    {mode === "literature" && <>{!literature.length && !members("media").length && <p>No literature or research documents linked yet.</p>}<TopicPdfUpload topicId={topic.id} /><div className="research-tools">{addExisting("reference", isLiterature)}{addExisting("media", record => record.mime_type === "application/pdf")}<Link href="/discover">Add from Discover</Link></div><h2>References / Literature Sources</h2>{recordList(literature, false, true)}<section className="topic-documents"><h2>Documents</h2>{recordList(members("media"), false, true)}</section></>}
     {mode === "precedents" && <><div className="research-tools">{addExisting("reference", record => !isLiterature(record))}<Link href="/discover">Add from Discover</Link></div>{recordList(precedents, true, true)}</>}
     {mode === "notes" && <><details className="research-create"><summary>+ New note</summary>{noteForm()}</details>{notes.map(note => <article className="research-item" key={note.id}><h3>{note.title || "Untitled note"}</h3><p className="research-note-text">{note.plain_text}</p><details><summary>Edit note</summary>{noteForm(note)}</details><form action={manageTopic}>{hidden("note-delete")}<input type="hidden" name="note_id" value={note.id} /><button className="text-button">Delete note</button></form></article>)}{!notes.length && <p>No notes yet.</p>}</>}
     {mode === "themes" && <><details className="research-create"><summary>+ New theme</summary><form action={manageTopic} className="form-stack research-form">{hidden("theme")}<label className="field">Title<input name="title" required maxLength={200} /></label><label className="field">Description<textarea name="description" rows={3} /></label><button className="button">Create theme</button></form></details>
