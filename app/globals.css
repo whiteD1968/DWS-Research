@@ -1470,3 +1470,37 @@ select:focus {
 .topic-pdf-staged label { display: grid; gap: 5px; max-width: 100%; font-size: 13px; }
 .topic-pdf-staged input { max-width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); }
 .topic-pdf-upload > button { margin-top: 14px; }
+
+.board-form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-block: 16px; }
+.board-create { border-block: 1px solid #ddd; padding: 24px 0; margin-top: 24px; }
+.board-create label, .board-details label, .board-conversion label { display: grid; gap: 8px; }
+.board-create input:not([type=checkbox]), .board-create select, .board-picker input, .board-picker select, .board-details input, .board-details textarea, .board-conversion input, .board-conversion textarea { padding: 10px; border: 1px solid #ccc; border-radius: 3px; min-width: 0; max-width: 100%; background: white; color: #222; }
+.board-selection { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); max-height: 480px; overflow: auto; gap: 0 24px; }
+.board-selection label { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #ddd; padding: 16px 0; min-width: 0; overflow-wrap: anywhere; }
+.board-selection img { width: 64px; height: 64px; object-fit: contain; }
+.board-selection small, .board-picker small { display: block; color: #777; font-size: 11px; margin-bottom: 4px; }
+.board-list { margin-top: 32px; }
+.board-list a { display: grid; gap: 8px; border-top: 1px solid #ddd; padding: 24px 0; }
+.board-list small, .board-list span { color: #666; font-size: 13px; }
+.board-workspace { height: 100dvh; display: flex; flex-direction: column; position: relative; background: #f7f7f6; color: #222; }
+.board-header { min-height: 64px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 10px 20px; background: white; border-bottom: 1px solid #ddd; z-index: 2; }
+.board-header > a, .board-header > span { font-size: 12px; }
+.board-header > span { color: #666; }
+.board-title { flex: 1 1 180px; min-width: 0; text-align: left; border: 0; background: transparent; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.board-header select { max-width: 160px; padding: 8px; background: white; border: 1px solid #ddd; }
+.board-surface { flex: 1; min-height: 0; position: relative; }
+.research-board-card { background: white; border: 1px solid #c9c9c9; border-radius: 2px; overflow: hidden; display: flex; flex-direction: column; pointer-events: all; }
+.research-board-card img { width: 100%; height: 62%; flex-shrink: 1; min-height: 0; object-fit: contain; background: #f4f4f3; }
+.research-board-card > div { padding: 14px; overflow: hidden; flex: 1; min-height: 72px; }
+.research-board-card small { display: block; text-transform: uppercase; color: #777; font-size: 10px; margin-bottom: 7px; }
+.research-board-card strong { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font: 600 16px/1.3 Georgia, serif; overflow-wrap: anywhere; }
+.research-board-card p { font-size: 12px; line-height: 1.5; margin: 8px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.board-picker, .board-details { position: absolute; top: 75px; right: 16px; width: 340px; max-width: calc(100% - 32px); max-height: calc(100% - 150px); overflow: auto; z-index: 500; background: white; border: 1px solid #ccc; padding: 20px; display: grid; gap: 12px; box-shadow: 0 4px 20px #0001; }
+.board-picker-results { display: grid; }
+.board-picker-results button { padding: 12px 0; background: white; border: 0; border-bottom: 1px solid #eee; text-align: left; overflow-wrap: anywhere; }
+.board-conversion { position: absolute; inset: 0; z-index: 600; background: #0004; display: grid; place-items: center; }
+.board-conversion form { width: 440px; max-width: calc(100% - 32px); max-height: 90%; overflow: auto; padding: 24px; background: white; display: grid; gap: 16px; }
+.board-conversion textarea { min-height: 150px; }
+.board-error { padding: 12px 20px; font-size: 13px; background: #fff3ed; display: flex; gap: 16px; align-items: center; z-index: 510; }
+.board-error button { margin-left: auto; }
+@media (max-width: 600px) { .board-header { gap: 8px; padding: 8px; } .board-title { flex-basis: 55%; } .board-header .button, .board-header select { font-size: 11px; padding: 7px; width: auto; } .board-picker, .board-details { top: 116px; } }

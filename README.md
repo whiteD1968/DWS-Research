@@ -322,4 +322,32 @@ searchable record pickers before opt-in, versioned AI synthesis.
 
 ## Deferred Packages
 
-This milestone intentionally does not include tldraw, BlockNote, React Flow, PDF.js, Uppy, or AI packages.
+Boards now uses tldraw. BlockNote, React Flow, PDF.js, Uppy and AI generation remain deferred.
+# Generated Research Boards
+
+Topic Boards (`/research/[id]/boards`) offers manual and generated compositions. Choose up to 100 topic records, a layout, and a title; each generation creates a new board. `/boards` lists boards and `/boards/[id]` opens the full-screen editor. Topic links, notes, themes, reference/project attachments and linked collections are available without copying source records.
+
+## Board deployment
+
+- Apply `supabase/migrations/20260916181217_board_snapshot_persistence.sql` through the normal reviewed deployment process before enabling board editing. This repository change does **not** apply it to production.
+- Set `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` to a valid production license. tldraw 5.4.2 permits local development without a key; production requires a license: https://tldraw.dev/community/license. No license is purchased or provisioned by this repository.
+- Existing public Supabase URL/publishable key and authenticated owner RLS remain required. No service-role key is used.
+
+## Board architecture
+
+- `ResearchBoardCanvas` isolates tldraw; it is dynamically imported without SSR. Native tools handle movement, resizing, rotation, duplication, frames, drawing, arrows, text and sticky notes. The ordinary sidebar is omitted in the editor.
+- `lib/boards/layout.ts` is a pure deterministic composition engine usable by topic, collection or future Discover services. Research Wall separates evidence, visual material and thinking; Contact Sheet is a five-column grid; Theme Clusters uses topic-specific theme frames (shared records can have multiple placements); Literature + Precedent uses narrower evidence/visual columns. No AI calls.
+- The authenticated `createGeneratedBoard` action validates topic ownership and selection. Board metadata records source topic, selected keys, generation version, timestamp, layout and initial composition. Supabase research records remain authoritative; snapshot cards contain only identity and geometry, not copied text or image URLs. Titles and previews refresh when the board is reopened.
+- `boards.snapshot` stores the tldraw document, not camera/selection state. `board_items` mirrors linked placements with parent/index state. PDFs use `item_type=document`, themes use `theme`, other linked records use `record`. The item vocabulary also reserves `tool` and typed tool configuration; no specialist tools are implemented.
+- Saves debounce for 900 ms and serialize writes. The security-invoker `save_research_board` RPC locks the owned board, checks its exact revision, validates linked owners, then updates snapshot and placements in one transaction. A stale session cannot overwrite a newer save. Errors retain the pending snapshot in memory with Retry; reload is required for revision conflicts. Leave warnings protect unsaved work, but there is no durable offline recovery or collaboration yet.
+- Source cards support the header's Open Source command. PDFs/images go through an authenticated fresh signed-URL redirect to the browser viewer. Notes and themes open their parent context. Removing a placement never deletes its source.
+- Add provides a searchable owner-scoped record picker and freeform tools. Text/sticky conversion opens an editable form, creates a topic Note or Reference with a stable retry ID, then replaces the loose placement. References are linked to the topic. No automatic conversion.
+- Image drops upload JPEG/PNG/WebP (up to 20 MB) directly to the private `research-media` owner folder, validate content server-side, register media and place a linked card. Retry retains the upload ID. Native embedded-asset imports are blocked. Thumbnails are authenticated, resized with sharp to fit 640px, private-cacheable and lazily loaded; originals are not sent to the canvas.
+
+## Board validation and limits
+
+Run `npm install`, `npm run lint`, `npm run typecheck`, `npm run build`, and `node --test --test-isolation=none tests/boards.cjs tests/board-persistence.cjs tests/research.cjs tests/discover.cjs`.
+
+Tests cover deterministic/nonoverlapping layouts at 100 records, shared themes, owner-scoped server saves, embedded-asset rejection and stale revisions. PGlite runs the repository baseline and save migration against an isolated Postgres engine, including atomic rollback, PDF placement type, owner RLS and denied anonymous RPC access. It does not contact Supabase. Browser fixture checks cover drag, resize, duplicate/delete, text/sticky/sketch/arrow, conversion form, local document reload and mobile fit; the temporary fixture is not shipped.
+
+Live authenticated uploads, conversions and Supabase save/reload still need a staging smoke test after migration and environment setup. Generation is capped at 100 selected records/300 theme placements; saves at 500 linked placements and 8 MB. Deleted sources display unavailable and must be removed before saving. The picker currently loads the owner's full catalog; server-side paginated search is a next scaling step. No board thumbnails, realtime collaboration, PDF page rendering, offline recovery, specialist nodes or AI generation yet. Next milestone: staging validation and durable draft recovery, then Collection/Discover-to-Board handoff.

@@ -24,6 +24,7 @@ export function WorkspaceShell({
   userEmail?: string;
 }) {
   const pathname = usePathname();
+  if (/^\/boards\/[^/]+$/.test(pathname)) return <>{children}</>;
 
   return (
     <div className="workspace-shell">

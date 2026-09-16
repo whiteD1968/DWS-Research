@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { topicContext, topicModes } from "@/lib/research";
 import { ResearchTopicWorkspace } from "@/components/research-topic-workspace";
@@ -7,6 +8,7 @@ export default async function TopicPage({ params, searchParams }: { params: Prom
   const user = await requireUser();
   const { id } = await params;
   const query = await searchParams;
+  if (query.mode === "boards") redirect(`/research/${id}/boards`);
   let context;
   try { context = await topicContext(user.id); }
   catch { return <p role="alert">Research workspace could not be loaded. <Link href="/research">Back to research</Link></p>; }
