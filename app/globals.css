@@ -1489,15 +1489,48 @@ select:focus {
 .board-title { flex: 1 1 180px; min-width: 0; text-align: left; border: 0; background: transparent; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
 .board-header select { max-width: 160px; padding: 8px; background: white; border: 1px solid #ddd; }
 .board-surface { flex: 1; min-height: 0; position: relative; }
-.research-board-card { background: white; border: 1px solid #c9c9c9; border-radius: 2px; overflow: hidden; display: flex; flex-direction: column; pointer-events: all; }
-.research-board-card img { width: 100%; height: 62%; flex-shrink: 1; min-height: 0; object-fit: contain; background: #f4f4f3; }
-.research-board-card > div { padding: 14px; overflow: hidden; flex: 1; min-height: 72px; }
-.research-board-card small { display: block; text-transform: uppercase; color: #777; font-size: 10px; margin-bottom: 7px; }
-.research-board-card strong { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font: 600 16px/1.3 Georgia, serif; overflow-wrap: anywhere; }
-.research-board-card p { font-size: 12px; line-height: 1.5; margin: 8px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+/* Pin-up cards retain readable type while their image area scales independently. */
+.board-surface .tl-container { --tl-color-background: #f5f5f2; --tl-color-panel: #fff; }
+.research-board-card { background: #fff; border: 1px solid #e5e4df; border-radius: 0; overflow: hidden; display: flex; flex-direction: column; pointer-events: all; color: #292a27; }
+.board-card-image { flex: 1 1 auto; min-height: 48px; overflow: hidden; background: #efefeb; display: flex; }
+.board-card-image img { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.board-card-caption { padding: 14px 16px; min-height: 0; overflow: hidden; }
+.card-visual .board-card-caption { flex: 0 0 auto; max-height: 50%; padding: 11px 13px; }
+.research-board-card small { display: block; text-transform: uppercase; letter-spacing: .11em; color: #77796f; font-size: 9px; line-height: 1.4; margin-bottom: 7px; }
+.research-board-card strong { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font: 500 18px/1.28 Georgia, serif; overflow-wrap: anywhere; }
+.card-visual strong { font-size: 16px; -webkit-line-clamp: 2; }
+.research-board-card p { font-size: 12px; line-height: 1.45; margin: 6px 0 0; overflow-wrap: anywhere; }
+.board-card-byline, .board-card-detail { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.board-card-detail { color: #73756b; font-size: 10px !important; }
+.card-note { background: #fcfbf6; border-color: #e6e4da; }
+.card-note strong { font: 500 17px/1.3 Georgia, serif; }
+.card-note .board-card-body { font-size: 14px; line-height: 1.45; white-space: pre-wrap; }
+.card-theme { background: transparent; border: 0; border-top: 1px solid #b9bcb0; }
+.card-theme strong { font: 600 13px/1.4 Arial, sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.card-theme .board-card-caption { padding: 12px 2px; }
+.card-document { border: 0; border-top: 2px solid #777b70; }
+.card-document .board-card-caption { padding: 12px 10px; }
+.card-compact .board-card-caption { padding: 9px 10px; }
+.card-compact small { display: none; }
+.card-compact strong { font-size: 14px; -webkit-line-clamp: 2; }
+.board-source-actions { display: flex; gap: 6px; }
 .board-picker, .board-details { position: absolute; top: 75px; right: 16px; width: 340px; max-width: calc(100% - 32px); max-height: calc(100% - 150px); overflow: auto; z-index: 500; background: white; border: 1px solid #ccc; padding: 20px; display: grid; gap: 12px; box-shadow: 0 4px 20px #0001; }
-.board-picker-results { display: grid; }
-.board-picker-results button { padding: 12px 0; background: white; border: 0; border-bottom: 1px solid #eee; text-align: left; overflow-wrap: anywhere; }
+.board-picker { width: 360px; padding: 16px; gap: 12px; }
+.board-picker-heading { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+.board-picker-heading button { border: 0; background: transparent; font-size: 20px; }
+.board-picker-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.board-picker-filters button { border: 1px solid #e3e3dd; background: #fff; padding: 5px 8px; font-size: 11px; border-radius: 3px; }
+.board-picker-filters button[aria-pressed="true"] { background: #32372e; border-color: #32372e; color: #fff; }
+.board-picker-results { display: grid; max-height: 42vh; overflow: auto; }
+.board-picker-results button { display: flex; align-items: center; gap: 12px; padding: 9px 0; background: white; border: 0; border-bottom: 1px solid #efefea; text-align: left; min-width: 0; }
+.board-picker-results img, .board-picker-kind { width: 44px; height: 44px; flex: 0 0 44px; object-fit: contain; background: #f2f2ed; }
+.board-picker-kind { display: grid; place-items: center; color: #777b70; font: 12px Georgia, serif; }
+.board-picker-results strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.board-picker-results small { margin: 4px 0 0; font-size: 10px; }
+.board-picker-empty { padding: 20px 0; font-size: 12px; color: #777; }
+.board-picker-tools { border-top: 1px solid #ddd; padding-top: 12px; }
+.board-picker-tools .board-form-row { margin-top: 8px; gap: 5px; }
+.board-picker-tools .button { padding: 5px 8px; font-size: 11px; }
 .board-conversion { position: absolute; inset: 0; z-index: 600; background: #0004; display: grid; place-items: center; }
 .board-conversion form { width: 440px; max-width: calc(100% - 32px); max-height: 90%; overflow: auto; padding: 24px; background: white; display: grid; gap: 16px; }
 .board-conversion textarea { min-height: 150px; }

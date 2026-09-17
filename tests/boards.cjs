@@ -93,14 +93,17 @@ test('text conversion is retry-safe, keeps note topic context and links referenc
   await assert.rejects(api.convertBoardText('foreign-board', 'n', 'note', 'x', 'x'), /not found/);
   await assert.rejects(api.convertBoardText('board', 'n', 'note', 'x', ''), /text/);
 });
-const insertion = load('lib/boards/insertion.ts', { tldraw: {
+const insertion = load('lib/boards/insertion.ts', { './layout': layout, tldraw: {
   createShapeId: (() => { let id = 0; return () => `shape:${++id}`; })(),
   loadSnapshot(store, snapshot) { store.loaded = snapshot.document; },
 } });
 function editorFixture({ readonly = false, reject = false } = {}) {
   const shapes = new Map();
   return { store: {}, shapes, isDisposed: false, getIsReadonly: () => readonly,
-    getViewportPageBounds: () => ({ center: { x: 500, y: 400 } }),
+    getOnlySelectedShape() { return shapes.get(this.selected); },
+    getZoomLevel: () => 1, zoomToSelectionIfOffscreen() { this.broughtIntoView = true; },
+    updateShapes() {},
+    getViewportPageBounds: () => ({ center: { x: 500, y: 400 }, collides: b => b.x >= 0 && b.x < 1000 && b.y >= 0 && b.y < 800 }),
     getCurrentPageId: () => 'page:test', getCurrentPageShapes: () => [...shapes.values()],
     getCurrentPageShapeIds: () => new Set(shapes.keys()),
     getShapePageBounds: shape => ({ x: shape.x, y: shape.y }),
@@ -121,11 +124,13 @@ test('all picker types insert visible, selected cards at distinct viewport-cente
     assert.equal(shape.props.title, type);
     assert.equal(shape.props.image, '/boards/thumbnail/image');
     assert.equal(shape.parentId, 'page:test');
-    assert.equal(shape.props.w, 280); assert.equal(shape.props.h, 300);
+    assert.deepEqual({ w: shape.props.w, h: shape.props.h }, layout.cardSize(item));
+    assert.equal(editor.broughtIntoView, true);
     assert.equal(editor.selected, id); assert.equal(editor.tool, 'select');
   }
   const shapes = [...editor.shapes.values()];
-  assert.deepEqual([shapes[0].x, shapes[0].y], [360, 250]);
+  assert.deepEqual([shapes[0].x, shapes[0].y], [500 - shapes[0].props.w / 2, 400 - shapes[0].props.h / 2]);
+  assert.deepEqual([shapes[1].x, shapes[1].y], [shapes[0].x + 28, shapes[0].y + 28]);
   assert.equal(new Set(shapes.map(s => `${s.x},${s.y}`)).size, 7);
 });
 test('insertion reports readonly and rejected writes; external image URLs are not copied', () => {
@@ -159,4 +164,69 @@ test('missing generated sources fail before any frame is inserted', () => {
   const editor = editorFixture();
   assert.throws(() => insertion.initializeResearchBoard(editor, null, layout.generateComposition([record('gone')], 'research_wall'), []), /unavailable/);
   assert.equal(editor.shapes.size, 0);
+});
+
+const qualityRecords = load('tests/fixtures/board-records.ts').boardFixtureRecords;
+for (const scenario of ['A', 'B', 'C', 'D', 'E', 'F']) for (const mode of layout.layouts) test(`quality ${scenario} / ${mode}: bounded, dense, deterministic and complete`, () => {
+  const records = qualityRecords(scenario), result = layout.generateComposition(records, mode);
+  assert.deepEqual(result, layout.generateComposition([...records].reverse(), mode));
+  const represented = new Set([...result.placements.map(p => p.key), ...result.frames.map(f => f.recordKey)]);
+  for (const r of records) assert.ok(represented.has(r.key), `missing ${r.key}`);
+  for (const [i, frame] of result.frames.entries()) {
+    assert.ok(frame.w > 0 && frame.h > 0);
+    for (const f of result.frames.slice(i + 1)) assert.ok(frame.x + frame.w <= f.x || f.x + f.w <= frame.x || frame.y + frame.h <= f.y || f.y + f.h <= frame.y);
+    const cards = result.placements.filter(p => p.frame === i);
+    for (const [j, p] of cards.entries()) {
+      assert.ok(p.w >= 180 && p.w <= 320 && p.h >= 64 && p.h <= 480);
+      assert.ok(p.x >= 0 && p.y >= 0 && p.x + p.w <= frame.w && p.y + p.h <= frame.h);
+      for (const other of cards.slice(j + 1)) assert.ok(p.x + p.w <= other.x || other.x + other.w <= p.x || p.y + p.h <= other.y || other.y + other.h <= p.y);
+    }
+    if (cards.length > 3) assert.ok(cards.reduce((area, p) => area + p.w * p.h, 0) / (frame.w * frame.h) > .48, 'excessive empty space');
+  }
+});
+test('notes grow with text; portrait and landscape image cards differ; invalid dimensions fall back safely', () => {
+  const short = record('n', 'thinking', { type: 'note', body: 'A short question.' });
+  assert.ok(layout.cardSize(short).h < 170);
+  assert.ok(layout.cardSize({ ...short, body: 'Long observation. '.repeat(80) }).h > layout.cardSize(short).h);
+  const image = record('image', 'visual', { image: '/boards/thumbnail/image', imageWidth: 1200, imageHeight: 720 });
+  const landscape = layout.cardSize(image), portrait = layout.cardSize({ ...image, imageWidth: 600, imageHeight: 900 });
+  assert.ok(landscape.w > portrait.w); assert.ok(landscape.h < portrait.h);
+  assert.equal(layout.imageRatio({ ...image, imageHeight: 0 }), 4 / 3);
+  assert.equal(layout.imageRatio({ ...image, imageWidth: Infinity }), 4 / 3);
+});
+test('Theme frames retain linked identity; shared notes are placed twice without standalone Theme cards', () => {
+  const records = qualityRecords('A'), composition = layout.generateComposition(records, 'theme_clusters');
+  assert.equal(composition.frames.filter(f => f.kind === 'theme').length, 2);
+  assert.equal(composition.placements.filter(p => p.key.startsWith('theme:')).length, 0);
+  assert.equal(composition.placements.filter(p => p.key === 'note:question').length, 2);
+  const editor = editorFixture();
+  insertion.initializeResearchBoard(editor, null, composition, records);
+  assert.equal([...editor.shapes.values()].filter(s => s.type === 'frame' && s.meta.recordKey.startsWith('theme:')).length, 2);
+});
+test('literature mode places notes with citations and Themes between Literature and Precedents', () => {
+  const result = layout.generateComposition(qualityRecords('D'), 'literature_precedent');
+  assert.deepEqual(result.frames.map(f => f.title), ['Literature', 'Themes', 'Precedents']);
+  for (const p of result.placements.filter(p => p.key.startsWith('note:'))) assert.equal(result.frames[p.frame].title, 'Literature');
+});
+test('Contact Sheet favors visual comparison, consistent columns and compact captions', () => {
+  const result = layout.generateComposition(qualityRecords('D'), 'contact_sheet');
+  assert.ok(result.placements.every(p => p.compact));
+  const records = qualityRecords('D');
+  assert.ok(records.find(r => r.key === result.placements[0].key).image);
+  assert.equal(new Set(result.placements.filter(p => records.find(r => r.key === p.key).image).map(p => p.w)).size, 1);
+});
+test('save mirrors linked native Theme frames and child placements, without copied source data', async () => {
+  const h = actions();
+  await h.api.saveBoard('board', 'old', { store: {
+    frame: { id: 'shape:theme', typeName: 'shape', type: 'frame', x: 0, y: 0, rotation: 0, index: 'a1', parentId: 'page:page', meta: { recordKey: 'theme:abc', boardZone: 'theme' }, props: { w: 400, h: 300, name: 'Material systems' } },
+    card: { id: 'shape:child', typeName: 'shape', type: 'research-record', x: 20, y: 20, rotation: 0, index: 'a2', parentId: 'shape:theme', props: { recordKey: 'reference:def', w: 280, h: 160, title: 'Research', image: '/boards/thumbnail/image' } },
+  } });
+  const { p_items } = h.calls.find(c => c[0] === 'save_research_board')[1];
+  assert.equal(p_items.length, 2); assert.equal(p_items[0].item_type, 'theme'); assert.equal(p_items[0].record_id, 'abc');
+  assert.equal(p_items[1].state.parentId, 'shape:theme');
+  assert.ok(p_items.every(i => !('title' in i) && !('image' in i)));
+});
+test('default board titles identify the source and chosen composition', () => {
+  assert.equal(layout.defaultBoardTitle('Robotic Plastic 3D Printing', 'theme_clusters'), 'Robotic Plastic 3D Printing — Theme Clusters');
+  assert.equal(layout.defaultBoardTitle('Materials', 'manual'), 'Materials — Research Board');
 });

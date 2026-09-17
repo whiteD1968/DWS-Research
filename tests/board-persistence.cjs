@@ -41,6 +41,20 @@ test('Postgres baseline + board RPC: atomic save, PDF items, conflicts, rollback
     await assert.rejects(save(revision, [{ ...item, width: 'not-a-number' }], { changed: true }), /invalid input/);
     assert.equal((await db.query('select * from board_items')).rows.length, 1);
     assert.deepEqual((await db.query('select snapshot from boards')).rows[0].snapshot, { store: {} });
+    // A linked native Theme frame is an ordinary theme placement; no new schema is needed.
+    const topic = '40000000-0000-4000-8000-000000000001', tag = '50000000-0000-4000-8000-000000000001', theme = '60000000-0000-4000-8000-000000000001';
+    await db.query("insert into research_threads (id, owner_id, title) values ($1,$2,'Topic')", [topic, owner]);
+    await db.query("insert into tags (id, owner_id, name) values ($1,$2,'Material systems')", [tag, owner]);
+    await db.query("insert into relationships (id, owner_id, source_type, source_id, relationship_type, target_type, target_id) values ($1,$2,'research_thread',$3,'has_theme','tag',$4)", [theme, owner, topic, tag]);
+    const themeItem = { ...item, shape_id: 'shape:theme', record_type: 'theme', record_id: theme, item_type: 'theme', width: 640, height: 360, state: { parentId: 'page:page' } };
+    const nested = { ...item, state: { parentId: 'shape:theme' } };
+    const frameSnapshot = { store: { frame: { type: 'frame', meta: { recordKey: `theme:${theme}` }, props: { w: 640, h: 360 } } } };
+    revision = (await save(revision, [themeItem, nested], frameSnapshot)).rows[0].revision;
+    const placements = (await db.query('select * from board_items order by shape_id')).rows;
+    assert.equal(placements.length, 2);
+    assert.equal(placements.find(p => p.shape_id === 'shape:theme').item_type, 'theme');
+    assert.equal(placements.find(p => p.shape_id === 'shape:pdf').state.parentId, 'shape:theme');
+    assert.deepEqual((await db.query('select snapshot from boards')).rows[0].snapshot, frameSnapshot);
     await db.query("select set_config('request.jwt.claim.sub', $1, false)", [stranger]);
     assert.equal((await db.query('select * from boards')).rows.length, 0);
     assert.equal((await db.query('select * from board_items')).rows.length, 0);

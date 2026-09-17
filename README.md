@@ -336,7 +336,7 @@ Topic Boards (`/research/[id]/boards`) offers manual and generated compositions.
 ## Board architecture
 
 - `ResearchBoardCanvas` isolates tldraw; it is dynamically imported without SSR. Native tools handle movement, resizing, rotation, duplication, frames, drawing, arrows, text and sticky notes. The ordinary sidebar is omitted in the editor.
-- `lib/boards/layout.ts` is a pure deterministic composition engine usable by topic, collection or future Discover services. Research Wall separates evidence, visual material and thinking; Contact Sheet is a five-column grid; Theme Clusters uses topic-specific theme frames (shared records can have multiple placements); Literature + Precedent uses narrower evidence/visual columns. No AI calls.
+- `lib/boards/layout.ts` is a pure deterministic composition engine usable by topic, collection or future Discover services. Research Wall separates evidence, visual material and thinking; Contact Sheet uses up to five compact masonry columns; Theme Clusters uses topic-specific theme frames (shared records can have multiple placements); Literature + Precedent separates broad literature and visual areas with Themes between them. No AI calls.
 - The authenticated `createGeneratedBoard` action validates topic ownership and selection. Board metadata records source topic, selected keys, generation version, timestamp, layout and initial composition. Supabase research records remain authoritative; snapshot cards contain identity, geometry and optional display hints (title, subtitle and an internal thumbnail endpoint). The renderer resolves the live catalog by recordKey, so titles and previews refresh on reopen. External image URLs are not copied into shape props; board_items stores only identity and placement.
 - `boards.snapshot` stores the tldraw document, not camera/selection state. `board_items` mirrors linked placements with parent/index state. PDFs use `item_type=document`, themes use `theme`, other linked records use `record`. The item vocabulary also reserves `tool` and typed tool configuration; no specialist tools are implemented.
 - Saves debounce for 900 ms and serialize writes. The security-invoker `save_research_board` RPC locks the owned board, checks its exact revision, validates linked owners, then updates snapshot and placements in one transaction. A stale session cannot overwrite a newer save. Errors retain the pending snapshot in memory with Retry; reload is required for revision conflicts. Leave warnings protect unsaved work, but there is no durable offline recovery or collaboration yet.
@@ -393,3 +393,47 @@ all fitted in the viewport, retained after reload with no duplicates; manual Add
 verified all seven picker types, selection, distinct origins and reload retention.
 The fixture used local snapshot persistence; Postgres RPC tests separately verify
 atomic board_items persistence and owner isolation. The fixture is not deployed.
+
+
+## Board quality and designer usability
+
+Generation version 2 sizes notes by text, documents as compact citations, and visual
+cards by stored media dimensions (4:3 fallback). Portrait and landscape cards retain
+natural image proportions with contain rendering. Initial sizes are bounded; native
+resize has readable minimums and persists each placement independently. Existing
+snapshots keep their geometry and are never automatically regenerated.
+
+Research Wall uses dense masonry within evidence, visual and thinking zones.
+Contact Sheet puts images first in compact columns with minimal captions.
+Literature + Precedent puts notes alongside literature and Themes between the two
+main areas. Theme Clusters uses subtle native frames linked by meta.recordKey;
+shared records have repeated placements, never duplicated source records. The
+existing atomic save mirrors Theme frame identity and child geometry without any
+schema migration. Source titles refresh from the owner catalog on reopen.
+
+New titles identify the topic and layout and remain editable. Initial camera fit
+waits for measurable surface dimensions, leaves toolbar clearance and keeps a 45%
+minimum zoom. Large walls require panning; explicit Fit shows the entire overview.
+Add uses the visible selection or viewport center, offsets occupied origins,
+selects the new card, brings it into view and queues autosave. The drawer provides
+All/References/Images/Documents/Notes/Themes/Projects/Collections filters, search
+and thumbnails. Both cards and linked Theme frames expose source navigation in a
+new tab or the current view. Native grid and drawing tools remain available.
+
+Rendering uses a memoized record map/card component, lazy decoded thumbnails and
+tldraw viewport culling. This is functional validation through 100 records, not a
+frame-rate benchmark. Long text remains bounded; resize or open the source for
+full content. The full owner catalog is still loaded into the picker.
+
+Quality fixtures A-F in tests/fixtures/board-records.ts cover two notes/two themes,
+five portrait/landscape references, three documents/five precedents, and 20/50/100
+mixed records across all four layouts. Browser checks used a temporary local-only
+route with synthetic images and local snapshot persistence: all six scenarios,
+Theme source selection and refresh, filtered Add, resize and refresh retention.
+The route and image assets are not shipped. Isolated Postgres tests additionally
+cover native Theme frame and child placement persistence. Live authenticated
+Supabase saves were not exercised by these browser fixtures. No new environment
+variables, production data writes or AI features are introduced.
+
+Next milestone: durable draft recovery and Collection/Discover-to-Board handoff,
+with staging coverage for authenticated uploads and source navigation.

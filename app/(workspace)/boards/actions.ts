@@ -14,7 +14,7 @@ export async function createGeneratedBoard(input: { sourceId: string; recordSele
   const selected = catalog.filter(r => input.recordSelection.includes(r.key) && r.topicIds.includes(topic.id));
   if (!input.manual && (!selected.length || selected.length !== new Set(input.recordSelection).size)) throw new Error("Select available topic records.");
   const composition = generateComposition(input.manual ? [] : selected, input.layoutMode, catalog.filter(r => r.type === "theme" && r.topicIds.includes(topic.id)));
-  const { data, error } = await db.from("boards").insert({ owner_id: user.id, research_thread_id: topic.id, title: input.title.trim().slice(0, 200), board_type: input.manual ? "freeform" : "research_generated", metadata: { generated_from: "research_topic", source_id: topic.id, generation_version: 1, generated_at: new Date().toISOString(), layout_mode: input.layoutMode, selected_record_ids: selected.map(r => r.key), composition } }).select("id").single();
+  const { data, error } = await db.from("boards").insert({ owner_id: user.id, research_thread_id: topic.id, title: input.title.trim().slice(0, 200), board_type: input.manual ? "freeform" : "research_generated", metadata: { generated_from: "research_topic", source_id: topic.id, generation_version: 2, generated_at: new Date().toISOString(), layout_mode: input.layoutMode, selected_record_ids: selected.map(r => r.key), composition } }).select("id").single();
   if (error) throw new Error("Unable to create board.");
   return data.id as string;
 }
@@ -29,12 +29,12 @@ async function ownedBoard(id: string) {
 
 export async function saveBoard(id: string, revision: string, snapshot: unknown) {
   const { db } = await ownedBoard(id);
-  const document = snapshot as { store?: Record<string, { typeName: string; type?: string; id: string; x: number; y: number; rotation: number; index: string; parentId: string; props: { recordKey?: string; w?: number; h?: number } }> };
+  const document = snapshot as { store?: Record<string, { typeName: string; type?: string; id: string; x: number; y: number; rotation: number; index: string; parentId: string; meta?: { recordKey?: string }; props: { recordKey?: string; w?: number; h?: number } }> };
   if (!document?.store || JSON.stringify(snapshot).length > 8_000_000) throw new Error("Invalid or oversized board.");
   const values = Object.values(document.store);
   if (values.some(r => r.typeName === "asset")) throw new Error("Use image upload to store media, not embedded assets.");
-  const items = values.filter(r => r.typeName === "shape" && r.type === "research-record").sort((a, b) => a.index.localeCompare(b.index)).map((r, i) => {
-    const [type, recordId] = (r.props.recordKey || "").split(":");
+  const items = values.filter(r => r.typeName === "shape" && (r.type === "research-record" || (r.type === "frame" && r.meta?.recordKey?.startsWith("theme:")))).sort((a, b) => a.index.localeCompare(b.index)).map((r, i) => {
+    const [type, recordId] = (r.props.recordKey || r.meta?.recordKey || "").split(":");
     return { shape_id: r.id, record_type: type, record_id: recordId, item_type: type === "theme" ? "theme" : "record", x: r.x, y: r.y, width: r.props.w, height: r.props.h, rotation: r.rotation, z_index: i, state: { parentId: r.parentId, index: r.index } };
   });
   const { data, error } = await db.rpc("save_research_board", { p_board_id: id, p_revision: revision, p_snapshot: snapshot, p_items: items });

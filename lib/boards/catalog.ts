@@ -3,6 +3,8 @@ import type { BoardRecord } from "./layout";
 
 export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
   const context = await topicContext(ownerId);
+  const mediaById = new Map(context.records.media.map(m => [m.id, m as typeof m & { width?: number; height?: number }]));
+  const text = (value: unknown) => typeof value === "string" ? value : "";
   const urls = new Map<string, string>();
   for (const media of context.records.media) if (media.storage_path && media.mime_type?.startsWith("image/")) urls.set(media.id, `/boards/thumbnail/${media.id}`);
   const themes = context.links.filter(l => l.source_type === "research_thread" && l.relationship_type === "has_theme" && l.target_type === "tag");
@@ -21,9 +23,14 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
           topicIds.push(...context.links.filter(l => l.source_type === "research_thread" && l.target_type === "reference" && l.target_id === reference.id).map(l => l.source_id));
         }
       }
+      const imageMedia = mediaById.get(type === "media" ? record.id : record.primary_media_id || record.cover_media_id || "");
+      const creator = details.creator || text(record.metadata?.author) || text(record.metadata?.creator);
+      const detail = [details.reference_date, details.project_type || record.reference_type, text(record.metadata?.publication)].filter(Boolean).join(" · ");
       result.push({ key: `${type}:${record.id}`, id: record.id, type: isDocument ? "document" : type,
         title: record.title || record.original_filename || "Untitled",
         subtitle: [details.creator, details.reference_date, details.project_type, type === "media" ? record.original_filename : undefined, record.plain_text || details.caption || details.description].filter(Boolean).join(" / ").slice(0, 600),
+        creator, detail, body: type === "note" ? record.plain_text || "" : undefined,
+        imageWidth: imageMedia?.width, imageHeight: imageMedia?.height,
         role: isDocument || (type === "reference" && isLiterature(record)) ? "evidence" : type === "note" ? "thinking" : "visual",
         themeIds: context.links.filter(l => l.source_type === "research_topic_theme" && l.relationship_type === "includes" && l.target_type === type && l.target_id === record.id).map(l => l.source_id),
         topicIds, image: type === "media" ? (record.mime_type?.startsWith("image/") ? urls.get(record.id) : undefined) : urls.get(record.primary_media_id || record.cover_media_id || ""),

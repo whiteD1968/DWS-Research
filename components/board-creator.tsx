@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createGeneratedBoard } from "@/app/(workspace)/boards/actions";
-import { layouts, type BoardRecord, type LayoutMode } from "@/lib/boards/layout";
+import { defaultBoardTitle, layoutLabels, layouts, type BoardRecord, type LayoutMode } from "@/lib/boards/layout";
 
 export function BoardCreator({ topicId, topicTitle, records }: { topicId: string; topicTitle: string; records: BoardRecord[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [manual, setManual] = useState(false);
-  const [title, setTitle] = useState(`${topicTitle} - Research Wall`);
+  const [title, setTitle] = useState(defaultBoardTitle(topicTitle, "research_wall"));
+  const [titleEdited, setTitleEdited] = useState(false);
   const [layout, setLayout] = useState<LayoutMode>("research_wall");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -20,8 +21,8 @@ export function BoardCreator({ topicId, topicTitle, records }: { topicId: string
     try { const id = await createGeneratedBoard({ sourceId: topicId, recordSelection: selected, layoutMode: layout, title, manual }); router.push(`/boards/${id}`); }
     catch (e) { setError(e instanceof Error ? e.message : "Unable to create board."); setBusy(false); }
   }}>
-    <div className="board-form-row"><label>Title<input value={title} onChange={e => setTitle(e.target.value)} required maxLength={200} /></label><label>Composition<select value={manual ? "manual" : "generated"} onChange={e => setManual(e.target.value === "manual")}><option value="generated">Generated board</option><option value="manual">Manual board</option></select></label></div>
-    {!manual && <><label>Layout<select value={layout} onChange={e => setLayout(e.target.value as LayoutMode)}>{layouts.map(l => <option value={l} key={l}>{l.replaceAll("_", " ")}</option>)}</select></label>
+    <div className="board-form-row"><label>Title<input value={title} onChange={e => { setTitle(e.target.value); setTitleEdited(true); }} required maxLength={200} /></label><label>Composition<select value={manual ? "manual" : "generated"} onChange={e => { const nextManual = e.target.value === "manual"; setManual(nextManual); if (!titleEdited) setTitle(defaultBoardTitle(topicTitle, nextManual ? "manual" : layout)); }}><option value="generated">Generated board</option><option value="manual">Manual board</option></select></label></div>
+    {!manual && <><label>Layout<select value={layout} onChange={e => { const nextLayout = e.target.value as LayoutMode; setLayout(nextLayout); if (!titleEdited) setTitle(defaultBoardTitle(topicTitle, nextLayout)); }}>{layouts.map(l => <option value={l} key={l}>{layoutLabels[l]}</option>)}</select></label>
       <div className="board-form-row"><button type="button" className="button" onClick={() => setSelected(records.map(r => r.key))}>Select all</button><button type="button" className="button" onClick={() => setSelected([])}>Clear</button>
         <select aria-label="Select by type" value="" onChange={e => setSelected(records.filter(r => r.type === e.target.value).map(r => r.key))}><option value="">Select by type</option>{[...new Set(records.map(r => r.type))].map(t => <option key={t}>{t}</option>)}</select>
         <select aria-label="Select by theme" value="" onChange={e => setSelected(records.filter(r => r.id === e.target.value || r.themeIds.includes(e.target.value)).map(r => r.key))}><option value="">Select by theme</option>{records.filter(r => r.type === "theme").map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select><span>{selected.length} selected</span></div>

@@ -1,43 +1,29 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Authenticated, server-resized thumbnail endpoint. */
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BaseBoxShapeUtil, HTMLContainer, T, Tldraw, getSnapshot, DefaultColorStyle, DefaultFontStyle, defaultHandleExternalTldrawContent, renderPlaintextFromRichText, type Editor, type TLRichText } from "tldraw";
+import { Tldraw, getSnapshot, DefaultColorStyle, DefaultFontStyle, defaultHandleExternalTldrawContent, renderPlaintextFromRichText, type Editor, type TLRichText } from "tldraw";
 import "tldraw/tldraw.css";
 import { saveBoard, renameBoard, convertBoardText, finishBoardImage } from "@/app/(workspace)/boards/actions";
 import { createClient } from "@/lib/supabase/client";
 import type { BoardRecord, Composition } from "@/lib/boards/layout";
 
-import { initializeResearchBoard, insertResearchRecord, type RecordShape } from "@/lib/boards/insertion";
-const Records = createContext<BoardRecord[]>([]);
-function RecordCard({ shape }: { shape: RecordShape }) {
-  const record = useContext(Records).find(r => r.key === shape.props.recordKey);
-  const [failedImage, setFailedImage] = useState<string | null>(null);
-  return <HTMLContainer className="research-board-card" style={{ width: shape.props.w, height: shape.props.h }}>
-    {record?.image && failedImage !== record.image && <img src={record.image} alt="" loading="lazy" draggable={false} onError={() => setFailedImage(record.image!)} />}
-    <div><small>{record?.type || "Unavailable record"}</small><strong>{record?.title || "Source removed"}</strong><p>{record?.subtitle}</p></div>
-  </HTMLContainer>;
-}
-class ResearchRecordUtil extends BaseBoxShapeUtil<RecordShape> {
-  static override type = "research-record" as const;
-  static override props = { w: T.number, h: T.number, recordKey: T.string, recordType: T.string.optional(), recordId: T.string.optional(), title: T.string.optional(), subtitle: T.string.optional(), image: T.string.optional() };
-  getDefaultProps() { return { w: 280, h: 300, recordKey: "" }; }
-  override canEdit() { return false; }
-  component(shape: RecordShape) { return <RecordCard shape={shape} />; }
-  getIndicatorPath(shape: RecordShape) { const path = new Path2D(); path.rect(0, 0, shape.props.w, shape.props.h); return path; }
-}
-const shapeUtils = [ResearchRecordUtil];
+import { fitResearchBoard, initializeResearchBoard, insertResearchRecord, type RecordShape } from "@/lib/boards/insertion";
+import { BoardRecords, BoardSourceActions, boardShapeUtils } from "./research-board-shapes";
 const components = { StylePanel: null };
 type ImageJob = { id: string; file: File; point?: { x: number; y: number }; uploaded: boolean };
 export type BoardCanvasProps = { board: { id: string; title: string; description: string | null; research_thread_id: string | null; updated_at: string; snapshot: unknown; metadata: { composition?: Composition } }; records: BoardRecord[]; ownerId: string };
 
 export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, persist = saveBoard }: BoardCanvasProps & { persist?: typeof saveBoard }) {
   const [records, setRecords] = useState(initialRecords);
+  const recordMap = useMemo(() => new Map(records.map(r => [r.key, r])), [records]);
+  const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [status, setStatus] = useState("Saved");
   const [error, setError] = useState("");
   const [picker, setPicker] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
+  const filteredRecords = useMemo(() => records.filter(r => (!filter || (filter === "media" ? r.type === "media" && !!r.image : r.type === filter)) && `${r.title} ${r.subtitle} ${r.creator || ""} ${r.body || ""}`.toLowerCase().includes(query.toLowerCase())), [records, filter, query]);
   const [title, setTitle] = useState(board.title);
   const [description, setDescription] = useState(board.description || "");
   const [details, setDetails] = useState(false);
@@ -122,7 +108,8 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
       initializeResearchBoard(ed, board.snapshot, board.metadata?.composition, initialRecords);
       ed.setStyleForNextShapes(DefaultColorStyle, "black");
       ed.setStyleForNextShapes(DefaultFontStyle, "sans");
-      setReady(true);
+      ed.updateInstanceState({ isGridMode: false });
+      setActiveEditor(ed); setReady(true);
     } catch { setError("This board could not be loaded. No changes will be saved."); stopped.current = true; ed.updateInstanceState({ isReadonly: true }); }
     // Fit after the surface has measurable bounds, rather than during mount/layout.
     let fitFrame = 0;
@@ -132,7 +119,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
       cancelAnimationFrame(fitFrame);
       fitFrame = requestAnimationFrame(() => {
         ed.updateViewportScreenBounds(surface);
-        ed.zoomToFit({ animation: { duration: 0 } });
+        fitResearchBoard(ed);
         fitObserver.disconnect();
       });
     });
@@ -164,20 +151,30 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     ed.registerExternalContentHandler("excalidraw", async () => { setError("External canvas imports are not supported yet."); });
     ed.registerExternalAssetHandler("file", async () => { throw new Error("Upload images through the board drop handler."); });
     ed.registerExternalAssetHandler("url", async () => { throw new Error("Add a saved reference instead."); });
-    return () => { fitObserver.disconnect(); cancelAnimationFrame(fitFrame); queueSave.current = null; setReady(false); unsubscribe(); stopNoteStyle(); clearTimeout(timeout); void flush(); window.removeEventListener("beforeunload", beforeUnload); editor.current = null; };
+    return () => { fitObserver.disconnect(); cancelAnimationFrame(fitFrame); queueSave.current = null; setActiveEditor(null); setReady(false); unsubscribe(); stopNoteStyle(); clearTimeout(timeout); void flush(); window.removeEventListener("beforeunload", beforeUnload); editor.current = null; };
   }
   return <div className="board-workspace">
     <header className="board-header"><Link href={board.research_thread_id ? `/research/${board.research_thread_id}/boards` : "/boards"} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>Research Topic</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError} onClick={() => setPicker(!picker)}>+ Add</button>
-      <button className="button" onClick={() => { const shape = editor.current?.getOnlySelectedShape(); if (shape?.type === "research-record") { const record = records.find(r => r.key === shape.props.recordKey); if (record) window.open(record.href, "_blank", "noopener,noreferrer"); } }}>Open Source</button>
+      <BoardSourceActions editor={activeEditor} records={recordMap} />
       <select aria-label="Convert selected text" value="" disabled={!board.research_thread_id} onChange={e => convert(e.target.value as "note" | "reference")}><option value="">Convert to...</option><option value="note">Structured Note</option><option value="reference">Reference</option></select>
-      <button className="button" title="Fit board to viewport" onClick={() => editor.current?.zoomToFit({ animation: { duration: 200 } })}>Fit</button>
+      <button className="button" title="Fit board to viewport" onClick={() => { if (editor.current) fitResearchBoard(editor.current, true); }}>Fit</button>
     </header>
     {licenseError && <div className="board-error" role="alert">The board editor is unavailable because this deployment’s tldraw license is missing, invalid, or expired. Contact the workspace administrator. Saved board content is retained.</div>}
     {error && <div className="board-error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>Close</button></div>}
     {failedImages.length > 0 && <div className="board-error"><span>{failedImages.length} image uploads need attention</span><button disabled={busy} onClick={async () => { setBusy(true); for (const job of failedImages) await uploadImage(job); setBusy(false); }}>Retry uploads</button></div>}
     {details && <form className="board-details" onSubmit={async e => { e.preventDefault(); if (pending.current || running.current) { setError("Wait for canvas changes to save before renaming."); return; } setBusy(true); running.current = true; try { revision.current = await renameBoard(board.id, title, description, revision.current); setDetails(false); } catch (e) { setError((e as Error).message); } finally { running.current = false; setBusy(false); void flush(); } }}><label>Title<input value={title} required onChange={e => setTitle(e.target.value)} /></label><label>Description<textarea value={description} onChange={e => setDescription(e.target.value)} /></label><button className="button" disabled={busy}>Save details</button>{board.research_thread_id && <Link href={`/research/${board.research_thread_id}/boards`}>Generate another board</Link>}</form>}
-    {picker && <aside className="board-picker"><input aria-label="Search research" placeholder="Search research" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Record type" value={filter} onChange={e => setFilter(e.target.value)}><option value="">All records</option>{["reference", "media", "document", "note", "theme", "project", "collection"].map(t => <option key={t}>{t}</option>)}</select><div className="board-form-row">{["text", "note", "draw", "arrow", "frame", "geo"].map(tool => <button key={tool} className="button" onClick={() => { editor.current?.setCurrentTool(tool); setPicker(false); }}>{tool === "draw" ? "Sketch" : tool === "geo" ? "Rectangle" : tool === "note" ? "Sticky" : tool}</button>)}</div><div className="board-picker-results">{records.filter(r => (!filter || r.type === filter) && `${r.title} ${r.subtitle}`.toLowerCase().includes(query.toLowerCase())).map(r => <button key={r.key} onClick={() => { if (place(r)) setPicker(false); }}><small>{r.type}</small>{r.title}</button>)}</div></aside>}
+    {picker && <aside className="board-picker" aria-label="Add research">
+      <div className="board-picker-heading"><strong>Add research</strong><button type="button" aria-label="Close Add drawer" onClick={() => setPicker(false)}>×</button></div>
+      <input aria-label="Search research" placeholder="Search title, creator or text" value={query} onChange={e => setQuery(e.target.value)} />
+      <div className="board-picker-filters" role="group" aria-label="Record type">{[["", "All"], ["reference", "References"], ["media", "Images"], ["document", "Documents"], ["note", "Notes"], ["theme", "Themes"], ["project", "Projects"], ["collection", "Collections"]].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
+      <div className="board-picker-results">{filteredRecords.map(r => <button key={r.key} onClick={() => { if (place(r)) setPicker(false); }}>
+        {r.image ? <img src={r.image} alt="" loading="lazy" decoding="async" /> : <span className="board-picker-kind" aria-hidden="true">{r.type === "document" ? "DOC" : r.type === "note" ? "Aa" : r.type === "theme" ? "#" : "↗"}</span>}
+        <span><strong>{r.title}</strong><small>{r.type}{r.creator ? ` · ${r.creator}` : ""}</small></span>
+      </button>)}
+      {!filteredRecords.length && <p className="board-picker-empty">No matching records.</p>}</div>
+      <div className="board-picker-tools"><small>Sketch & annotate</small><div className="board-form-row">{["text", "note", "draw", "arrow", "frame", "geo"].map(tool => <button key={tool} className="button" onClick={() => { editor.current?.setCurrentTool(tool); setPicker(false); }}>{tool === "draw" ? "Sketch" : tool === "geo" ? "Rectangle" : tool === "note" ? "Sticky" : tool}</button>)}</div></div>
+    </aside>}
     {conversion && <div role="dialog" aria-modal="true" aria-label="Convert loose text" className="board-conversion"><form onSubmit={async e => { e.preventDefault(); setBusy(true); try { const record = await convertBoardText(board.id, conversion.id, conversion.type, conversion.title, conversion.text); setRecords(prev => [...prev.filter(r => r.key !== record.key), record]); const ed = editor.current; const shape = ed?.getShape(conversion.shapeId as RecordShape["id"]); if (ed && shape) { const point = ed.getShapePageBounds(shape)?.point; ed.run(() => { if (!place(record, point)) throw new Error("Record saved, but placement failed. Try again when the editor is available."); ed.deleteShapes([shape.id]); }); } setConversion(null); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><h2>Convert to {conversion.type}</h2><label>Title<input required value={conversion.title} onChange={e => setConversion({ ...conversion, title: e.target.value })} /></label><label>Text<textarea required value={conversion.text} onChange={e => setConversion({ ...conversion, text: e.target.value })} /></label><button disabled={busy} className="button">Create {conversion.type}</button><button type="button" className="button" onClick={() => setConversion(null)}>Cancel</button></form></div>}
-    <div className="board-surface" ref={surfaceRef}><Records.Provider value={records}><Tldraw shapeUtils={shapeUtils} components={components} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></Records.Provider></div>
+    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={boardShapeUtils} components={components} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider></div>
   </div>;
 }
