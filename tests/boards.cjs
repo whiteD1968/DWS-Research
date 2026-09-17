@@ -93,3 +93,70 @@ test('text conversion is retry-safe, keeps note topic context and links referenc
   await assert.rejects(api.convertBoardText('foreign-board', 'n', 'note', 'x', 'x'), /not found/);
   await assert.rejects(api.convertBoardText('board', 'n', 'note', 'x', ''), /text/);
 });
+const insertion = load('lib/boards/insertion.ts', { tldraw: {
+  createShapeId: (() => { let id = 0; return () => `shape:${++id}`; })(),
+  loadSnapshot(store, snapshot) { store.loaded = snapshot.document; },
+} });
+function editorFixture({ readonly = false, reject = false } = {}) {
+  const shapes = new Map();
+  return { store: {}, shapes, isDisposed: false, getIsReadonly: () => readonly,
+    getViewportPageBounds: () => ({ center: { x: 500, y: 400 } }),
+    getCurrentPageId: () => 'page:test', getCurrentPageShapes: () => [...shapes.values()],
+    getCurrentPageShapeIds: () => new Set(shapes.keys()),
+    getShapePageBounds: shape => ({ x: shape.x, y: shape.y }),
+    createShape(shape) { if (!reject) shapes.set(shape.id, shape); },
+    getShape: id => shapes.get(id), setCurrentTool(tool) { this.tool = tool; },
+    select(id) { this.selected = id; }, run(callback) { callback(); },
+  };
+}
+test('all picker types insert visible, selected cards at distinct viewport-centered positions', () => {
+  const editor = editorFixture();
+  for (const type of ['reference', 'media', 'document', 'note', 'theme', 'project', 'collection']) {
+    const item = record(type, 'visual', { type, key: `${type === 'document' ? 'media' : type}:${type}`, subtitle: 'Creator', image: '/boards/thumbnail/image' });
+    const id = insertion.insertResearchRecord(editor, item);
+    const shape = editor.shapes.get(id);
+    assert.equal(shape.props.recordKey, item.key);
+    assert.equal(shape.props.recordType, type);
+    assert.equal(shape.props.recordId, type);
+    assert.equal(shape.props.title, type);
+    assert.equal(shape.props.image, '/boards/thumbnail/image');
+    assert.equal(shape.parentId, 'page:test');
+    assert.equal(shape.props.w, 280); assert.equal(shape.props.h, 300);
+    assert.equal(editor.selected, id); assert.equal(editor.tool, 'select');
+  }
+  const shapes = [...editor.shapes.values()];
+  assert.deepEqual([shapes[0].x, shapes[0].y], [360, 250]);
+  assert.equal(new Set(shapes.map(s => `${s.x},${s.y}`)).size, 7);
+});
+test('insertion reports readonly and rejected writes; external image URLs are not copied', () => {
+  assert.throws(() => insertion.insertResearchRecord(editorFixture({ readonly: true }), record('a')), /not ready/);
+  assert.throws(() => insertion.insertResearchRecord(editorFixture({ reject: true }), record('a')), /could not be added/);
+  const editor = editorFixture();
+  const id = insertion.insertResearchRecord(editor, record('a', 'visual', { image: 'https://example.com/image.jpg' }));
+  assert.equal(editor.shapes.get(id).props.image, undefined);
+});
+test('seven generated records keep deterministic geometry and initialize only once', () => {
+  const records = Array.from({ length: 7 }, (_, i) => record(`${i}`, i < 5 ? 'evidence' : 'visual', i < 5 ? {} : { key: `media:${i}`, type: 'media' }));
+  const composition = layout.generateComposition(records, 'research_wall');
+  const editor = editorFixture();
+  assert.equal(insertion.initializeResearchBoard(editor, null, composition, records), true);
+  const cards = [...editor.shapes.values()].filter(s => s.type === 'research-record');
+  assert.equal(cards.length, 7);
+  for (const [i, card] of cards.entries()) {
+    const p = composition.placements[i], frame = editor.shapes.get(card.parentId);
+    assert.deepEqual([card.x, card.y, card.props.w, card.props.h], [p.x, p.y, p.w, p.h]);
+    assert.equal(frame.x, composition.frames[p.frame].x);
+  }
+  assert.equal(editor.selected, undefined);
+  assert.equal(insertion.initializeResearchBoard(editor, null, composition, records), false);
+  assert.equal(editor.shapes.size, 9);
+  const reopened = editorFixture(), saved = { store: {}, schema: {} };
+  assert.equal(insertion.initializeResearchBoard(reopened, saved, composition, records), false);
+  assert.equal(reopened.store.loaded, saved);
+  assert.equal(reopened.shapes.size, 0, 'an intentionally empty snapshot must not regenerate');
+});
+test('missing generated sources fail before any frame is inserted', () => {
+  const editor = editorFixture();
+  assert.throws(() => insertion.initializeResearchBoard(editor, null, layout.generateComposition([record('gone')], 'research_wall'), []), /unavailable/);
+  assert.equal(editor.shapes.size, 0);
+});

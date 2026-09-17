@@ -337,7 +337,7 @@ Topic Boards (`/research/[id]/boards`) offers manual and generated compositions.
 
 - `ResearchBoardCanvas` isolates tldraw; it is dynamically imported without SSR. Native tools handle movement, resizing, rotation, duplication, frames, drawing, arrows, text and sticky notes. The ordinary sidebar is omitted in the editor.
 - `lib/boards/layout.ts` is a pure deterministic composition engine usable by topic, collection or future Discover services. Research Wall separates evidence, visual material and thinking; Contact Sheet is a five-column grid; Theme Clusters uses topic-specific theme frames (shared records can have multiple placements); Literature + Precedent uses narrower evidence/visual columns. No AI calls.
-- The authenticated `createGeneratedBoard` action validates topic ownership and selection. Board metadata records source topic, selected keys, generation version, timestamp, layout and initial composition. Supabase research records remain authoritative; snapshot cards contain only identity and geometry, not copied text or image URLs. Titles and previews refresh when the board is reopened.
+- The authenticated `createGeneratedBoard` action validates topic ownership and selection. Board metadata records source topic, selected keys, generation version, timestamp, layout and initial composition. Supabase research records remain authoritative; snapshot cards contain identity, geometry and optional display hints (title, subtitle and an internal thumbnail endpoint). The renderer resolves the live catalog by recordKey, so titles and previews refresh on reopen. External image URLs are not copied into shape props; board_items stores only identity and placement.
 - `boards.snapshot` stores the tldraw document, not camera/selection state. `board_items` mirrors linked placements with parent/index state. PDFs use `item_type=document`, themes use `theme`, other linked records use `record`. The item vocabulary also reserves `tool` and typed tool configuration; no specialist tools are implemented.
 - Saves debounce for 900 ms and serialize writes. The security-invoker `save_research_board` RPC locks the owned board, checks its exact revision, validates linked owners, then updates snapshot and placements in one transaction. A stale session cannot overwrite a newer save. Errors retain the pending snapshot in memory with Retry; reload is required for revision conflicts. Leave warnings protect unsaved work, but there is no durable offline recovery or collaboration yet.
 - Source cards support the header's Open Source command. PDFs/images go through an authenticated fresh signed-URL redirect to the browser viewer. Notes and themes open their parent context. Removing a placement never deletes its source.
@@ -351,3 +351,45 @@ Run `npm install`, `npm run lint`, `npm run typecheck`, `npm run build`, and `no
 Tests cover deterministic/nonoverlapping layouts at 100 records, shared themes, owner-scoped server saves, embedded-asset rejection and stale revisions. PGlite runs the repository baseline and save migration against an isolated Postgres engine, including atomic rollback, PDF placement type, owner RLS and denied anonymous RPC access. It does not contact Supabase. Browser fixture checks cover drag, resize, duplicate/delete, text/sticky/sketch/arrow, conversion form, local document reload and mobile fit; the temporary fixture is not shipped.
 
 Live authenticated uploads, conversions and Supabase save/reload still need a staging smoke test after migration and environment setup. Generation is capped at 100 selected records/300 theme placements; saves at 500 linked placements and 8 MB. Deleted sources display unavailable and must be removed before saving. The picker currently loads the owner's full catalog; server-side paginated search is a next scaling step. No board thumbnails, realtime collaboration, PDF page rendering, offline recovery, specialist nodes or AI generation yet. Next milestone: staging validation and durable draft recovery, then Collection/Discover-to-Board handoff.
+
+
+## Board insertion repair
+
+`lib/boards/insertion.ts` owns structured shape creation. Generated initialization
+resolves each composition key against the catalog and preserves frame-local
+x/y/w/h. It initializes only without a snapshot and with an empty editor. A saved
+snapshot always wins, including an intentionally emptied board. The camera fits
+after the surface has measurable dimensions; initialization immediately queues
+the document for the existing atomic snapshot/board_items save RPC.
+
+Manual Add, image upload and text conversion use the same insertion helper. It
+checks editor availability, creates a page-parented card near the viewport center,
+offsets occupied origins by 24px, verifies the resulting shape ID, and selects it.
+The Add drawer closes only on success. Insertions explicitly queue the existing
+900ms debounced, serialized autosave. Optional display props keep older snapshots
+compatible. Failed thumbnails fall back to a visible text card; documents include
+the original filename when available. Source records remain authoritative.
+
+The pinned tldraw 5.4.2 LicenseProvider hides/unmounts the editor after five seconds
+for expired or unlicensed production deployments. Previously the outer Add drawer
+remained usable after that cleanup cleared the editor ref: place() silently
+returned, and the click handler still closed the drawer. This can look like failed
+initialization even when shapes and board_items are already saved. The app now
+observes that license state, displays an explanation and disables Add when the
+editor is unavailable. It does not change or bypass SDK license enforcement.
+Configure a valid NEXT_PUBLIC_TLDRAW_LICENSE_KEY for the deployment domain and
+redeploy if this message appears. No additional environment variable is introduced.
+
+Read-only inspection on 2026-09-16 confirmed the production snapshot column and
+save_research_board function match the required persistence migration. The existing
+generated board contained two linked record shapes and two board_items. Thus that
+board was populated in storage. The migration remains required for a new database;
+no migration edits or production data writes were made by this repair. Production
+license configuration still requires verification in the deployment environment.
+
+Validation adds insertion/geometry/snapshot-precedence regressions to boards.cjs.
+A temporary browser fixture verified five References plus two image Media cards,
+all fitted in the viewport, retained after reload with no duplicates; manual Add
+verified all seven picker types, selection, distinct origins and reload retention.
+The fixture used local snapshot persistence; Postgres RPC tests separately verify
+atomic board_items persistence and owner isolation. The fixture is not deployed.

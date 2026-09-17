@@ -23,7 +23,7 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
       }
       result.push({ key: `${type}:${record.id}`, id: record.id, type: isDocument ? "document" : type,
         title: record.title || record.original_filename || "Untitled",
-        subtitle: [details.creator, details.reference_date, details.project_type, record.plain_text || details.caption || details.description].filter(Boolean).join(" / ").slice(0, 600),
+        subtitle: [details.creator, details.reference_date, details.project_type, type === "media" ? record.original_filename : undefined, record.plain_text || details.caption || details.description].filter(Boolean).join(" / ").slice(0, 600),
         role: isDocument || (type === "reference" && isLiterature(record)) ? "evidence" : type === "note" ? "thinking" : "visual",
         themeIds: context.links.filter(l => l.source_type === "research_topic_theme" && l.relationship_type === "includes" && l.target_type === type && l.target_id === record.id).map(l => l.source_id),
         topicIds, image: type === "media" ? (record.mime_type?.startsWith("image/") ? urls.get(record.id) : undefined) : urls.get(record.primary_media_id || record.cover_media_id || ""),
