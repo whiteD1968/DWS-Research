@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Authenticated, server-resized thumbnail endpoint. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Tldraw, getSnapshot, DefaultColorStyle, DefaultFontStyle, defaultHandleExternalTldrawContent, renderPlaintextFromRichText, type Editor, type TLRichText } from "tldraw";
 import "tldraw/tldraw.css";
 import { saveBoard, renameBoard, convertBoardText, finishBoardImage } from "@/app/(workspace)/boards/actions";
@@ -10,14 +11,26 @@ import type { BoardRecord, Composition } from "@/lib/boards/layout";
 
 import { fitResearchBoard, initializeResearchBoard, insertResearchRecord, type RecordShape } from "@/lib/boards/insertion";
 import { BoardRecords, BoardSourceActions, boardShapeUtils } from "./research-board-shapes";
+import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts";
+import { copyRecoveredBoard } from "@/app/(workspace)/boards/recovery-actions";
+import type { BoardTransfer } from "@/lib/boards/handoff";
+import { applyBoardTransfer } from "@/lib/boards/transfer";
 const components = { StylePanel: null };
 type ImageJob = { id: string; file: File; point?: { x: number; y: number }; uploaded: boolean };
-export type BoardCanvasProps = { board: { id: string; title: string; description: string | null; research_thread_id: string | null; updated_at: string; snapshot: unknown; metadata: { composition?: Composition } }; records: BoardRecord[]; ownerId: string };
+export type BoardCanvasProps = { board: { id: string; title: string; description: string | null; research_thread_id: string | null; updated_at: string; snapshot: unknown; metadata: { composition?: Composition; generated_from?: string; source_id?: string } }; records: BoardRecord[]; ownerId: string; transfer?: BoardTransfer };
 
-export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, persist = saveBoard }: BoardCanvasProps & { persist?: typeof saveBoard }) {
+export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, persist = saveBoard, recoveryDraft, recoveryWarning = "", transfer }: BoardCanvasProps & { persist?: typeof saveBoard; recoveryDraft?: BoardDraft; recoveryWarning?: string }) {
+  const source = board.research_thread_id ? { href: `/research/${board.research_thread_id}/boards`, label: "Research Topic" }
+    : board.metadata?.generated_from === "collection" && board.metadata.source_id ? { href: `/collections/${encodeURIComponent(board.metadata.source_id)}`, label: "Collection" }
+    : board.metadata?.generated_from === "discover" && board.metadata.source_id ? { href: `/discover/sessions/${encodeURIComponent(board.metadata.source_id)}`, label: "Discover session" }
+    : { href: "/boards", label: "Boards" };
   const [records, setRecords] = useState(initialRecords);
   const recordMap = useMemo(() => new Map(records.map(r => [r.key, r])), [records]);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+  const [draftWarning, setDraftWarning] = useState(recoveryWarning);
+  const journal = useRef<DraftJournal | null>(null);
+  const copyId = useRef("");
+  const router = useRouter();
   const [status, setStatus] = useState("Saved");
   const [error, setError] = useState("");
   const [picker, setPicker] = useState(false);
@@ -39,6 +52,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
   const pending = useRef<unknown>(null);
   const running = useRef(false);
   const stopped = useRef(false);
+  const allowReload = useRef(false);
 
   useEffect(() => {
     const surface = surfaceRef.current;
@@ -56,14 +70,51 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     if (running.current || stopped.current || !pending.current) return;
     running.current = true; setStatus("Saving...");
     const snapshot = pending.current; pending.current = null;
+    const savingJournal = journal.current;
     try {
+      await savingJournal?.settled();
       revision.current = await persist(board.id, revision.current, snapshot);
+      savingJournal?.acknowledge(snapshot, revision.current);
+      if (savingJournal !== journal.current) journal.current?.acknowledge(snapshot, revision.current);
+      if (recoveryDraft) void removeDraft(recoveryDraft).catch(() => setDraftWarning("The saved draft could not be cleared from this browser."));
       setStatus("Saved"); setError("");
+      if (transfer) window.history.replaceState(null, "", `/boards/${board.id}`);
     } catch (e) {
       pending.current ||= snapshot; stopped.current = true; setStatus("Error saving");
       setError(e instanceof Error ? e.message : "Unable to save.");
     } finally { running.current = false; }
     if (pending.current && !stopped.current) void flush();
+  }
+  async function saveSeparateCopy() {
+    setBusy(true);
+    editor.current?.updateInstanceState({ isReadonly: true });
+    try {
+      const snapshot = editor.current ? getSnapshot(editor.current.store).document : pending.current;
+      journal.current?.write(snapshot, revision.current);
+      await journal.current?.settled();
+      copyId.current ||= crypto.randomUUID();
+      const id = await copyRecoveredBoard(board.id, copyId.current, snapshot);
+      journal.current?.acknowledge(snapshot, revision.current);
+      await journal.current?.settled();
+      if (recoveryDraft) await removeDraft(recoveryDraft);
+      pending.current = null;
+      router.push(`/boards/${id}`);
+    } catch (e) {
+      editor.current?.updateInstanceState({ isReadonly: false });
+      setError((e as Error).message); setBusy(false);
+    }
+  }
+  async function reloadForRecovery() {
+    const ed = editor.current;
+    if (!ed) return;
+    setBusy(true); ed.updateInstanceState({ isReadonly: true });
+    journal.current?.write(getSnapshot(ed.store).document, revision.current);
+    await journal.current?.settled();
+    if (journal.current?.isDurable()) { allowReload.current = true; window.location.reload(); }
+    else {
+      ed.updateInstanceState({ isReadonly: false }); setBusy(false);
+      setError("Recovery storage is unavailable. Retry saving or save a separate board before reloading.");
+    }
   }
   function place(record: BoardRecord, position?: { x: number; y: number }) {
     const ed = editor.current;
@@ -103,14 +154,17 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     }
   }
   function mount(ed: Editor) {
+    let transferred = false;
     editor.current = ed;
+    journal.current = new DraftJournal(ownerId, board.id, crypto.randomUUID(), () => setDraftWarning("Local draft backup failed. Keep this tab open until the board is saved."));
     try {
-      initializeResearchBoard(ed, board.snapshot, board.metadata?.composition, initialRecords);
+      initializeResearchBoard(ed, recoveryDraft?.snapshot ?? board.snapshot, board.metadata?.composition, initialRecords);
+      if (transfer) transferred = applyBoardTransfer(ed, transfer, initialRecords);
       ed.setStyleForNextShapes(DefaultColorStyle, "black");
       ed.setStyleForNextShapes(DefaultFontStyle, "sans");
       ed.updateInstanceState({ isGridMode: false });
       setActiveEditor(ed); setReady(true);
-    } catch { setError("This board could not be loaded. No changes will be saved."); stopped.current = true; ed.updateInstanceState({ isReadonly: true }); }
+    } catch (e) { setError(e instanceof Error ? e.message : "This board could not be loaded. No changes will be saved."); stopped.current = true; ed.updateInstanceState({ isReadonly: true }); }
     // Fit after the surface has measurable bounds, rather than during mount/layout.
     let fitFrame = 0;
     const surface = ed.getContainer();
@@ -120,6 +174,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
       fitFrame = requestAnimationFrame(() => {
         ed.updateViewportScreenBounds(surface);
         fitResearchBoard(ed);
+        if (transferred) ed.zoomToSelectionIfOffscreen(48, { targetZoom: 0.75 });
         fitObserver.disconnect();
       });
     });
@@ -127,13 +182,15 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     let timeout: ReturnType<typeof setTimeout>;
     const stopNoteStyle = ed.sideEffects.registerBeforeCreateHandler("shape", shape => shape.type === "note" && shape.props.color === "black" ? { ...shape, props: { ...shape.props, color: "grey" } } : shape);
     const scheduleSave = () => {
+      copyId.current = "";
       pending.current = getSnapshot(ed.store).document;
+      journal.current?.write(pending.current, revision.current);
       setStatus(stopped.current ? "Error saving" : "Unsaved"); clearTimeout(timeout); timeout = setTimeout(() => void flush(), 900);
     };
     queueSave.current = scheduleSave;
     const unsubscribe = ed.store.listen(scheduleSave, { scope: "document", source: "user" });
-    if (board.snapshot == null && !stopped.current) { pending.current = getSnapshot(ed.store).document; void flush(); }
-    const beforeUnload = (e: BeforeUnloadEvent) => { if (pending.current || running.current) { e.preventDefault(); } };
+    if ((board.snapshot == null || recoveryDraft || transferred) && !stopped.current) { scheduleSave(); }
+    const beforeUnload = (e: BeforeUnloadEvent) => { if (!allowReload.current && (pending.current || running.current)) { e.preventDefault(); } };
     window.addEventListener("beforeunload", beforeUnload);
     // Override native asset import: media belongs in private Storage, never in the snapshot.
     ed.registerExternalContentHandler("files", async ({ files, point }) => {
@@ -154,11 +211,13 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     return () => { fitObserver.disconnect(); cancelAnimationFrame(fitFrame); queueSave.current = null; setActiveEditor(null); setReady(false); unsubscribe(); stopNoteStyle(); clearTimeout(timeout); void flush(); window.removeEventListener("beforeunload", beforeUnload); editor.current = null; };
   }
   return <div className="board-workspace">
-    <header className="board-header"><Link href={board.research_thread_id ? `/research/${board.research_thread_id}/boards` : "/boards"} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>Research Topic</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError} onClick={() => setPicker(!picker)}>+ Add</button>
+    <header className="board-header"><Link href={source.href} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>{source.label}</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button disabled={busy} onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError || busy} onClick={() => setPicker(!picker)}>+ Add</button>
       <BoardSourceActions editor={activeEditor} records={recordMap} />
       <select aria-label="Convert selected text" value="" disabled={!board.research_thread_id} onChange={e => convert(e.target.value as "note" | "reference")}><option value="">Convert to...</option><option value="note">Structured Note</option><option value="reference">Reference</option></select>
       <button className="button" title="Fit board to viewport" onClick={() => { if (editor.current) fitResearchBoard(editor.current, true); }}>Fit</button>
     </header>
+    {draftWarning && <div className="board-error" role="alert">{draftWarning}</div>}
+    {status === "Error saving" && <div className="board-error"><span>Your work is retained in this tab and, when available, in this browser’s draft storage. If another session changed the board, preserve both versions with a separate copy.</span><button disabled={busy} onClick={() => void saveSeparateCopy()}>Save as separate board</button><button disabled={busy} onClick={() => void reloadForRecovery()}>Reload and recover</button></div>}
     {licenseError && <div className="board-error" role="alert">The board editor is unavailable because this deployment’s tldraw license is missing, invalid, or expired. Contact the workspace administrator. Saved board content is retained.</div>}
     {error && <div className="board-error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>Close</button></div>}
     {failedImages.length > 0 && <div className="board-error"><span>{failedImages.length} image uploads need attention</span><button disabled={busy} onClick={async () => { setBusy(true); for (const job of failedImages) await uploadImage(job); setBusy(false); }}>Retry uploads</button></div>}

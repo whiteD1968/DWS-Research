@@ -339,18 +339,18 @@ Topic Boards (`/research/[id]/boards`) offers manual and generated compositions.
 - `lib/boards/layout.ts` is a pure deterministic composition engine usable by topic, collection or future Discover services. Research Wall separates evidence, visual material and thinking; Contact Sheet uses up to five compact masonry columns; Theme Clusters uses topic-specific theme frames (shared records can have multiple placements); Literature + Precedent separates broad literature and visual areas with Themes between them. No AI calls.
 - The authenticated `createGeneratedBoard` action validates topic ownership and selection. Board metadata records source topic, selected keys, generation version, timestamp, layout and initial composition. Supabase research records remain authoritative; snapshot cards contain identity, geometry and optional display hints (title, subtitle and an internal thumbnail endpoint). The renderer resolves the live catalog by recordKey, so titles and previews refresh on reopen. External image URLs are not copied into shape props; board_items stores only identity and placement.
 - `boards.snapshot` stores the tldraw document, not camera/selection state. `board_items` mirrors linked placements with parent/index state. PDFs use `item_type=document`, themes use `theme`, other linked records use `record`. The item vocabulary also reserves `tool` and typed tool configuration; no specialist tools are implemented.
-- Saves debounce for 900 ms and serialize writes. The security-invoker `save_research_board` RPC locks the owned board, checks its exact revision, validates linked owners, then updates snapshot and placements in one transaction. A stale session cannot overwrite a newer save. Errors retain the pending snapshot in memory with Retry; reload is required for revision conflicts. Leave warnings protect unsaved work, but there is no durable offline recovery or collaboration yet.
+- Saves debounce for 900 ms and serialize writes. The security-invoker `save_research_board` RPC locks the owned board, checks its exact revision, validates linked owners, then updates snapshot and placements in one transaction. A stale session cannot overwrite a newer save. Errors retain the pending snapshot in memory and in a browser-local IndexedDB draft when storage is available. Retry preserves revision checks; conflicts can be recovered into a separate board. Leave warnings protect unsaved work. Draft recovery is not full offline access or collaboration.
 - Source cards support the header's Open Source command. PDFs/images go through an authenticated fresh signed-URL redirect to the browser viewer. Notes and themes open their parent context. Removing a placement never deletes its source.
 - Add provides a searchable owner-scoped record picker and freeform tools. Text/sticky conversion opens an editable form, creates a topic Note or Reference with a stable retry ID, then replaces the loose placement. References are linked to the topic. No automatic conversion.
 - Image drops upload JPEG/PNG/WebP (up to 20 MB) directly to the private `research-media` owner folder, validate content server-side, register media and place a linked card. Retry retains the upload ID. Native embedded-asset imports are blocked. Thumbnails are authenticated, resized with sharp to fit 640px, private-cacheable and lazily loaded; originals are not sent to the canvas.
 
 ## Board validation and limits
 
-Run `npm install`, `npm run lint`, `npm run typecheck`, `npm run build`, and `node --test --test-isolation=none tests/boards.cjs tests/board-persistence.cjs tests/research.cjs tests/discover.cjs`.
+Run `npm install`, `npm run lint`, `npm run typecheck`, `npm run build`, and `node --test --test-isolation=none tests/boards.cjs tests/board-persistence.cjs tests/board-continuity.cjs tests/research.cjs tests/discover.cjs`.
 
 Tests cover deterministic/nonoverlapping layouts at 100 records, shared themes, owner-scoped server saves, embedded-asset rejection and stale revisions. PGlite runs the repository baseline and save migration against an isolated Postgres engine, including atomic rollback, PDF placement type, owner RLS and denied anonymous RPC access. It does not contact Supabase. Browser fixture checks cover drag, resize, duplicate/delete, text/sticky/sketch/arrow, conversion form, local document reload and mobile fit; the temporary fixture is not shipped.
 
-Live authenticated uploads, conversions and Supabase save/reload still need a staging smoke test after migration and environment setup. Generation is capped at 100 selected records/300 theme placements; saves at 500 linked placements and 8 MB. Deleted sources display unavailable and must be removed before saving. The picker currently loads the owner's full catalog; server-side paginated search is a next scaling step. No board thumbnails, realtime collaboration, PDF page rendering, offline recovery, specialist nodes or AI generation yet. Next milestone: staging validation and durable draft recovery, then Collection/Discover-to-Board handoff.
+Live authenticated uploads, conversions and Supabase save/reload still need a staging smoke test after migration and environment setup. Generation is capped at 100 selected records/300 theme placements; saves at 500 linked placements and 8 MB. Deleted sources display unavailable and must be removed before saving. The picker currently loads the owner's full catalog; server-side paginated search is a next scaling step. No full-canvas raster thumbnails, realtime collaboration, PDF page rendering, offline uploads, specialist nodes or AI generation yet. Linked-record previews and browser-local draft recovery are available.
 
 
 ## Board insertion repair
@@ -437,3 +437,56 @@ variables, production data writes or AI features are introduced.
 
 Next milestone: durable draft recovery and Collection/Discover-to-Board handoff,
 with staging coverage for authenticated uploads and source navigation.
+
+
+## Board continuity: drafts, handoff and previews
+
+Board editing writes a versioned document to IndexedDB before its network save.
+Drafts are scoped by authenticated owner, board and a unique editing session, so
+separate tabs cannot replace each other's backups. Disk writes are serialized;
+acknowledging an older save rebases newer local edits rather than deleting them.
+Successful saves remove only their own acknowledged draft. JSONB key ordering is
+ignored when detecting an already-saved draft after an uncertain network response.
+Storage failure is visible and does not silently claim that a backup exists.
+
+Opening a board checks this browser's drafts before mounting the editor. A draft
+based on the current server revision can be restored. A conflicting draft can be
+saved as a separate recovered board, preserving topic context, using the existing
+owner-validated atomic save RPC. Recovery copies use a retry-safe request ID. Users
+can retain drafts while opening the saved board, or explicitly discard one.
+Reload and recover waits for durable local storage before leaving the editor.
+Drafts do not sync across devices, survive clearing site data, or back up pending
+image upload files. Authentication and the initial page still require connectivity.
+
+Collection detail includes searchable reference selection and Send to board.
+Discover offers the same destination chooser for its selected results: import
+reuses the existing reference/source deduplication transaction before the handoff.
+Both paths support a new board with an editable title and one of the four layouts,
+or one of the 100 most recently updated existing boards. The server verifies the
+source, membership, destination ownership and available catalog keys. A failed
+handoff retains any successfully imported references for retry.
+
+New boards store source provenance in existing metadata and reuse the pure layout
+engine. Existing boards receive a compact group beside their content. Its receipt
+and linked placements are saved in the same document; reopening the same transfer
+URL cannot duplicate them, even after deleting an imported placement. Transfers
+are limited to 100 sources and preserve the 500-placement board limit. No source
+records or existing board geometry are rewritten by the transfer.
+
+Board lists display six linked-record preview tiles with private, lazy image
+thumbnails and text fallback. These are representative source previews, not canvas
+screenshots; freehand-only boards show a neutral placeholder. Lists are ordered by
+last update and paginated 24 at a time. Preview reads fetch only the listed sources,
+not full board snapshots or the owner's complete catalog.
+
+Validation includes draft/save races, session isolation, storage failures,
+revision conflicts, JSONB equality, retry-safe recovery copies, ownership and
+membership rejection, Discover handoff ordering and transfer receipts in
+`tests/board-continuity.cjs`. A temporary browser fixture exercised real IndexedDB:
+offline edit/reload/restore, acknowledgement cleanup, conflict recovery choices,
+repeated transfers, destination controls and linked-record previews. It used a
+simulated server; authenticated live Supabase end-to-end testing remains a staging
+check. The fixture route is not deployed. No migrations, dependencies or new
+environment variables are required.
+
+Next: selected PDF pages and named board views, followed by clean pin-up export.

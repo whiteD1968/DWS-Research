@@ -1,3 +1,4 @@
+import { CollectionBoardHandoff } from "@/components/board-handoff";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -115,6 +116,7 @@ export default async function CollectionDetailPage({
         <span className="status-pill">{references.length} records</span>
       </section>
 
+      <CollectionBoardHandoff id={collection.id} title={collection.title} records={references.map(r => ({ id: r.id, title: r.title }))} />
       <section className="workspace-grid">
         <form action={updateCollection} className="panel form-stack">
           <p className="panel-kicker">Edit collection</p>

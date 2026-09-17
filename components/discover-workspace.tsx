@@ -7,6 +7,7 @@ import { runDiscover, importDiscover } from "@/app/(workspace)/discover/actions"
 import type { DiscoverFilters, ResearchSession } from "@/lib/discover/types";
 import { discoverMode, rankDiscoverResults } from "@/lib/discover/rank";
 import { DiscoverResultCard } from "@/components/discover-result-card";
+import { BoardHandoff } from "@/components/board-handoff";
 import { DiscoverTopicAction } from "@/components/discover-topic-action";
 
 export function DiscoverWorkspace({ initial, collections, matches = {}, topics = [] }: {
@@ -80,6 +81,7 @@ export function DiscoverWorkspace({ initial, collections, matches = {}, topics =
     {error && <p className="discover-error" role="alert">{error}</p>}
     {message && <p role="status">{message} {destination && <Link href={`/collections/${destination}`}>Open collection</Link>}</p>}
     {initial && <>
+      <BoardHandoff source={{ type: "discover", id: initial.id }} sourceTitle={initial.title || initial.query} selected={selected} />
       <DiscoverTopicAction sessionId={initial.id} selected={selected} topics={topics} onSaved={items => setSaved(previous => ({ ...previous, ...items }))} />
       <div className="discover-result-heading"><h2>{results.length} results</h2><div>
         <button className="text-button" disabled={pending} onClick={() => setSelected(results.map(result => result.id))}>Select all</button>
