@@ -1,3 +1,4 @@
+import { externalImageReference } from "@/lib/discover/images";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { BoardPreview, type PreviewRecord } from "./board-preview";
@@ -17,10 +18,10 @@ export async function BoardList({ ownerId, topicId, page = 1 }: { ownerId: strin
   await Promise.all(types.map(async ([type, table, imageColumn]) => {
     const ids = [...new Set(items.filter(i => i.record_type === type).map(i => i.record_id))];
     if (!ids.length) return;
-    const { data: sources } = await db.from(table).select(`id,title${imageColumn ? `,${imageColumn}` : ""}`).eq("owner_id", ownerId).in("id", ids);
-    for (const source of (sources || []) as unknown as { id: string; title: string; primary_media_id?: string; cover_media_id?: string }[]) {
+    const { data: sources } = await db.from(table).select(`id,title${type === "reference" ? ",metadata" : ""}${imageColumn ? `,${imageColumn}` : ""}`).eq("owner_id", ownerId).in("id", ids);
+    for (const source of (sources || []) as unknown as { id: string; title: string; primary_media_id?: string; cover_media_id?: string; metadata?: Record<string, unknown> }[]) {
       const key = `${type}:${source.id}`;
-      records.set(key, { key, type, title: source.title });
+      records.set(key, { key, type, title: source.title, image: type === "reference" ? externalImageReference(source.metadata)?.thumbnail : undefined });
       const imageId = source.primary_media_id || source.cover_media_id;
       if (imageId) imageIds.set(key, imageId);
     }

@@ -490,3 +490,47 @@ check. The fixture route is not deployed. No migrations, dependencies or new
 environment variables are required.
 
 Next: selected PDF pages and named board views, followed by clean pin-up export.
+
+
+## Discover image search
+
+Choose Images, enter a query, and run Search images. The Brave adapter uses the
+separate `/res/v1/images/search` endpoint with up to 50 results and strict SafeSearch.
+It reuses `BRAVE_SEARCH_API_KEY`; that key must have image-search access. No new
+variable is required. Brave's image endpoint does not support the web date filters,
+so date controls are disabled in Images mode. Switching between web and image modes
+requires a new search instead of presenting reordered web hits as image results.
+
+Image cards use lazy provider thumbnails, bounded natural proportions, dimensions,
+an enlarged keyboard-dismissable preview and separate source-page/original links.
+Signed image URL parameters are preserved. Sessions retain image dimensions and
+source-page provenance. Broken thumbnails fall back to the original in Discover;
+unavailable images retain their source links and selection controls.
+
+Apply `supabase/migrations/20260917143424_discover_image_import.sql` before deploying
+the image search importer. It replaces the existing security-invoker import RPC:
+image URLs determine image identity, title-only matching excludes images, the batch
+limit is 100, and the existing advisory lock, owner RLS and atomic transaction remain.
+No tables, policies, source records or existing session snapshots are rewritten.
+The image URL is the reference/source identity; `sourcePageUrl` and `source_page_url`
+retain the page that published it. Different images on one page remain separate.
+
+Save as references, Collection, Research Topic and Board handoffs reuse this import.
+Library, Collections and Boards can display the saved external thumbnail. These are
+linked previews, not uploaded media files; images can expire or be removed by the
+publisher. Canvas snapshots still contain identity/geometry and never copy external
+image URLs into shape props. Original images are not downloaded by the server.
+
+Validation: `tests/discover.cjs` covers endpoint selection, signed URLs, dimensions,
+source provenance, invalid/empty/provider-denied responses and unsupported filters.
+`tests/discover-images.cjs` runs isolated Postgres imports of 50 same-title images,
+retry deduplication, collection placement, owner isolation and anonymous denial.
+Temporary browser fixtures check portrait/landscape layout, preview, Escape,
+selection and mode switching. They do not exercise a live Brave subscription.
+API reference: https://api-dashboard.search.brave.com/api-reference/images/image_search
+
+The image-import migration was applied to the production Supabase project and its
+security-invoker/authenticated-only permissions verified on 2026-09-17. Migration
+filename matches the deployed history version. Existing unrelated advisories remain:
+[signup trigger function permissions](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)
+and [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).

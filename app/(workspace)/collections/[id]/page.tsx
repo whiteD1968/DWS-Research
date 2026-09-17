@@ -1,3 +1,4 @@
+import { externalImageReference } from "@/lib/discover/images";
 import { CollectionBoardHandoff } from "@/components/board-handoff";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -24,6 +25,7 @@ type CollectionItem = {
 };
 
 type ReferenceRecord = {
+  metadata?: Record<string, unknown>;
   id: string;
   title: string;
   reference_type: string;
@@ -64,7 +66,7 @@ export default async function CollectionDetailPage({
       .returns<CollectionItem[]>(),
     supabase
       .from("references")
-      .select("id,title,reference_type,creator,primary_media_id")
+      .select("id,title,reference_type,creator,primary_media_id,metadata")
       .order("updated_at", { ascending: false })
       .returns<ReferenceRecord[]>(),
   ]);
@@ -164,7 +166,7 @@ export default async function CollectionDetailPage({
               const mediaItem = reference.primary_media_id
                 ? mediaById.get(reference.primary_media_id)
                 : null;
-              const imageUrl = mediaItem ? signedUrls.get(mediaItem.id) : null;
+              const imageUrl = (mediaItem ? signedUrls.get(mediaItem.id) : null) || externalImageReference(reference.metadata)?.thumbnail;
 
               return (
                 <article className="visual-card reference-card" key={reference.id}>
@@ -172,7 +174,7 @@ export default async function CollectionDetailPage({
                     <div className="image-frame reference-thumb">
                       {imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img alt={mediaItem?.alt_text ?? reference.title} src={imageUrl} />
+                        <img referrerPolicy="no-referrer" alt={mediaItem?.alt_text ?? reference.title} src={imageUrl} />
                       ) : (
                         <span>{reference.reference_type}</span>
                       )}

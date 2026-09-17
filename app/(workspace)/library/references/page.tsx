@@ -1,3 +1,4 @@
+import { externalImageReference } from "@/lib/discover/images";
 import Link from "next/link";
 import { createReference } from "./actions";
 import { createClient } from "@/lib/supabase/server";
@@ -12,6 +13,7 @@ type ReferenceRecord = {
   project_name: string | null;
   why_saved: string | null;
   primary_media_id: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 function excerpt(value: string | null) {
@@ -34,7 +36,7 @@ export default async function ReferencesPage({
 
   const { data: references } = await supabase
     .from("references")
-    .select("id,title,reference_type,creator,project_name,why_saved,primary_media_id")
+    .select("id,title,reference_type,creator,project_name,why_saved,primary_media_id,metadata")
     .order("updated_at", { ascending: false })
     .returns<ReferenceRecord[]>();
 
@@ -147,14 +149,14 @@ export default async function ReferencesPage({
             const mediaItem = reference.primary_media_id
               ? mediaById.get(reference.primary_media_id)
               : null;
-            const imageUrl = mediaItem ? signedUrls.get(mediaItem.id) : null;
+            const imageUrl = (mediaItem ? signedUrls.get(mediaItem.id) : null) || externalImageReference(reference.metadata)?.thumbnail;
 
             return (
               <Link className="visual-card reference-card" href={`/library/references/${reference.id}`} key={reference.id}>
                 <div className="image-frame reference-thumb">
                   {imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img alt={mediaItem?.alt_text ?? reference.title} src={imageUrl} />
+                    <img referrerPolicy="no-referrer" loading="lazy" alt={mediaItem?.alt_text ?? reference.title} src={imageUrl} />
                   ) : (
                     <span>{reference.reference_type}</span>
                   )}

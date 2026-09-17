@@ -5,7 +5,7 @@ export function buildDiscoverQuery(query: string, filters: DiscoverFilters) {
   const suffix = {
     all: "", project: "(project OR prototype OR pavilion OR case study)",
     paper: "(paper OR proceedings OR thesis OR DOI)", lab: "(research lab OR laboratory OR research group)",
-    video: "(site:youtube.com OR site:vimeo.com)",
+    video: "(site:youtube.com OR site:vimeo.com)", image: "",
   }[discoverMode(filters.contentType)];
   return [query.trim(), filters.topic, suffix].filter(Boolean).join(" ");
 }

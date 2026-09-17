@@ -13,10 +13,13 @@ export type DiscoverResult = {
   location?: string;
   imageUrl?: string;
   thumbnailUrl?: string;
+  sourcePageUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   metadata?: Record<string, unknown>;
   relevanceReason?: string;
 };
-export type DiscoverMode = "all" | "project" | "paper" | "lab" | "video";
+export type DiscoverMode = "all" | "project" | "paper" | "lab" | "video" | "image";
 export type DiscoverFilters = { freshness: string; contentType: string; topic: string; yearFrom?: string; yearTo?: string };
 export type ResearchSession = {
   id: string; title: string; query: string; filters: DiscoverFilters;

@@ -1554,3 +1554,18 @@ select:focus {
 .board-preview-tile small { display: block; text-transform: uppercase; font-size: 8px; margin-bottom: 7px; }
 .board-preview-tile span { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font-family: Georgia, serif; font-size: 11px; color: #30302c; }
 .board-preview-empty { grid-column: 1 / -1; grid-row: 1 / -1; align-self: center; justify-self: center; }
+
+.discover-image-help { font-size: 13px; color: #686d68; max-width: 850px; }
+.discover-image-grid { display: block; columns: 3; column-gap: 24px; }
+.discover-image-grid .discover-result { break-inside: avoid; margin-bottom: 28px; }
+.discover-image-grid .discover-result h3 { font-size: 17px; }
+.discover-preview-button { position: absolute; inset: 0; border: 0; background: transparent; cursor: zoom-in; }
+.discover-preview-button:focus-visible { outline: 3px solid #687a69; outline-offset: -4px; }
+.discover-check { z-index: 1; }
+.discover-image-links { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; margin: 10px 0; }
+.discover-image-links span { width: 100%; color: #686d68; }
+.discover-image-dialog { border: 1px solid #d4d7d0; border-radius: 6px; padding: 20px; max-width: min(1100px, 94vw); max-height: 94dvh; }
+.discover-image-dialog::backdrop { background: #151a16bf; }
+.discover-image-dialog > img { display: block; max-width: 100%; max-height: 70dvh; object-fit: contain; margin: 16px auto; }
+@media (max-width: 1100px) { .discover-image-grid { columns: 2; } }
+@media (max-width: 640px) { .discover-image-grid { columns: 1; } }

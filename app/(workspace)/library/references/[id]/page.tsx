@@ -1,3 +1,4 @@
+import { externalImageReference } from "@/lib/discover/images";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { linkReferenceToProject } from "@/app/(workspace)/projects/actions";
@@ -20,6 +21,7 @@ import {
 import { getSearchParam, type PageSearchParams } from "@/lib/search-params";
 
 type ReferenceDetail = {
+  metadata?: Record<string, unknown>;
   id: string;
   title: string;
   reference_type: string;
@@ -83,6 +85,7 @@ export default async function ReferenceDetailPage({
     notFound();
   }
 
+  const external = externalImageReference(reference.metadata);
   const [
     { data: collectionItems },
     { data: relationships },
@@ -349,6 +352,11 @@ export default async function ReferenceDetailPage({
         </div>
       </section>
 
+      {external && <section className="panel section-block"><h2>Image reference</h2>
+        {/* eslint-disable-next-line @next/next/no-img-element -- External image reference preview. */}
+        {external.thumbnail && <img src={external.thumbnail} alt={reference.title} loading="lazy" referrerPolicy="no-referrer" style={{ maxWidth: "100%", maxHeight: 520, objectFit: "contain" }} />}
+        <p>This is a linked image preview. The original remains on its source website.</p><div className="inline-actions">{external.source && <a href={external.source} target="_blank" rel="noopener noreferrer">Source page ↗</a>}{external.image && <a href={external.image} target="_blank" rel="noopener noreferrer">Original image ↗</a>}</div>
+      </section>}
       <section className="workspace-grid section-block">
         <article className="panel detail-panel">
           <p className="panel-kicker">Description</p>

@@ -26,11 +26,12 @@ export function DiscoverWorkspace({ initial, collections, matches = {}, topics =
   const [newTitle, setNewTitle] = useState("");
   const [destination, setDestination] = useState<string | null>(null);
   const mode = discoverMode(filters.contentType);
+  const requiresSearch = !!initial && ((mode === "image") !== (discoverMode(initial.filters.contentType) === "image"));
   const results = useMemo(() => {
-    if (!initial) return [];
+    if (!initial || requiresSearch) return [];
     // Reopening preserves the snapshot; changing mode locally previews a different order.
     return mode === discoverMode(initial.filters.contentType) ? initial.result_snapshot : rankDiscoverResults(initial.result_snapshot, initial.query, mode);
-  }, [initial, mode]);
+  }, [initial, mode, requiresSearch]);
 
   function save(toCollection: boolean) {
     if (!initial) return;
@@ -63,24 +64,26 @@ export function DiscoverWorkspace({ initial, collections, matches = {}, topics =
       <textarea id="research-question" required maxLength={400} value={query} onChange={event => setQuery(event.target.value)}
         placeholder="Find architectural projects using robotic 3D printing with stone, concrete, clay, or bio-based materials..." />
       <div className="discover-modes" role="group" aria-label="Content mode">
-        {[["all", "All"], ["project", "Projects"], ["paper", "Papers"], ["lab", "Labs"], ["video", "Videos"]].map(([value, label]) =>
+        {[["all", "All"], ["project", "Projects"], ["paper", "Papers"], ["lab", "Labs"], ["video", "Videos"], ["image", "Images"]].map(([value, label]) =>
           <button type="button" key={value} aria-pressed={mode === value} disabled={pending}
-            onClick={() => setFilters({ ...filters, contentType: value })}>{label}</button>)}
+            onClick={() => { setSelected([]); setFilters({ ...filters, contentType: value, ...(value === "image" ? { freshness: "", yearFrom: "", yearTo: "" } : {}) }); }}>{label}</button>)}
       </div>
       <div className="discover-query-footer"><div className="discover-filters">
-        <label>Date range<select disabled={Boolean(filters.yearFrom || filters.yearTo)} value={filters.freshness} onChange={event => setFilters({ ...filters, freshness: event.target.value })}>
+        <label>Date range<select disabled={mode === "image" || Boolean(filters.yearFrom || filters.yearTo)} value={filters.freshness} onChange={event => setFilters({ ...filters, freshness: event.target.value })}>
           <option value="">Any time</option><option value="pd">Past day</option><option value="pw">Past week</option><option value="pm">Past month</option><option value="py">Past year</option>
         </select></label>
-        <label>From year<input type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearFrom ?? ""} onChange={event => setFilters({ ...filters, yearFrom: event.target.value })} /></label>
-        <label>To year<input type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearTo ?? ""} onChange={event => setFilters({ ...filters, yearTo: event.target.value })} /></label>
+        <label>From year<input disabled={mode === "image"} type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearFrom ?? ""} onChange={event => setFilters({ ...filters, yearFrom: event.target.value })} /></label>
+        <label>To year<input disabled={mode === "image"} type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearTo ?? ""} onChange={event => setFilters({ ...filters, yearTo: event.target.value })} /></label>
         <label>Focus<select value={filters.topic} onChange={event => setFilters({ ...filters, topic: event.target.value })}>
           <option value="">All disciplines</option>{["architecture", "fabrication", "materials"].map(value => <option key={value}>{value}</option>)}
         </select></label>
-      </div><button className="button button-primary" disabled={pending} type="submit">{pending ? "Working..." : initial ? "Search again" : "Search"}</button></div>
+      </div><button className="button button-primary" disabled={pending} type="submit">{pending ? "Working..." : mode === "image" ? "Search images" : initial ? "Search again" : "Search"}</button></div>
     </form>
+    {mode === "image" && <p className="discover-image-help">Image search uses visual results. Date filters are unavailable. Saving keeps an image reference and its source page; it does not upload a copy of the original image.</p>}
+    {requiresSearch && <p role="status">Run {mode === "image" ? "Search images" : "Search again"} to fetch results for this mode.</p>}
     {error && <p className="discover-error" role="alert">{error}</p>}
     {message && <p role="status">{message} {destination && <Link href={`/collections/${destination}`}>Open collection</Link>}</p>}
-    {initial && <>
+    {initial && !requiresSearch && <>
       <BoardHandoff source={{ type: "discover", id: initial.id }} sourceTitle={initial.title || initial.query} selected={selected} />
       <DiscoverTopicAction sessionId={initial.id} selected={selected} topics={topics} onSaved={items => setSaved(previous => ({ ...previous, ...items }))} />
       <div className="discover-result-heading"><h2>{results.length} results</h2><div>
@@ -101,7 +104,7 @@ export function DiscoverWorkspace({ initial, collections, matches = {}, topics =
           <button className="button" disabled={pending} onClick={() => save(true)}>Save to collection</button>
         </div>}
       </div>}
-      <div className="discover-grid">{results.map(result => <DiscoverResultCard key={result.id} result={result}
+      <div className={mode === "image" ? "discover-grid discover-image-grid" : "discover-grid"}>{results.map(result => <DiscoverResultCard key={result.id} result={result}
         selected={selected.includes(result.id)} disabled={pending} referenceId={saved[result.id]}
         onSelect={checked => setSelected(previous => checked ? [...previous, result.id] : previous.filter(id => id !== result.id))} />)}</div>
     </>}

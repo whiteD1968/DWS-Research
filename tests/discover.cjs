@@ -104,3 +104,42 @@ test('provider normalizes partial results, rejects unsafe links and contains fai
     if (originalKey === undefined) delete process.env.BRAVE_SEARCH_API_KEY; else process.env.BRAVE_SEARCH_API_KEY = originalKey;
   }
 });
+
+test('image mode uses image endpoint, preserves signed URLs and distinct images on the same source page', async () => {
+ const originalFetch=global.fetch, originalKey=process.env.BRAVE_SEARCH_API_KEY;
+ try {
+  process.env.BRAVE_SEARCH_API_KEY='test-only'; let request;
+  global.fetch=async(url)=>{request=url;return {ok:true,json:async()=>({results:[
+   {title:'<b>Pavilion</b>',url:'https://example.com/projects/pavilion',thumbnail:{src:'https://imgs.search.brave.com/proxy?z=2&a=1'},properties:{url:'https://example.com/a.jpg?z=2&a=1',width:600,height:900}},
+   {title:'Pavilion',url:'https://example.com/projects/pavilion',properties:{url:'https://example.com/b.jpg',width:1200,height:600}},
+   {title:'Duplicate',url:'https://example.com/projects/pavilion',properties:{url:'https://example.com/a.jpg?z=2&a=1'}},
+   {title:'Unsafe',url:'https://example.com',properties:{url:'javascript:alert(1)'}},
+   {title:'Missing image',url:'https://example.com'},null,
+  ]})};};
+  const results=await searchDiscover('pavilion',{contentType:'image',topic:'architecture',freshness:''});
+  assert.equal(request.pathname,'/res/v1/images/search');assert.equal(request.searchParams.get('count'),'50');assert.equal(request.searchParams.get('safesearch'),'strict');
+  assert.equal(request.searchParams.has('freshness'),false);assert.equal(request.searchParams.has('text_decorations'),false);
+  assert.equal(results.length,2);assert.equal(results[0].resultType,'image');assert.equal(results[0].sourcePageUrl,'https://example.com/projects/pavilion');
+  assert.equal(results[0].imageUrl,'https://example.com/a.jpg?z=2&a=1');assert.notEqual(results[0].id,results[1].id);
+  const snapshot=createDiscoverSnapshot(results);assert.equal(snapshot[0].imageHeight,900);assert.equal(snapshot[0].sourcePageUrl,results[0].sourcePageUrl);
+ } finally {global.fetch=originalFetch;if(originalKey===undefined)delete process.env.BRAVE_SEARCH_API_KEY;else process.env.BRAVE_SEARCH_API_KEY=originalKey;}
+});
+test('image mode rejects unsupported dates before making a provider request', async()=>{
+ let called=false;await assert.rejects(searchDiscover('clay',{contentType:'image',freshness:'py',topic:''},{search:async()=>{called=true;return [];}}),/Date filters/);assert.equal(called,false);
+ assert.equal(discoverMode('image'),'image');assert.equal(buildDiscoverQuery('clay pavilion',{contentType:'image',topic:'',freshness:''}),'clay pavilion');
+});
+test('image provider handles empty, malformed and unauthorized responses',async()=>{
+ const originalFetch=global.fetch, originalKey=process.env.BRAVE_SEARCH_API_KEY;const filters={contentType:'image',topic:'',freshness:''};
+ try{process.env.BRAVE_SEARCH_API_KEY='test-only';global.fetch=async()=>({ok:true,json:async()=>({results:[]})});assert.deepEqual(await new BraveSearchProvider().search('clay',filters),[]);
+ global.fetch=async()=>({ok:true,json:async()=>({results:{}})});await assert.rejects(new BraveSearchProvider().search('clay',filters),/invalid response/);
+ global.fetch=async()=>({ok:false,status:403});await assert.rejects(new BraveSearchProvider().search('clay',filters),/not enabled/);
+ }finally{global.fetch=originalFetch;if(originalKey===undefined)delete process.env.BRAVE_SEARCH_API_KEY;else process.env.BRAVE_SEARCH_API_KEY=originalKey;}
+});
+test('external image references validate URLs and dimensions without altering signed query strings',()=>{
+ const {externalImageReference,safeImageUrl,imageDimension}=load('lib/discover/images.ts');
+ assert.equal(safeImageUrl('https://example.com/a?z=2&a=1'),'https://example.com/a?z=2&a=1');
+ for(const value of ['javascript:alert(1)','data:image/png,x','https://user:pass@example.com',undefined,123])assert.equal(safeImageUrl(value),undefined);
+ assert.equal(imageDimension(-3),undefined);assert.equal(imageDimension(Infinity),undefined);
+ assert.equal(externalImageReference({external_result:{resultType:'article',thumbnailUrl:'https://example.com/a'}}),undefined);
+ assert.equal(externalImageReference({external_result:{resultType:'image',sourcePageUrl:'https://example.com/page',imageUrl:'https://example.com/a.jpg',imageWidth:600,imageHeight:900}}).height,900);
+});

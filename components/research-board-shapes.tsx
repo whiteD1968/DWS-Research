@@ -20,7 +20,7 @@ const RecordCard = memo(function RecordCard({ shape }: { shape: RecordShape }) {
   const body = type === "note" ? record?.body || record?.subtitle : type === "theme" ? record?.subtitle : undefined;
   const byline = record?.creator || (type === "document" ? record?.subtitle : undefined);
   return <HTMLContainer className={`research-board-card card-${type}${image ? " card-visual" : ""}${compact ? " card-compact" : ""}`} style={{ width: shape.props.w, height: shape.props.h }}>
-    {image && <div className="board-card-image"><img src={image} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setFailedImage(image)} /></div>}
+    {image && <div className="board-card-image"><img src={image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} onError={() => setFailedImage(image)} /></div>}
     <div className="board-card-caption">
       <small>{type === "document" ? "Document / source" : type === "theme" ? "Theme / linked" : type === "unavailable" ? "Unavailable record" : type}</small>
       <strong>{record?.title || "Source removed"}</strong>

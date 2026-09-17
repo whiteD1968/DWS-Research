@@ -13,6 +13,7 @@ export function createDiscoverSnapshot(results: DiscoverResult[]): DiscoverResul
       title: result.title, subtitle: result.subtitle, summary: result.summary, url: result.url,
       sourceName: result.sourceName, publishedAt: result.publishedAt, creator: result.creator,
       location: result.location, imageUrl: result.imageUrl, thumbnailUrl: result.thumbnailUrl,
+      sourcePageUrl: result.sourcePageUrl, imageWidth: result.imageWidth, imageHeight: result.imageHeight,
       relevanceReason: result.relevanceReason, metadata,
     };
   });

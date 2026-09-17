@@ -11,14 +11,14 @@ export async function discoverLibrary(ownerId: string, results: DiscoverResult[]
   if (results.length) {
     let offset = 0;
     for (;;) {
-      const { data, error: readError } = await db.from("references").select("id,title,metadata,sources:primary_source_id(url)")
+      const { data, error: readError } = await db.from("references").select("id,title,reference_type,metadata,sources:primary_source_id(url)")
         .eq("owner_id", ownerId).order("id").range(offset, offset + 499);
       if (readError) break;
       for (const reference of data ?? []) {
         const source = reference.sources as unknown as { url?: string } | null;
         for (const result of results) {
-          if (normalizeUrl(source?.url ?? "") === result.url || reference.metadata?.normalized_url === result.url ||
-            reference.title.toLowerCase().replace(/[\s\p{P}]+/gu, "") === result.title.toLowerCase().replace(/[\s\p{P}]+/gu, "")) matches[result.id] = reference.id;
+          if (source?.url === result.url || normalizeUrl(source?.url ?? "") === result.url || reference.metadata?.normalized_url === result.url ||
+            (result.resultType !== "image" && reference.reference_type !== "image" && reference.metadata?.original_result_type !== "image" && reference.title.toLowerCase().replace(/[\s\p{P}]+/gu, "") === result.title.toLowerCase().replace(/[\s\p{P}]+/gu, ""))) matches[result.id] = reference.id;
         }
       }
       if (!data || data.length < 500) break;

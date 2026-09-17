@@ -13,11 +13,11 @@ const hits = (text: string, expression: RegExp) => [...new Set(text.match(expres
 
 export function discoverMode(value: string): DiscoverMode {
   if (value === "studio") return "lab";
-  return ["project", "paper", "lab", "video"].includes(value) ? value as DiscoverMode : "all";
+  return ["project", "paper", "lab", "video", "image"].includes(value) ? value as DiscoverMode : "all";
 }
 
 export function classifyDiscoverResult(result: DiscoverResult) {
-  const url = new URL(result.url);
+  const url = new URL(result.sourcePageUrl || result.url);
   const host = url.hostname.toLowerCase();
   const path = normalize(url.pathname);
   const title = normalize(result.title);
@@ -30,13 +30,14 @@ export function classifyDiscoverResult(result: DiscoverResult) {
   const evidence: string[] = [];
   function classify(type: DiscoverResult["resultType"], reason: string) { classification = type; evidence.push(reason); }
 
-  if (onDomain(host, ["youtube.com", "youtu.be", "vimeo.com"]) || /\/(video|watch|videos)(\/|$)/.test(path) || result.resultType === "video") classify("video", "Video source or page");
+  if (result.resultType === "image") classify("image", "Image search result");
+  else if (onDomain(host, ["youtube.com", "youtu.be", "vimeo.com"]) || /\/(video|watch|videos)(\/|$)/.test(path) || result.resultType === "video") classify("video", "Video source or page");
   else if (/\/(products?|shop|store|catalog)(\/|$)/.test(path) || /\b(buy now|add to cart|request a quote|for sale)\b/.test(text)) classify("product", "Product or sales page");
   else if (journal || /\b(doi|proceedings|journal|thesis|dissertation|research paper|conference paper)\b/.test(text) || (/\.pdf$/.test(path) && /\b(abstract|authors?|research|conference|study)\b/.test(text))) classify("paper", "Scholarly source or publication language");
   else if (projectPage || project.test(title) || (project.test(text) && /\b(fabricated|constructed|built|3d printed|completed)\b/.test(text))) classify("project", "Project page or case-study language");
   else if (/\b(laboratory|research group|research lab|fabrication lab|institute|research cent(er|re))\b/.test(text) || /\/(labs?|research groups?)(\/|$)/.test(path)) classify("lab", "Lab or research-group identity");
   else if (/\b(supplier|manufacturer|equipment catalog|machine sales)\b/.test(text)) classify("vendor", "Commercial supplier language");
-  else if (/\.(jpg|jpeg|png|webp)$/.test(path) || result.resultType === "image") classify("image", "Image resource");
+  else if (/\.(jpg|jpeg|png|webp)$/.test(path)) classify("image", "Image resource");
   else if (result.summary || result.resultType === "article") classify("article", "General editorial page");
 
   const classified = classification as DiscoverResult["resultType"];
@@ -52,6 +53,7 @@ const modeOrder: Record<DiscoverMode, string[]> = {
   paper: ["paper", "lab", "article", "project", "video", "image", "other", "vendor", "product"],
   lab: ["lab", "project", "paper", "article", "video", "image", "other", "vendor", "product"],
   video: ["video", "project", "lab", "paper", "article", "image", "other", "vendor", "product"],
+  image: ["image", "project", "article", "paper", "lab", "video", "other", "vendor", "product"],
 };
 
 export function rankDiscoverResults(results: DiscoverResult[], query: string, mode: DiscoverMode = "all"): DiscoverResult[] {

@@ -227,7 +227,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
       <input aria-label="Search research" placeholder="Search title, creator or text" value={query} onChange={e => setQuery(e.target.value)} />
       <div className="board-picker-filters" role="group" aria-label="Record type">{[["", "All"], ["reference", "References"], ["media", "Images"], ["document", "Documents"], ["note", "Notes"], ["theme", "Themes"], ["project", "Projects"], ["collection", "Collections"]].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
       <div className="board-picker-results">{filteredRecords.map(r => <button key={r.key} onClick={() => { if (place(r)) setPicker(false); }}>
-        {r.image ? <img src={r.image} alt="" loading="lazy" decoding="async" /> : <span className="board-picker-kind" aria-hidden="true">{r.type === "document" ? "DOC" : r.type === "note" ? "Aa" : r.type === "theme" ? "#" : "↗"}</span>}
+        {r.image ? <img src={r.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" /> : <span className="board-picker-kind" aria-hidden="true">{r.type === "document" ? "DOC" : r.type === "note" ? "Aa" : r.type === "theme" ? "#" : "↗"}</span>}
         <span><strong>{r.title}</strong><small>{r.type}{r.creator ? ` · ${r.creator}` : ""}</small></span>
       </button>)}
       {!filteredRecords.length && <p className="board-picker-empty">No matching records.</p>}</div>

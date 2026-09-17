@@ -1,3 +1,4 @@
+import { externalImageReference } from "@/lib/discover/images";
 import { topicContext, isLiterature } from "@/lib/research";
 import type { BoardRecord } from "./layout";
 
@@ -23,6 +24,7 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
           topicIds.push(...context.links.filter(l => l.source_type === "research_thread" && l.target_type === "reference" && l.target_id === reference.id).map(l => l.source_id));
         }
       }
+      const external = type === "reference" ? externalImageReference(record.metadata) : undefined;
       const imageMedia = mediaById.get(type === "media" ? record.id : record.primary_media_id || record.cover_media_id || "");
       const creator = details.creator || text(record.metadata?.author) || text(record.metadata?.creator);
       const detail = [details.reference_date, details.project_type || record.reference_type, text(record.metadata?.publication)].filter(Boolean).join(" · ");
@@ -30,10 +32,10 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
         title: record.title || record.original_filename || "Untitled",
         subtitle: [details.creator, details.reference_date, details.project_type, type === "media" ? record.original_filename : undefined, record.plain_text || details.caption || details.description].filter(Boolean).join(" / ").slice(0, 600),
         creator, detail, body: type === "note" ? record.plain_text || "" : undefined,
-        imageWidth: imageMedia?.width, imageHeight: imageMedia?.height,
+        imageWidth: imageMedia?.width || external?.width, imageHeight: imageMedia?.height || external?.height,
         role: isDocument || (type === "reference" && isLiterature(record)) ? "evidence" : type === "note" ? "thinking" : "visual",
         themeIds: context.links.filter(l => l.source_type === "research_topic_theme" && l.relationship_type === "includes" && l.target_type === type && l.target_id === record.id).map(l => l.source_id),
-        topicIds, image: type === "media" ? (record.mime_type?.startsWith("image/") ? urls.get(record.id) : undefined) : urls.get(record.primary_media_id || record.cover_media_id || ""),
+        topicIds, image: type === "media" ? (record.mime_type?.startsWith("image/") ? urls.get(record.id) : undefined) : urls.get(record.primary_media_id || record.cover_media_id || "") || external?.thumbnail,
         href: type === "reference" ? `/library/references/${record.id}` : type === "project" ? `/projects/${record.id}` : type === "collection" ? `/collections/${record.id}` : type === "media" ? `/boards/source/${record.id}` : record.parent_type === "research_thread" ? `/research/${record.parent_id}?mode=notes` : record.parent_type === "project" ? `/projects/${record.parent_id}` : record.parent_type === "reference" ? `/library/references/${record.parent_id}` : "/library",
       });
     }
