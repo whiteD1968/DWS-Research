@@ -1,3 +1,4 @@
+import { DeleteContent } from "@/components/content-controls";
 import { externalImageReference } from "@/lib/discover/images";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -192,6 +193,7 @@ export default async function ReferenceDetailPage({
             <Link className="button button-primary" href={`/library/references/${reference.id}/edit`}>
               Edit reference
             </Link>
+            <DeleteContent kind="reference" id={reference.id} title={reference.title} />
             <Link className="button" href="/library/references">
               Back to references
             </Link>

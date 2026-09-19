@@ -534,3 +534,8 @@ security-invoker/authenticated-only permissions verified on 2026-09-17. Migratio
 filename matches the deployed history version. Existing unrelated advisories remain:
 [signup trigger function permissions](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)
 and [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+
+
+## Repository controls and research-studio UI
+
+See [the workspace audit](docs/research-workspace-audit.md) for edit/delete coverage, visual and navigation changes, verification, and the next PDF-to-Board milestone. Apply `20260919192226_repository_content_management.sql` before deploying these controls. Deletion is permanent and requires typing DELETE; container deletion preserves shared source records. Storage deletion and database cleanup are retryable separate operations.

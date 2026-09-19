@@ -1,27 +1,4 @@
-import { PageScaffold } from "@/components/page-scaffold";
-
+import Link from "next/link";
 export default function AtlasPage() {
-  return (
-    <PageScaffold
-      eyebrow="Places"
-      title="Atlas"
-      description="A geographic and contextual index for sites, precedents, regions, and place-based research."
-      status="Placeholder"
-      primaryPanel={{
-        kicker: "Mapping",
-        title: "Place records",
-        copy: "Atlas entries will eventually connect locations to projects, references, images, and observations.",
-      }}
-      secondaryPanel={{
-        kicker: "Foundation",
-        title: "No map dependency yet",
-        copy: "The shell intentionally avoids adding mapping or canvas packages before the workflow is defined.",
-      }}
-      rows={[
-        { meta: "Site", title: "Field observations", copy: "Notes, images, and readings attached to a specific place." },
-        { meta: "Region", title: "Context layers", copy: "Environmental, historical, infrastructural, and policy references." },
-        { meta: "Precedent", title: "Comparable works", copy: "Built examples that inform site-based research." },
-      ]}
-    />
-  );
+  return <><header className="page-header"><div><p className="eyebrow">Knowledge atlas / Planned</p><h1 className="page-title">Materials. Methods. Possibilities.</h1><p className="page-description">A future home for reusable knowledge about materials, fabrication processes, products, vendors, and tools.</p></div></header><section className="panel"><h2>Build the research behind your atlas</h2><p className="panel-copy">For now, gather sources in Collections and investigate materials and methods in Research Topics.</p><div className="detail-actions"><Link className="button" href="/collections">Open collections</Link><Link className="button" href="/research">Open research</Link></div></section></>;
 }

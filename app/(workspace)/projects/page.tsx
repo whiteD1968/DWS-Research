@@ -62,8 +62,7 @@ export default async function ProjectsPage({
           <p className="eyebrow">Work</p>
           <h1 className="page-title">Projects</h1>
           <p className="page-description">
-            Browse active research spaces, then open a project to edit its brief, dates, and linked
-            references.
+            Design work, experiments, and the research that informs them.
           </p>
         </div>
         <span className="status-pill">{projects?.length ?? 0} projects</span>
@@ -73,7 +72,7 @@ export default async function ProjectsPage({
       {error ? <p className="notice notice-error">{error}</p> : null}
 
       <section className="workspace-grid compact-create">
-        <form action={createProject} className="panel form-stack">
+        <details className="create-disclosure"><summary>+ New project</summary><form action={createProject} className="panel form-stack">
           <p className="panel-kicker">Create</p>
           <h2 className="panel-title">New project</h2>
           <label className="field">
@@ -102,15 +101,9 @@ export default async function ProjectsPage({
           <button className="button button-primary" type="submit">
             Save project
           </button>
-        </form>
+        </form></details>
 
-        <div className="panel quiet-panel">
-          <p className="panel-kicker">Workspace</p>
-          <p className="panel-copy">
-            Project cards open into focused workspaces for editing project metadata and reviewing
-            linked references and collections.
-          </p>
-        </div>
+
       </section>
 
       <section className="visual-grid projects-grid" aria-label="Projects">

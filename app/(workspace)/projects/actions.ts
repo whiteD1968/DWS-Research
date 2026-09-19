@@ -290,3 +290,17 @@ export async function linkDocumentToReference(formData: FormData) {
 
   redirect(`${returnTo}?linked=reference`);
 }
+export async function unlinkProjectReference(form: FormData) {
+  const user = await requireUser();
+  const projectId = getFormValue(form, "project_id");
+  const referenceId = getFormValue(form, "reference_id");
+  if (!projectId || !referenceId) redirect("/projects?error=Choose+a+reference");
+  const db = await createClient();
+  const { error } = await db.from("relationships").delete().eq("owner_id", user.id)
+    .eq("source_type", "reference").eq("source_id", referenceId).eq("target_type", "project")
+    .eq("target_id", projectId).eq("relationship_type", "related_to");
+  if (error) redirect(`/projects/${projectId}?error=Could+not+unlink+reference`);
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/library/references/${referenceId}`);
+  redirect(`/projects/${projectId}?removed=reference`);
+}

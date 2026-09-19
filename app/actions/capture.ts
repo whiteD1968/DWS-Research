@@ -24,6 +24,11 @@ export async function captureImages(formData: FormData) {
   }
 
   const supabase = await createClient();
+  for (const [table, id] of [["references", referenceId], ["projects", projectId], ["collections", collectionId]]) {
+    if (!id) continue;
+    const { data, error } = await supabase.from(table!).select("id").eq("id", id).eq("owner_id", user.id).single();
+    if (error || !data) redirect("/library?error=The+selected+destination+is+unavailable");
+  }
   let firstMediaId: string | null = null;
 
   try {
@@ -102,5 +107,16 @@ export async function captureImages(formData: FormData) {
     redirect(`/projects/${projectId}?uploaded=images`);
   }
 
-  redirect("/library/references?uploaded=images");
+  revalidatePath("/library");
+  redirect("/library?view=images&uploaded=images");
+}
+
+export async function captureDestinations() {
+  const user = await requireUser(); const db = await createClient();
+  const [projects, references] = await Promise.all([
+    db.from("projects").select("id,title").eq("owner_id", user.id).order("title").limit(500),
+    db.from("references").select("id,title").eq("owner_id", user.id).order("title").limit(500),
+  ]);
+  if (projects.error || references.error) throw new Error("Destinations could not be loaded. You can still save to the Library.");
+  return { projects: projects.data, references: references.data };
 }

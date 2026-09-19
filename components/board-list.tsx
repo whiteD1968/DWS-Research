@@ -2,11 +2,11 @@ import { externalImageReference } from "@/lib/discover/images";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { BoardPreview, type PreviewRecord } from "./board-preview";
-export async function BoardList({ ownerId, topicId, page = 1 }: { ownerId: string; topicId?: string; page?: number }) {
+export async function BoardList({ ownerId, topicId, page = 1, preview = false }: { ownerId: string; topicId?: string; page?: number; preview?: boolean }) {
   const db = await createClient();
   const currentPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
   const offset = (currentPage - 1) * 24;
-  let query = db.from("boards").select("id,title,board_type,created_at,updated_at,board_items(count),preview_items:board_items(record_type,record_id)").eq("owner_id", ownerId).order("updated_at", { ascending: false }).range(offset, offset + 23).limit(6, { referencedTable: "preview_items" }).order("z_index", { referencedTable: "preview_items", ascending: true });
+  let query = db.from("boards").select("id,title,board_type,created_at,updated_at,board_items(count),preview_items:board_items(record_type,record_id)").eq("owner_id", ownerId).order("updated_at", { ascending: false }).range(offset, offset + (preview ? 3 : 23)).limit(6, { referencedTable: "preview_items" }).order("z_index", { referencedTable: "preview_items", ascending: true });
   if (topicId) query = query.eq("research_thread_id", topicId);
   const { data, error } = await query;
   if (error) return <p role="alert">Boards could not be loaded.</p>;
@@ -46,5 +46,5 @@ export async function BoardList({ ownerId, topicId, page = 1 }: { ownerId: strin
   }
   return <><div className="board-list">{data.length ? data.map(b => <Link href={`/boards/${b.id}`} key={b.id}>
     <BoardPreview records={b.preview_items.map(i => records.get(`${i.record_type}:${i.record_id}`) || { key: `${i.record_type}:${i.record_id}`, type: i.record_type, title: i.record_type === "theme" ? "Linked theme" : "Linked record" })} />
-    <strong>{b.title}</strong><span>{b.board_type.replaceAll("_", " ")} / {b.board_items[0]?.count || 0} placements</span><small>Updated {new Date(b.updated_at).toLocaleDateString("en-US")}</small></Link>) : <p>No boards yet.</p>}</div><nav className="board-form-row" aria-label="Board list pages">{currentPage > 1 && <Link className="button" href={`?boardPage=${currentPage - 1}`}>Previous boards</Link>}{data.length === 24 && <Link className="button" href={`?boardPage=${currentPage + 1}`}>More boards</Link>}</nav></>;
+    <strong>{b.title}</strong><span>{b.board_type.replaceAll("_", " ")} / {b.board_items[0]?.count || 0} placements</span><small>Updated {new Date(b.updated_at).toLocaleDateString("en-US")}</small></Link>) : <p>No boards yet.</p>}</div><nav className="board-form-row" aria-label="Board list pages">{!preview && currentPage > 1 && <Link className="button" href={`?boardPage=${currentPage - 1}`}>Previous boards</Link>}{!preview && data.length === 24 && <Link className="button" href={`?boardPage=${currentPage + 1}`}>More boards</Link>}</nav></>;
 }

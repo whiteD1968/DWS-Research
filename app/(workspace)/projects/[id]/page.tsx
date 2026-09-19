@@ -1,3 +1,4 @@
+import { DeleteContent } from "@/components/content-controls";
 import Link from "next/link";
 import { ProjectResearchTopics } from "@/components/project-research-topics";
 import { notFound } from "next/navigation";
@@ -5,6 +6,7 @@ import {
   linkReferenceToProject,
   setProjectCoverMedia,
   unlinkProjectDocument,
+  unlinkProjectReference,
   updateProjectDocumentDetails,
 } from "../actions";
 import { DocumentUploadPanel } from "@/components/document-upload-panel";
@@ -63,8 +65,7 @@ const projectModes: Array<{ key: ProjectMode; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "visuals", label: "Visuals" },
   { key: "documents", label: "Documents" },
-  { key: "notes", label: "Notes" },
-  { key: "workspace", label: "Workspace" },
+  { key: "workspace", label: "References" },
 ];
 
 export default async function ProjectDetailPage({
@@ -222,7 +223,7 @@ export default async function ProjectDetailPage({
       </section>
 
       {updated ? <p className="notice notice-success">Project updated.</p> : null}
-      {removed ? <p className="notice notice-success">Document unlinked from project.</p> : null}
+      {removed ? <p className="notice notice-success">Item unlinked from project.</p> : null}
       {linked ? <p className="notice notice-success">Reference linked.</p> : null}
       {error ? <p className="notice notice-error">{error}</p> : null}
 
@@ -235,6 +236,7 @@ export default async function ProjectDetailPage({
             <Link className="button button-primary" href={`/projects/${project.id}/edit`}>
               Edit project
             </Link>
+            <DeleteContent kind="project" id={project.id} title={project.title} />
             <span className="status-pill">{project.status ?? "active"}</span>
           </div>
         </div>
@@ -265,7 +267,7 @@ export default async function ProjectDetailPage({
         <>
           <section className="workspace-grid">
             <MediaUploadPanel hasPrimaryImage={Boolean(project.cover_media_id)} recordId={project.id} recordKind="project" />
-            <ProjectReferenceLinkForm availableReferences={availableReferences} projectId={project.id} />
+            <ProjectReferenceLinkForm availableReferences={availableReferences} projectId={project.id} mode={mode} />
           </section>
 
           <section className="section-block">
@@ -279,7 +281,7 @@ export default async function ProjectDetailPage({
                 <article className="panel media-edit-card" key={item.id}>
                   <div className="meta-row">
                     <span>{item.mime_type ?? "image"}</span>
-                    <span>{item.original_filename ?? "file"}</span>
+                    <span>{item.original_filename ?? "file"}</span><Link href="/library?view=images">Edit or delete in Library ↗</Link>
                   </div>
                   <form action={setProjectCoverMedia}>
                     <input name="project_id" type="hidden" value={project.id} />
@@ -303,7 +305,7 @@ export default async function ProjectDetailPage({
           </div>
           <div className="workspace-grid">
             <DocumentUploadPanel projectId={project.id} />
-            <ProjectReferenceLinkForm availableReferences={availableReferences} projectId={project.id} />
+            <ProjectReferenceLinkForm availableReferences={availableReferences} projectId={project.id} mode={mode} />
           </div>
           {documentItems.length > 0 ? (
             <div className="document-list">
@@ -343,12 +345,12 @@ export default async function ProjectDetailPage({
       {mode === "workspace" ? (
         <section className="section-block">
           <div className="workspace-grid">
-            <ProjectReferenceLinkForm availableReferences={availableReferences} projectId={project.id} />
+            <ProjectReferenceLinkForm availableReferences={availableReferences} projectId={project.id} mode={mode} />
             <article className="panel detail-panel">
-              <p className="panel-kicker">Workspace</p>
-              <h2 className="panel-title">Project working area</h2>
+              <p className="panel-kicker">Linked sources</p>
+              <h2 className="panel-title">Project references</h2>
               <p className="panel-copy">
-                Boards, experiments, research threads, and document-derived excerpts will collect here as the project workspace grows.
+                Link an existing source to this project. The original stays in your Library and can be reused elsewhere.
               </p>
             </article>
           </div>
@@ -390,7 +392,9 @@ function formatBytes(bytes: number | null | undefined) {
 function ProjectReferenceLinkForm({
   availableReferences,
   projectId,
+  mode = "workspace",
 }: {
+  mode?: string;
   availableReferences: Array<{ id: string; title: string }>;
   projectId: string;
 }) {
@@ -398,7 +402,7 @@ function ProjectReferenceLinkForm({
     <form action={linkReferenceToProject} className="panel form-stack">
       <p className="panel-kicker">+ Add reference</p>
       <input name="project_id" type="hidden" value={projectId} />
-      <input name="redirect_to" type="hidden" value={`/projects/${projectId}?mode=workspace`} />
+      <input name="redirect_to" type="hidden" value={`/projects/${projectId}?mode=${mode}`} />
       <label className="field">
         <span>Existing reference</span>
         <select name="reference_id" required>
@@ -583,7 +587,7 @@ function ProjectOverview({
         <div className="visual-grid">
           {references.length > 0 ? (
             references.map((reference) => (
-              <Link className="visual-card compact-visual-card" href={`/library/references/${reference.id}`} key={reference.id}>
+              <article className="visual-card compact-visual-card" key={reference.id}><Link href={`/library/references/${reference.id}`}>
                 <div className="visual-card-body">
                   <div className="meta-row">
                     <span>{reference.reference_type}</span>
@@ -591,12 +595,12 @@ function ProjectOverview({
                   </div>
                   <h2>{reference.title}</h2>
                 </div>
-              </Link>
+              </Link><form action={unlinkProjectReference} className="visual-card-body"><input type="hidden" name="project_id" value={project.id} /><input type="hidden" name="reference_id" value={reference.id} /><button className="text-button">Remove from project</button></form></article>
             ))
           ) : (
             <div className="empty-state wide-empty">
               <h2>No references linked yet.</h2>
-              <p>Link references from the workspace mode or reference detail workflow.</p>
+              <p>Use the References tab to link a source from your Library.</p>
             </div>
           )}
         </div>

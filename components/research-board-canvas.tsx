@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Authenticated, server-resized thumbnail endpoint. */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DeleteContent } from "@/components/content-controls";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tldraw, getSnapshot, DefaultColorStyle, DefaultFontStyle, defaultHandleExternalTldrawContent, renderPlaintextFromRichText, type Editor, type TLRichText } from "tldraw";
@@ -221,6 +222,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     {licenseError && <div className="board-error" role="alert">The board editor is unavailable because this deployment’s tldraw license is missing, invalid, or expired. Contact the workspace administrator. Saved board content is retained.</div>}
     {error && <div className="board-error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>Close</button></div>}
     {failedImages.length > 0 && <div className="board-error"><span>{failedImages.length} image uploads need attention</span><button disabled={busy} onClick={async () => { setBusy(true); for (const job of failedImages) await uploadImage(job); setBusy(false); }}>Retry uploads</button></div>}
+    {details && <div className="board-delete-control"><DeleteContent kind="board" id={board.id} title={title} /></div>}
     {details && <form className="board-details" onSubmit={async e => { e.preventDefault(); if (pending.current || running.current) { setError("Wait for canvas changes to save before renaming."); return; } setBusy(true); running.current = true; try { revision.current = await renameBoard(board.id, title, description, revision.current); setDetails(false); } catch (e) { setError((e as Error).message); } finally { running.current = false; setBusy(false); void flush(); } }}><label>Title<input value={title} required onChange={e => setTitle(e.target.value)} /></label><label>Description<textarea value={description} onChange={e => setDescription(e.target.value)} /></label><button className="button" disabled={busy}>Save details</button>{board.research_thread_id && <Link href={`/research/${board.research_thread_id}/boards`}>Generate another board</Link>}</form>}
     {picker && <aside className="board-picker" aria-label="Add research">
       <div className="board-picker-heading"><strong>Add research</strong><button type="button" aria-label="Close Add drawer" onClick={() => setPicker(false)}>×</button></div>

@@ -10,10 +10,10 @@ const navItems = [
   { href: "/discover", label: "Discover" },
   { href: "/projects", label: "Projects" },
   { href: "/research", label: "Research" },
-  { href: "/atlas", label: "Atlas" },
-  { href: "/collections", label: "Collections" },
+    { href: "/collections", label: "Collections" },
   { href: "/boards", label: "Boards" },
   { href: "/library", label: "Library" },
+  { href: "/atlas", label: "Atlas · planned" },
 ];
 
 export function WorkspaceShell({
@@ -27,11 +27,11 @@ export function WorkspaceShell({
   if (/^\/boards\/[^/]+$/.test(pathname)) return <>{children}</>;
 
   return (
-    <div className="workspace-shell">
+    <div className="workspace-shell"><a className="skip-link" href="#workspace-content">Skip to content</a>
       <aside className="sidebar" aria-label="Workspace navigation">
         <div className="brand">
           <span className="brand-title">DWS Research</span>
-          <span className="brand-subtitle">Architecture, references, and project knowledge.</span>
+          <span className="brand-subtitle">A studio for inquiry and design.</span>
         </div>
 
         <nav className="primary-nav">
@@ -64,16 +64,14 @@ export function WorkspaceShell({
 
       <div className="workspace-main">
         <header className="topbar">
-          <div className="mobile-brand">DWS Research</div>
+          <div className="mobile-brand">DWS Research</div><p className="workspace-location">Research / Design / Practice</p>
           <div className="topbar-actions" aria-label="Global actions">
-            <button className="button" type="button">
-              Ask
-            </button>
+            <Link className="button" href="/discover">Search sources</Link>
             <CapturePanel />
           </div>
         </header>
 
-        <main className="content-wrap">{children}</main>
+        <main id="workspace-content" className="content-wrap">{children}</main>
       </div>
     </div>
   );

@@ -57,6 +57,7 @@ export default async function ReferencesPage({
 
   return (
     <>
+      <nav className="mode-tabs" aria-label="Library repositories"><Link className="mode-tab" href="/library?view=images">Images</Link><Link className="mode-tab" href="/library?view=documents">Documents</Link><Link className="mode-tab" href="/library?view=notes">Notes</Link><Link className="mode-tab mode-tab-active" aria-current="page" href="/library/references">References</Link></nav>
       <section className="page-header">
         <div>
           <p className="eyebrow">Library</p>

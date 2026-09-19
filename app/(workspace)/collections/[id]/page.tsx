@@ -1,3 +1,4 @@
+import { DeleteContent } from "@/components/content-controls";
 import { externalImageReference } from "@/lib/discover/images";
 import { CollectionBoardHandoff } from "@/components/board-handoff";
 import Link from "next/link";
@@ -115,12 +116,12 @@ export default async function CollectionDetailPage({
           <h1 className="page-title">{collection.title}</h1>
           <p className="page-description">{collection.description ?? "No collection description yet."}</p>
         </div>
-        <span className="status-pill">{references.length} records</span>
+        <div className="detail-actions"><span className="status-pill">{references.length} records</span><DeleteContent kind="collection" id={collection.id} title={collection.title} /></div>
       </section>
 
       <CollectionBoardHandoff id={collection.id} title={collection.title} records={references.map(r => ({ id: r.id, title: r.title }))} />
       <section className="workspace-grid">
-        <form action={updateCollection} className="panel form-stack">
+        <details className="create-disclosure"><summary>Edit collection details</summary><form action={updateCollection} className="panel form-stack">
           <p className="panel-kicker">Edit collection</p>
           <input name="collection_id" type="hidden" value={collection.id} />
           <label className="field">
@@ -134,7 +135,7 @@ export default async function CollectionDetailPage({
           <button className="button" type="submit">
             Save changes
           </button>
-        </form>
+        </form></details>
 
         <form action={addReferenceToCollection} className="panel form-stack">
           <p className="panel-kicker">Add reference</p>

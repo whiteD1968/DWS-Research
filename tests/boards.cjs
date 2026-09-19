@@ -39,14 +39,14 @@ test('unselected theme descriptors still organize selected records without addin
   assert.equal(result.placements.length, 1);
   assert.equal(result.placements[0].key, 'reference:ref');
 });
-function actions({ authenticated = true, owned = true, conflict = false } = {}) {
+function actions({ authenticated = true, owned = true, conflict = false, catalog = ['reference:abc', 'reference:def', 'theme:abc'] } = {}) {
   const calls = [];
   const db = { from(table) {
     const q = { select() { return q; }, eq(key, value) { calls.push([table, key, value]); return q; }, async single() { return { data: owned ? { id: 'board', research_thread_id: 'topic' } : null }; } }; return q;
   }, async rpc(name, args) { calls.push([name, args]); return conflict ? { error: { message: 'Board changed in another session. Reload before editing.' } } : { data: 'next-revision' }; } };
   return { calls, api: load('app/(workspace)/boards/actions.ts', {
     '@/lib/auth': { requireUser: async () => { if (!authenticated) throw new Error('Authentication required'); return { id: 'owner' }; } },
-    '@/lib/supabase/server': { createClient: async () => db }, '@/lib/boards/catalog': { boardCatalog: async () => [] }, '@/lib/boards/layout': layout,
+    '@/lib/supabase/server': { createClient: async () => db }, '@/lib/boards/catalog': { boardCatalog: async () => catalog.map(key => ({key})) }, '@/lib/boards/layout': layout,
   }) };
 }
 test('save mirrors linked cards only and preserves full document', async () => {
@@ -229,4 +229,12 @@ test('save mirrors linked native Theme frames and child placements, without copi
 test('default board titles identify the source and chosen composition', () => {
   assert.equal(layout.defaultBoardTitle('Robotic Plastic 3D Printing', 'theme_clusters'), 'Robotic Plastic 3D Printing — Theme Clusters');
   assert.equal(layout.defaultBoardTitle('Materials', 'manual'), 'Materials — Research Board');
+});
+
+test('deleted source cards preserve their canvas position without blocking future board saves', async () => {
+  const h = actions({catalog: []});
+  const snapshot = {store:{card:{id:'shape:deleted',typeName:'shape',type:'research-record',index:'a1',props:{recordKey:'reference:deleted',w:200,h:300}}}};
+  await h.api.saveBoard('board','old',snapshot);
+  const rpc=h.calls.find(c=>c[0]==='save_research_board')[1];
+  assert.deepEqual(rpc.p_items,[]);assert.equal(rpc.p_snapshot,snapshot);
 });

@@ -7,6 +7,17 @@ import type { DiscoverFilters, ResearchSession } from "@/lib/discover/types";
 import { revalidatePath } from "next/cache";
 import { normalizeUrl } from "@/lib/discover/normalize";
 import { createDiscoverSnapshot } from "@/lib/discover/snapshot";
+import { redirect } from "next/navigation";
+
+export async function renameDiscoverSession(form: FormData) {
+  const user = await requireUser(); const db = await createClient();
+  const id = String(form.get("session_id") || ""); const title = String(form.get("title") || "").trim();
+  if (!title || title.length > 200) redirect(`/discover/sessions/${encodeURIComponent(id)}?error=Enter+a+title+up+to+200+characters`);
+  const { error } = await db.from("research_sessions").update({ title }).eq("id", id).eq("owner_id", user.id).select("id").single();
+  if (error) redirect(`/discover/sessions/${encodeURIComponent(id)}?error=Could+not+rename+this+session`);
+  revalidatePath("/discover"); revalidatePath(`/discover/sessions/${id}`);
+  redirect(`/discover/sessions/${id}`);
+}
 
 export async function runDiscover(query: string, filters: DiscoverFilters): Promise<{ session?: ResearchSession; error?: string }> {
   const user = await requireUser();
