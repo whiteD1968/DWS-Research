@@ -539,3 +539,7 @@ and [leaked-password protection](https://supabase.com/docs/guides/auth/password-
 ## Repository controls and research-studio UI
 
 See [the workspace audit](docs/research-workspace-audit.md) for edit/delete coverage, visual and navigation changes, verification, and the next PDF-to-Board milestone. Apply `20260919192226_repository_content_management.sql` before deploying these controls. Deletion is permanent and requires typing DELETE; container deletion preserves shared source records. Storage deletion and database cleanup are retryable separate operations.
+
+## Source coordination
+
+Use **Search workspace** to find saved titles across repositories. Images, documents, and notes now have source-detail pages with **Used in** links. See [the coordination milestone](docs/source-coordination-build.md) for coverage and verification limits. Run `npm test` for the full regression suite.

@@ -24,7 +24,7 @@ export async function deleteContent(kind: string, id: string, confirmation: stri
 
 export async function editLibraryContent(kind: "media" | "note", id: string, values: { title: string; text: string; altText?: string }) {
   const user = await requireUser();
-  if (!["media", "note"].includes(kind) || !values.title.trim() || values.title.length > 200 || values.text.length > 50000 || (values.altText?.length ?? 0) > 2000) throw new Error("Enter a title (up to 200 characters) and shorter content.");
+  if (!["media", "note"].includes(kind) || !values || typeof values.title !== "string" || typeof values.text !== "string" || (values.altText !== undefined && typeof values.altText !== "string") || !values.title.trim() || values.title.length > 200 || values.text.length > 50000 || (values.altText?.length ?? 0) > 2000) throw new Error("Enter a title (up to 200 characters) and shorter content.");
   const db = await createClient();
   const update = kind === "media" ? { title: values.title.trim(), caption: values.text, alt_text: values.altText || null } : { title: values.title.trim(), plain_text: values.text };
   const { data, error } = await db.from(contentKinds[kind].table).update(update).eq("id", id).eq("owner_id", user.id).select("id").single();

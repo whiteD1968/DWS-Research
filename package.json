@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-isolation=none \"tests/*.cjs\""
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

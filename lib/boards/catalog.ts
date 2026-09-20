@@ -36,7 +36,7 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
         role: isDocument || (type === "reference" && isLiterature(record)) ? "evidence" : type === "note" ? "thinking" : "visual",
         themeIds: context.links.filter(l => l.source_type === "research_topic_theme" && l.relationship_type === "includes" && l.target_type === type && l.target_id === record.id).map(l => l.source_id),
         topicIds, image: type === "media" ? (record.mime_type?.startsWith("image/") ? urls.get(record.id) : undefined) : urls.get(record.primary_media_id || record.cover_media_id || "") || external?.thumbnail,
-        href: type === "reference" ? `/library/references/${record.id}` : type === "project" ? `/projects/${record.id}` : type === "collection" ? `/collections/${record.id}` : type === "media" ? `/boards/source/${record.id}` : record.parent_type === "research_thread" ? `/research/${record.parent_id}?mode=notes` : record.parent_type === "project" ? `/projects/${record.parent_id}` : record.parent_type === "reference" ? `/library/references/${record.parent_id}` : "/library?view=notes",
+        href: type === "reference" ? `/library/references/${record.id}` : type === "project" ? `/projects/${record.id}` : type === "collection" ? `/collections/${record.id}` : type === "media" ? `/library/items/media/${record.id}` : `/library/items/note/${record.id}`,
       });
     }
   }

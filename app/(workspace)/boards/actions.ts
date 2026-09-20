@@ -2,6 +2,7 @@
 
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { liveRecordKeys } from "@/lib/boards/live-records";
 import { boardCatalog } from "@/lib/boards/catalog";
 import { generateComposition, layouts, type LayoutMode } from "@/lib/boards/layout";
 
@@ -32,13 +33,13 @@ export async function saveBoard(id: string, revision: string, snapshot: unknown)
   const document = snapshot as { store?: Record<string, { typeName: string; type?: string; id: string; x: number; y: number; rotation: number; index: string; parentId: string; meta?: { recordKey?: string }; props: { recordKey?: string; w?: number; h?: number } }> };
   if (!document?.store || JSON.stringify(snapshot).length > 8_000_000) throw new Error("Invalid or oversized board.");
   const values = Object.values(document.store);
-  const available = new Set((await boardCatalog(user.id)).map(record => record.key));
   if (values.some(r => r.typeName === "asset")) throw new Error("Use image upload to store media, not embedded assets.");
   const items = values.filter(r => r.typeName === "shape" && (r.type === "research-record" || (r.type === "frame" && r.meta?.recordKey?.startsWith("theme:")))).sort((a, b) => a.index.localeCompare(b.index)).map((r, i) => {
     const [type, recordId] = (r.props.recordKey || r.meta?.recordKey || "").split(":");
     return { shape_id: r.id, record_type: type, record_id: recordId, item_type: type === "theme" ? "theme" : "record", x: r.x, y: r.y, width: r.props.w, height: r.props.h, rotation: r.rotation, z_index: i, state: { parentId: r.parentId, index: r.index } };
   });
   // Retain unavailable cards in the canvas, but do not persist dangling relational placements.
+  const available = await liveRecordKeys(db, user.id, items);
   const liveItems = items.filter(item => available.has(`${item.record_type}:${item.record_id}`));
   const { data, error } = await db.rpc("save_research_board", { p_board_id: id, p_revision: revision, p_snapshot: snapshot, p_items: liveItems });
   if (error) throw new Error(error.message.includes("another session") ? error.message : "Save failed. Check connection and board migration, then retry.");

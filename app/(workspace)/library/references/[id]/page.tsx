@@ -1,3 +1,4 @@
+import { RecordUsage } from "@/components/record-usage";
 import { DeleteContent } from "@/components/content-controls";
 import { externalImageReference } from "@/lib/discover/images";
 import Link from "next/link";
@@ -38,19 +39,6 @@ type ReferenceDetail = {
   updated_at: string;
 };
 
-type CollectionItem = {
-  collection_id: string;
-};
-
-type Collection = {
-  id: string;
-  title: string;
-};
-
-type Relationship = {
-  target_id: string;
-};
-
 type Project = {
   id: string;
   title: string;
@@ -88,26 +76,10 @@ export default async function ReferenceDetailPage({
 
   const external = externalImageReference(reference.metadata);
   const [
-    { data: collectionItems },
-    { data: relationships },
     { data: projectsForPicker },
     sourceResult,
     { data: mediaRelationships },
   ] = await Promise.all([
-    supabase
-      .from("collection_items")
-      .select("collection_id")
-      .eq("record_type", "reference")
-      .eq("record_id", id)
-      .returns<CollectionItem[]>(),
-    supabase
-      .from("relationships")
-      .select("target_id")
-      .eq("source_type", "reference")
-      .eq("source_id", id)
-      .eq("relationship_type", "related_to")
-      .eq("target_type", "project")
-      .returns<Relationship[]>(),
     supabase.from("projects").select("id,title").order("updated_at", { ascending: false }).returns<Project[]>(),
     reference.primary_source_id
       ? supabase.from("sources").select("id,title,url").eq("id", reference.primary_source_id).single<Source>()
@@ -121,16 +93,6 @@ export default async function ReferenceDetailPage({
       .eq("target_type", "media")
       .returns<MediaRelationship[]>(),
   ]);
-
-  const collectionIds = collectionItems?.map((item) => item.collection_id) ?? [];
-  const { data: collections } = collectionIds.length
-    ? await supabase.from("collections").select("id,title").in("id", collectionIds).returns<Collection[]>()
-    : { data: [] as Collection[] };
-
-  const projectIds = relationships?.map((relationship) => relationship.target_id) ?? [];
-  const { data: projects } = projectIds.length
-    ? await supabase.from("projects").select("id,title").in("id", projectIds).returns<Project[]>()
-    : { data: [] as Project[] };
 
   const mediaIds = Array.from(
     new Set([
@@ -370,41 +332,7 @@ export default async function ReferenceDetailPage({
         </article>
       </section>
 
-      <section className="section-block">
-        <div className="section-heading">
-          <h2>Connected contexts</h2>
-        </div>
-        <div className="workspace-grid">
-          <article className="panel">
-            <p className="panel-kicker">Collections</p>
-            {collections && collections.length > 0 ? (
-              <ul className="simple-list">
-                {collections.map((collection) => (
-                  <li key={collection.id}>
-                    <Link href={`/collections/${collection.id}`}>{collection.title}</Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="panel-copy">This reference is not in a collection yet.</p>
-            )}
-          </article>
-          <article className="panel">
-            <p className="panel-kicker">Projects</p>
-            {projects && projects.length > 0 ? (
-              <ul className="simple-list">
-                {projects.map((project) => (
-                  <li key={project.id}>
-                    <Link href={`/projects/${project.id}`}>{project.title}</Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="panel-copy">This reference is not linked to a project yet.</p>
-            )}
-          </article>
-        </div>
-      </section>
+      <RecordUsage kind="reference" id={id} />
     </>
   );
 }

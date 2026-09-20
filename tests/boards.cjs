@@ -10,6 +10,7 @@ function load(file, mocks = {}) {
   return mod.exports;
 }
 const layout = load('lib/boards/layout.ts');
+const live = load('lib/boards/live-records.ts');
 const record = (id, role = 'visual', extra = {}) => ({ key: `reference:${id}`, id, type: 'reference', title: id, subtitle: '', role, themeIds: [], topicIds: ['topic'], href: '/', ...extra });
 for (const mode of layout.layouts) test(`${mode}: deterministic layout, finite bounds, no overlapping cards`, () => {
   const records = Array.from({ length: 100 }, (_, i) => record(`${i}`, ['visual', 'evidence', 'thinking'][i % 3]));
@@ -42,11 +43,12 @@ test('unselected theme descriptors still organize selected records without addin
 function actions({ authenticated = true, owned = true, conflict = false, catalog = ['reference:abc', 'reference:def', 'theme:abc'] } = {}) {
   const calls = [];
   const db = { from(table) {
-    const q = { select() { return q; }, eq(key, value) { calls.push([table, key, value]); return q; }, async single() { return { data: owned ? { id: 'board', research_thread_id: 'topic' } : null }; } }; return q;
+    let ids=[];
+    const q = { select() { return q; }, eq(key, value) { calls.push([table, key, value]); return q; }, in(key, values) { ids=values; return q; }, then(resolve) { const type=({references:'reference',media:'media',notes:'note',projects:'project',collections:'collection',relationships:'theme'})[table];return Promise.resolve({data:ids.filter(id=>catalog.includes(`${type}:${id}`)).map(id=>({id})),error:null}).then(resolve); }, async single() { return { data: owned ? { id: 'board', research_thread_id: 'topic' } : null }; } }; return q;
   }, async rpc(name, args) { calls.push([name, args]); return conflict ? { error: { message: 'Board changed in another session. Reload before editing.' } } : { data: 'next-revision' }; } };
   return { calls, api: load('app/(workspace)/boards/actions.ts', {
     '@/lib/auth': { requireUser: async () => { if (!authenticated) throw new Error('Authentication required'); return { id: 'owner' }; } },
-    '@/lib/supabase/server': { createClient: async () => db }, '@/lib/boards/catalog': { boardCatalog: async () => catalog.map(key => ({key})) }, '@/lib/boards/layout': layout,
+    '@/lib/supabase/server': { createClient: async () => db }, '@/lib/boards/catalog': { boardCatalog: async () => catalog.map(key => ({key})) }, '@/lib/boards/layout': layout, '@/lib/boards/live-records': live,
   }) };
 }
 test('save mirrors linked cards only and preserves full document', async () => {
@@ -81,7 +83,7 @@ test('text conversion is retry-safe, keeps note topic context and links referenc
   } };
   const api = load('app/(workspace)/boards/actions.ts', {
     '@/lib/auth': { requireUser: async () => ({ id: 'owner' }) }, '@/lib/supabase/server': { createClient: async () => db },
-    '@/lib/boards/layout': layout, '@/lib/boards/catalog': { boardCatalog: async () => [...tables.notes.map(r => record(r.id, 'thinking', { key: `note:${r.id}`, type: 'note' })), ...tables.references.map(r => record(r.id))] },
+    '@/lib/boards/layout': layout, '@/lib/boards/live-records': live, '@/lib/boards/catalog': { boardCatalog: async () => [...tables.notes.map(r => record(r.id, 'thinking', { key: `note:${r.id}`, type: 'note' })), ...tables.references.map(r => record(r.id))] },
   });
   await api.convertBoardText('board', 'note-id', 'note', 'Question', 'How does the toolpath carry load?');
   await api.convertBoardText('board', 'note-id', 'note', 'Question', 'How does the toolpath carry load?');

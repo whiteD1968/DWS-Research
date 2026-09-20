@@ -10,7 +10,7 @@ const navItems = [
   { href: "/discover", label: "Discover" },
   { href: "/projects", label: "Projects" },
   { href: "/research", label: "Research" },
-    { href: "/collections", label: "Collections" },
+  { href: "/collections", label: "Collections" },
   { href: "/boards", label: "Boards" },
   { href: "/library", label: "Library" },
   { href: "/atlas", label: "Atlas · planned" },
@@ -66,7 +66,7 @@ export function WorkspaceShell({
         <header className="topbar">
           <div className="mobile-brand">DWS Research</div><p className="workspace-location">Research / Design / Practice</p>
           <div className="topbar-actions" aria-label="Global actions">
-            <Link className="button" href="/discover">Search sources</Link>
+            <Link className="button" href="/search">Search workspace</Link>
             <CapturePanel />
           </div>
         </header>
