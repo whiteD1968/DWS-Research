@@ -38,7 +38,7 @@ export async function recordUsage(ownerId: string, kind: RecordKind, id: string)
     generatedBoards(),
   ]);
   incoming.forEach(link => add(link.source_type, link.source_id));
-  outgoing.forEach(link => { if (["related_to", "informs_project"].includes(link.relationship_type)) add(link.target_type, link.target_id); });
+  outgoing.forEach(link => { if (["related_to", "informs_project", "derived_from"].includes(link.relationship_type)) add(link.target_type, link.target_id); });
   collections.forEach(item => add("collection", item.collection_id));
   placements.forEach(item => add("board", item.board_id));
   generated.forEach(item => add("board", item.id));

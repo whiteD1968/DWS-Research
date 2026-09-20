@@ -2,6 +2,8 @@
 
 DWS Research is a private Next.js workspace for architectural research practice: project knowledge, references, collections, source material, place-based inquiry, boards, and research lineage.
 
+Current workflow notes: [PDF page research and Board placement](docs/pdf-page-research.md).
+
 The application is intentionally restrained: white and light neutral surfaces, dark typography, subtle borders, generous spacing, and no decorative dashboard or sci-fi styling.
 
 ## Current Architecture

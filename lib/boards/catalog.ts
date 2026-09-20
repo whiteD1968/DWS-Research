@@ -12,7 +12,7 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
   const result: BoardRecord[] = [];
   for (const type of ["reference", "media", "note", "project", "collection"] as const) {
     for (const record of context.records[type]) {
-      const details = record as typeof record & { creator?: string; reference_date?: string; caption?: string; description?: string; project_type?: string };
+      const details = record as typeof record & { creator?: string; reference_date?: string; caption?: string; description?: string; project_type?: string; source_page?: number };
       const isDocument = type === "media" && record.mime_type === "application/pdf";
       const topicIds = context.links.filter(l => l.source_type === "research_thread" && l.target_type === type && l.target_id === record.id).map(l => l.source_id);
       if (type === "note" && record.parent_type === "research_thread" && record.parent_id) topicIds.push(record.parent_id);
@@ -27,7 +27,8 @@ export async function boardCatalog(ownerId: string): Promise<BoardRecord[]> {
       const external = type === "reference" ? externalImageReference(record.metadata) : undefined;
       const imageMedia = mediaById.get(type === "media" ? record.id : record.primary_media_id || record.cover_media_id || "");
       const creator = details.creator || text(record.metadata?.author) || text(record.metadata?.creator);
-      const detail = [details.reference_date, details.project_type || record.reference_type, text(record.metadata?.publication)].filter(Boolean).join(" · ");
+      const page = type === "media" && Number.isInteger(details.source_page) && (details.source_page ?? 0) > 0 ? `PDF page ${details.source_page}` : "";
+      const detail = [page, details.reference_date, details.project_type || record.reference_type, text(record.metadata?.publication)].filter(Boolean).join(" · ");
       result.push({ key: `${type}:${record.id}`, id: record.id, type: isDocument ? "document" : type,
         title: record.title || record.original_filename || "Untitled",
         subtitle: [details.creator, details.reference_date, details.project_type, type === "media" ? record.original_filename : undefined, record.plain_text || details.caption || details.description].filter(Boolean).join(" / ").slice(0, 600),

@@ -45,6 +45,8 @@ test('transfer URL parsing rejects malformed, oversized and repeated inputs safe
   assert.equal(handoff.parseTransfer(`reference:${uuid(1)}`, 'bad'), undefined);
   assert.equal(handoff.parseTransfer(Array.from({length:101}, (_,i)=>`reference:${uuid(i)}`).join(','), uuid(1)), undefined);
   assert.deepEqual(handoff.parseTransfer(`reference:${uuid(1)},reference:${uuid(1)}`, uuid(2)), { id: uuid(2), keys: [`reference:${uuid(1)}`] });
+  assert.deepEqual(handoff.parseTransfer(`media:${uuid(1)}`, uuid(2)), { id: uuid(2), keys: [`media:${uuid(1)}`] });
+  assert.equal(handoff.parseTransfer(`note:${uuid(1)}`, uuid(2)), undefined);
 });
 function harness({ foreign = false, missing = false, failImport = false } = {}) {
   const calls = []; const boards = []; const ref = { key: `reference:${uuid(1)}`, id: uuid(1), type: 'reference', title: 'Study', subtitle: '', role: 'visual', themeIds: [], topicIds: [], href: '/' };

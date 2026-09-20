@@ -1643,3 +1643,23 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .search-groups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; align-items: start; }
 .search-groups .usage-panel { margin: 0; }
 @media(max-width: 800px) { .source-workspace, .search-groups { grid-template-columns: 1fr; } }
+
+.pdf-research { margin: 28px 0; padding: 24px; }
+.pdf-research-heading { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin-bottom: 22px; }
+.pdf-research-heading h2 { margin: 5px 0 8px; font-size: 24px; font-weight: 500; }
+.pdf-research-heading p { margin: 0; color: var(--text-muted); }
+.pdf-research-heading > span { white-space: nowrap; font-size: 12px; color: var(--text-muted); }
+.pdf-research-layout { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(240px,0.8fr); gap: 22px; align-items: start; }
+.pdf-preview { min-width: 0; padding: 12px; background: #e8e7e2; border: 1px solid var(--border); text-align: center; }
+.pdf-preview canvas { display: block; max-width: 100%; height: auto; margin: 12px auto 0; background: white; box-shadow: 0 10px 30px #24221f25; }
+.pdf-page-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.pdf-page-controls button { border: 0; background: transparent; cursor: pointer; font: inherit; text-decoration: underline; }
+.pdf-page-controls button:disabled { opacity: .35; cursor: default; }
+.pdf-page-controls input { width: 55px; padding: 5px; text-align: center; }
+.pdf-research-fields { min-width: 0; }
+.pdf-research-fields details { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; }
+.pdf-research-fields summary { cursor: pointer; }
+.pdf-page-text { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
+.pdf-research-fields small { color: var(--text-muted); line-height: 1.5; }
+@media(max-width: 1200px) { .pdf-research-layout { grid-template-columns: 1fr; } }
+@media(max-width: 680px) { .pdf-research { padding: 16px; } .pdf-research-heading { flex-direction: column; } }

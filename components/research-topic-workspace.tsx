@@ -46,6 +46,7 @@ export async function ResearchTopicWorkspace({ topic, context, mode, error, save
           {typeof record.metadata?.document_type === "string" && <small>{record.metadata.document_type}</small>}
           {typeof link.metadata.relevance_note === "string" && <p>{link.metadata.relevance_note}</p>}
           {href ? <a className="text-button" href={href} target="_blank" rel="noreferrer">Open PDF</a> : <p>PDF link unavailable. Refresh to try again.</p>}
+          <Link className="text-button" href={`/library/items/media/${record.id}`}>Research pages →</Link>
           <details><summary>Edit metadata</summary><form action={manageTopic} className="form-stack research-form">{hidden("document-edit")}<input type="hidden" name="link_id" value={link.id} /><label className="field">Document title<input name="title" required maxLength={200} defaultValue={record.title ?? ""} /></label><label className="field">Document type<input name="document_type" defaultValue={typeof record.metadata?.document_type === "string" ? record.metadata.document_type : ""} placeholder="Paper, thesis, report..." /></label><button className="button">Save metadata</button></form></details>
         </div>}
         {reviews && review(link)}

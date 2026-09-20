@@ -9,7 +9,7 @@ export function applyBoardTransfer(editor: Editor, transfer: BoardTransfer, reco
   const receipts = Array.isArray(page.meta.boardTransfers) ? page.meta.boardTransfers.filter((id): id is string => typeof id === "string") : [];
   if (receipts.includes(transfer.id)) return false;
   const selected = transfer.keys.map(key => records.find(record => record.key === key));
-  if (selected.some(record => !record)) throw new Error("Some selected references are no longer available. Return to the source and select again.");
+  if (selected.some(record => !record)) throw new Error("Some selected sources are no longer available. Return to the source and select again.");
   const shapes = editor.getCurrentPageShapes();
   const linkedCount = editor.store.allRecords().filter(r => r.typeName === "shape" && (r.type === "research-record" || (r.type === "frame" && typeof r.meta.recordKey === "string"))).length;
   if (linkedCount + selected.length > 500) throw new Error("This selection exceeds the board's 500-placement limit.");

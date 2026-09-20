@@ -117,6 +117,7 @@ export default async function ProjectDocumentPage({
               Open PDF
             </a>
           ) : null}
+          <Link className="button" href={`/library/items/media/${document.id}`}>Research PDF pages</Link>
           <Link className="button" href={`/projects/${project.id}?mode=documents`}>
             Back to documents
           </Link>
