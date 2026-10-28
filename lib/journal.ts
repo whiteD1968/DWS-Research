@@ -37,3 +37,21 @@ export function groupByDay<T>(entries: T[], dayOf: (entry: T) => string) {
   }
   return groups;
 }
+
+// Weeks of days ending on today, Monday-first, for the journal rhythm grid.
+export function rhythmWeeks(today: string, weeks: number) {
+  const end = new Date(`${today}T00:00:00Z`);
+  const offset = (end.getUTCDay() + 6) % 7;
+  const start = new Date(end); start.setUTCDate(end.getUTCDate() - offset - (weeks - 1) * 7);
+  return Array.from({ length: weeks }, (_, week) => Array.from({ length: 7 }, (_, day) => {
+    const date = new Date(start); date.setUTCDate(start.getUTCDate() + week * 7 + day);
+    const iso = date.toISOString().slice(0, 10);
+    return iso > today ? null : iso;
+  }));
+}
+
+// The studio's calendar day (FAU is on Eastern time), so pages rendered on the server don't jump to tomorrow at 8pm.
+export const studioTimeZone = "America/New_York";
+export function studioToday(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: studioTimeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}

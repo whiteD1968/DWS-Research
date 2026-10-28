@@ -34,3 +34,15 @@ test('entries group under their journal day, falling back to when they were writ
   assert.deepEqual(journal.groupByDay(rows, journal.entryDay).map(g => [g.day, g.entries.map(e => e.id)]), [['2026-10-28', [1, 2]], ['2026-10-20', [3]]]);
   assert.equal(journal.formatDay('2026-10-28'), 'Wednesday, October 28, 2026');
 });
+
+test('rhythm weeks end on today, start on a Monday, and leave future days empty', () => {
+  const weeks = journal.rhythmWeeks('2026-10-28', 3);
+  assert.equal(weeks.length, 3);
+  assert.equal(weeks[0][0], '2026-10-12');
+  assert.deepEqual(weeks[2], ['2026-10-26', '2026-10-27', '2026-10-28', null, null, null, null]);
+});
+
+test('the studio day follows Eastern time, not the server clock', () => {
+  assert.equal(journal.studioToday(new Date('2026-10-29T01:30:00Z')), '2026-10-28');
+  assert.equal(journal.studioToday(new Date('2026-10-29T05:30:00Z')), '2026-10-29');
+});

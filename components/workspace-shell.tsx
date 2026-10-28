@@ -6,6 +6,7 @@ import { signOut } from "@/app/actions/auth";
 import { BrandMark } from "@/components/brand-mark";
 import { CapturePanel } from "@/components/capture-panel";
 import { CommandSearch } from "@/components/command-search";
+import { QuickNote } from "@/components/quick-note";
 
 const icons = {
   home: <><rect x="3" y="3" width="8" height="8" /><rect x="13" y="3" width="8" height="5" /><rect x="13" y="10" width="8" height="11" /><rect x="3" y="13" width="8" height="8" /></>,
@@ -94,6 +95,7 @@ export function WorkspaceShell({
         </header>
 
         <main id="workspace-content" className="content-wrap">{children}</main>
+        <QuickNote />
       </div>
     </div>
   );

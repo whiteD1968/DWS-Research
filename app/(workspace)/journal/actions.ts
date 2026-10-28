@@ -50,3 +50,15 @@ export async function createJournalEntry(form: FormData) {
   revalidatePath("/journal"); revalidatePath("/library");
   return note.id as string;
 }
+
+export async function journalLinkOptions() {
+  const user = await requireUser(); const db = await createClient();
+  const [projects, topics] = await Promise.all([
+    db.from("projects").select("id,title").eq("owner_id", user.id).order("title").limit(300),
+    db.from("research_threads").select("id,title").eq("owner_id", user.id).order("title").limit(300),
+  ]);
+  return [
+    { label: "Projects", options: (projects.data || []).map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) },
+    { label: "Research topics", options: (topics.data || []).map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) },
+  ];
+}
