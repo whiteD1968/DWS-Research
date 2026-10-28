@@ -4,13 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { discoverLibrary } from "@/lib/discover/data";
 import { DiscoverWorkspace } from "@/components/discover-workspace";
 
-export default async function DiscoverPage() {
+export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
   const user = await requireUser();
   const db = await createClient();
   const { data, error } = await db.from("research_sessions").select("id,title,created_at,result_snapshot,saved_items")
     .eq("owner_id", user.id).order("created_at", { ascending: false }).limit(12);
   const library = await discoverLibrary(user.id);
-  return <div className="discover-page"><h1>Discover</h1><DiscoverWorkspace collections={library.collections} topics={library.topics} />
+  return <div className="discover-page"><h1>Discover</h1><DiscoverWorkspace collections={library.collections} topics={library.topics} initialQuery={(q || "").trim().slice(0, 120)} />
     {(error || library.error) && <p role="status">Research history is unavailable. Check the Discover migration and connection.</p>}
     <section className="discover-history"><h2>Recent research</h2>
       {!error && !data?.length && <p>No research sessions yet.</p>}
