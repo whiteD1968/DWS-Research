@@ -31,3 +31,19 @@ test('library entries merge newest first across kinds and page without repeats',
   assert.equal(doc.kind, 'documents'); assert.equal(doc.label, 'PDF'); assert.equal(doc.title, 'brief.pdf');
   assert.equal(library.mergeEntries(groups, 2, 1)[0].label, 'case study · Barragán');
 });
+
+test('library links keep layout, tags, place, and search, and drop defaults', () => {
+  const a = '11111111-1111-4111-8111-111111111111', b = '22222222-2222-4222-8222-222222222222';
+  assert.equal(library.libraryHref({ view: 'all', layout: 'grid', page: 1 }), '/library');
+  assert.equal(library.libraryHref({ view: 'images', q: 'clay', layout: 'compact', tags: [a, b], within: `project:${a}`, page: 2 }), `/library?view=images&q=clay&layout=compact&tags=${a}%2C${b}&in=project%3A${a}&page=2`);
+  assert.deepEqual(library.parseTagIds(`${a},nope,${a},${b}`), [a, b]);
+  assert.deepEqual(library.parseWithin(`board:${b}`), { kind: 'board', id: b });
+  assert.equal(library.parseWithin(`collection:${b}`), null);
+  assert.equal(library.parseLibraryLayout('masonry'), 'grid');
+  assert.equal(library.pageSizeFor('compact') > library.pageSizeFor('grid'), true);
+});
+test('library filters keep only ids present in every list', () => {
+  assert.equal(library.intersectIds([]), null);
+  assert.deepEqual(library.intersectIds([['a', 'b', 'c', 'a'], ['c', 'a'], ['a', 'c', 'z']]), ['a', 'c']);
+  assert.deepEqual(library.intersectIds([['a'], []]), []);
+});
