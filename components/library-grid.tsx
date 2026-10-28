@@ -5,12 +5,12 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addMediaToProject, deleteMediaMany, tagMedia, untagMedia } from "@/app/actions/library";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
-import type { LibraryEntry, LibraryLayout } from "@/lib/library";
+import { groupByMonth, type LibraryEntry, type LibraryLayout } from "@/lib/library";
 
 export type GridEntry = LibraryEntry & { image: string | null };
 type Option = { id: string; title: string };
 
-export function LibraryGrid({ entries, layout, selectable, editable, tags, projects }: { entries: GridEntry[]; layout: LibraryLayout; selectable: boolean; editable: boolean; tags: Option[]; projects: Option[] }) {
+export function LibraryGrid({ entries, layout, grouped = false, selectable, editable, tags, projects }: { entries: GridEntry[]; layout: LibraryLayout; grouped?: boolean; selectable: boolean; editable: boolean; tags: Option[]; projects: Option[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<number | null>(null);
@@ -38,7 +38,9 @@ export function LibraryGrid({ entries, layout, selectable, editable, tags, proje
   }
 
   return <>
-    <div className={`library-grid library-layout-${layout}${selected.length ? " library-selecting" : ""}`}>{entries.map((entry, index) => {
+    {(grouped ? groupByMonth(entries) : [{ label: "", items: entries.map((entry, index) => ({ entry, index })) }]).map(group => <section key={group.label || "all"} className="library-group" aria-label={group.label || undefined}>
+    {group.label && <h2 className="library-group-title">{group.label}<span>{group.items.length}</span></h2>}
+    <div className={`library-grid library-layout-${layout}${selected.length ? " library-selecting" : ""}`}>{group.items.map(({ entry, index }) => {
       const isSelected = selected.includes(entry.id);
       return <article className={`library-card library-card-${entry.kind}${isSelected ? " library-card-selected" : ""}`} key={`${entry.kind}-${entry.id}`}>
         {selectable && <label className="library-select" onMouseDown={event => { if (event.shiftKey) event.preventDefault(); }} onClick={event => { event.preventDefault(); toggle(index, event.shiftKey); }}><input type="checkbox" checked={isSelected} readOnly aria-label={`Select ${entry.title}`} /></label>}
@@ -49,7 +51,7 @@ export function LibraryGrid({ entries, layout, selectable, editable, tags, proje
           {editable && layout === "grid" && entry.kind !== "references" && <><LibraryEditor kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} text={entry.text} altText={entry.altText} /><DeleteContent stayOnPage kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} /></>}
         </div>
       </article>;
-    })}</div>
+    })}</div></section>)}
 
     {selectable && (selected.length > 0 || status) && <div className="library-batch" role="region" aria-label="Selected items">
       <p className="library-batch-count">{selected.length ? `${selected.length} selected` : status}</p>

@@ -53,3 +53,18 @@ test('thumbnails live in the owner folder so storage policies allow them', () =>
   assert.equal(thumbs.thumbnailPath('owner-1', 'media-9'), 'owner-1/thumbs/media-9.webp');
   assert.equal(thumbs.thumbnailUrl('media-9'), '/library/thumb/media-9');
 });
+
+test('library sorting orders by date or title and groups pages by month', () => {
+  const rows = [
+    library.noteEntry({ id: 'b', title: 'beta', updated_at: '2026-09-30T23:00:00Z' }),
+    library.noteEntry({ id: 'a', title: 'Alpha', updated_at: '2026-10-02T10:00:00Z' }),
+    library.noteEntry({ id: 'c', title: 'gamma', updated_at: '2026-10-01T09:00:00Z' }),
+  ];
+  assert.deepEqual(library.mergeEntries([rows], 0, 3).map(e => e.id), ['a', 'c', 'b']);
+  assert.deepEqual(library.mergeEntries([rows], 0, 3, 'oldest').map(e => e.id), ['b', 'c', 'a']);
+  assert.deepEqual(library.mergeEntries([rows], 0, 3, 'title').map(e => e.id), ['a', 'b', 'c']);
+  const groups = library.groupByMonth(library.mergeEntries([rows], 0, 3));
+  assert.deepEqual(groups.map(g => [g.label, g.items.map(i => i.index)]), [['October 2026', [0, 1]], ['September 2026', [2]]]);
+  assert.equal(library.parseLibrarySort('popular'), 'newest');
+  assert.equal(library.libraryHref({ view: 'notes', sort: 'title' }), '/library?view=notes&sort=title');
+});

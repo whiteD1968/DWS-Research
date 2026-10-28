@@ -10,7 +10,14 @@ export type LibraryLayout = (typeof libraryLayouts)[number];
 // Compact sheets show many more thumbnails per screen, so they page in larger steps.
 export const pageSizeFor = (layout: LibraryLayout) => (layout === "compact" ? 120 : libraryPageSize);
 
-export type LibraryState = { view: LibraryView; q?: string; layout?: LibraryLayout; tags?: string[]; within?: string; page?: number };
+export const librarySorts = ["newest", "oldest", "title"] as const;
+export type LibrarySort = (typeof librarySorts)[number];
+export const sortLabels: Record<LibrarySort, string> = { newest: "Newest first", oldest: "Oldest first", title: "Title A–Z" };
+export function parseLibrarySort(value: string | undefined): LibrarySort {
+  return librarySorts.includes(value as LibrarySort) ? (value as LibrarySort) : "newest";
+}
+
+export type LibraryState = { view: LibraryView; q?: string; layout?: LibraryLayout; sort?: LibrarySort; tags?: string[]; within?: string; page?: number };
 
 // Every library link is built here so filters, layout, and search survive each click.
 export function libraryHref(state: LibraryState) {
@@ -18,6 +25,7 @@ export function libraryHref(state: LibraryState) {
   if (state.view !== "all") params.set("view", state.view);
   if (state.q) params.set("q", state.q);
   if (state.layout && state.layout !== "grid") params.set("layout", state.layout);
+  if (state.sort && state.sort !== "newest") params.set("sort", state.sort);
   if (state.tags?.length) params.set("tags", state.tags.join(","));
   if (state.within) params.set("in", state.within);
   if (state.page && state.page > 1) params.set("page", String(state.page));
@@ -115,7 +123,24 @@ export function referenceEntry(row: Row, externalThumbnail?: string | null): Lib
   };
 }
 
-// Newest first across every kind; ties keep a stable order so paging never repeats an item.
-export function mergeEntries(groups: LibraryEntry[][], start: number, size: number) {
-  return groups.flat().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(start, start + size);
+// Orders entries across every kind; ties fall back to id so paging never repeats an item.
+export function compareEntries(sort: LibrarySort) {
+  return (a: Pick<LibraryEntry, "id" | "title" | "updatedAt">, b: Pick<LibraryEntry, "id" | "title" | "updatedAt">) =>
+    (sort === "title" ? a.title.localeCompare(b.title, undefined, { sensitivity: "base" }) : sort === "oldest" ? a.updatedAt.localeCompare(b.updatedAt) : b.updatedAt.localeCompare(a.updatedAt)) || a.id.localeCompare(b.id);
+}
+
+export function mergeEntries(groups: LibraryEntry[][], start: number, size: number, sort: LibrarySort = "newest") {
+  return groups.flat().sort(compareEntries(sort)).slice(start, start + size);
+}
+
+// Splits a date-ordered page into month sections, keeping each entry's position for range selection.
+export function groupByMonth<T extends { updatedAt: string }>(entries: T[]) {
+  const groups: { label: string; items: { entry: T; index: number }[] }[] = [];
+  entries.forEach((entry, index) => {
+    const date = new Date(entry.updatedAt);
+    const label = Number.isNaN(date.getTime()) ? "Undated" : date.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    if (groups.at(-1)?.label !== label) groups.push({ label, items: [] });
+    groups.at(-1)!.items.push({ entry, index });
+  });
+  return groups;
 }

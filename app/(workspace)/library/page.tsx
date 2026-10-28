@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { thumbnailUrl } from "@/lib/thumbnails";
 import { externalImageReference } from "@/lib/discover/images";
-import { intersectIds, libraryHref, libraryLabels, libraryPattern, mediaEntry, mergeEntries, noteEntry, pageSizeFor, parseLibraryLayout, parseLibraryView, parseTagIds, parseWithin, referenceEntry, type LibraryEntry, type LibraryKind, type LibraryState } from "@/lib/library";
+import { compareEntries, intersectIds, libraryHref, libraryLabels, libraryPattern, mediaEntry, mergeEntries, noteEntry, pageSizeFor, parseLibraryLayout, parseLibrarySort, parseLibraryView, parseTagIds, parseWithin, referenceEntry, type LibraryEntry, type LibraryKind, type LibraryState } from "@/lib/library";
 import { LibraryFilters } from "@/components/library-filters";
 import { LibraryToolbar } from "@/components/library-toolbar";
 import { LibraryGrid } from "@/components/library-grid";
@@ -19,14 +19,14 @@ const emptyHints: Record<string, string> = {
 type Row = Record<string, unknown>;
 type Result = { data: Row[] | null; count: number | null; error: unknown };
 
-export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ view?: string; q?: string; page?: string; layout?: string; tags?: string; in?: string; uploaded?: string; error?: string }> }) {
+export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ view?: string; q?: string; page?: string; layout?: string; sort?: string; tags?: string; in?: string; uploaded?: string; error?: string }> }) {
   const user = await requireUser(); const db = await createClient(); const query = await searchParams;
-  const view = parseLibraryView(query.view); const layout = parseLibraryLayout(query.layout); const size = pageSizeFor(layout);
+  const view = parseLibraryView(query.view); const layout = parseLibraryLayout(query.layout); const sort = parseLibrarySort(query.sort); const size = pageSizeFor(layout);
   const page = Math.max(1, Math.min(10000, Math.floor(Number(query.page) || 1))); const start = (page - 1) * size;
   const search = (query.q || "").trim().slice(0, 120); const pattern = libraryPattern(search);
   const mediaView = view === "images" || view === "documents";
   const tagIds = mediaView ? parseTagIds(query.tags) : []; const within = mediaView ? parseWithin(query.in) : null;
-  const state: LibraryState = { view, q: search, layout, tags: tagIds, within: within ? `${within.kind}:${within.id}` : undefined, page };
+  const state: LibraryState = { view, q: search, layout, sort, tags: tagIds, within: within ? `${within.kind}:${within.id}` : undefined, page };
 
   // Reads every matching row in pages of 1000, for link tables that can outgrow one response.
   async function every(build: (from: number) => PromiseLike<{ data: Row[] | null; error: unknown }>) {
@@ -51,6 +51,12 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   }
   const filterIds = intersectIds(await Promise.all([...tagIds.map(tagged), ...(within ? [usedIn(within)] : [])]));
 
+  // Each table is read in the same order the merged page uses, so "Everything" pages line up.
+  const ordered = <Q extends { order: (column: string, options: { ascending: boolean; nullsFirst?: boolean }) => Q }>(request: Q, fallback?: string) => {
+    if (sort !== "title") return request.order("updated_at", { ascending: sort === "oldest" });
+    const byTitle = request.order("title", { ascending: true, nullsFirst: false });
+    return fallback ? byTitle.order(fallback, { ascending: true }) : byTitle;
+  };
   const shown = (kind: LibraryKind) => view === "all" || view === kind;
   const rangeFor = (kind: LibraryKind): [number, number] => view === "all" ? [0, start + size - 1] : view === kind ? [start, start + size - 1] : [0, 0];
   const mediaSearch = `title.ilike.${pattern},caption.ilike.${pattern},original_filename.ilike.${pattern}`;
@@ -60,20 +66,20 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       // With tag or place filters, match ids in chunks, then load full rows only for this page.
       const matches: Row[] = [];
       for (let i = 0; i < filterIds.length; i += 150) {
-        let request = db.from("media").select("id,updated_at").eq("owner_id", user.id).eq("media_type", type).in("id", filterIds.slice(i, i + 150));
+        let request = db.from("media").select("id,title,original_filename,updated_at").eq("owner_id", user.id).eq("media_type", type).in("id", filterIds.slice(i, i + 150));
         if (pattern) request = request.or(mediaSearch);
         const { data, error } = await request;
         if (error) return { data: null, count: 0, error };
         matches.push(...data);
       }
-      const ids = matches.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)) || String(a.id).localeCompare(String(b.id))).slice(start, start + size).map(row => String(row.id));
+      const ids = matches.map(mediaEntry).sort(compareEntries(sort)).slice(start, start + size).map(entry => entry.id);
       const { data, error } = ids.length ? await db.from("media").select("*").eq("owner_id", user.id).in("id", ids) : { data: [], error: null };
       const order = new Map(ids.map((id, index) => [id, index]));
       return { data: (data || []).sort((a, b) => order.get(a.id)! - order.get(b.id)!), count: matches.length, error };
     }
     let request = db.from("media").select("*", { count: "exact", head: !shown(kind) }).eq("owner_id", user.id).eq("media_type", type);
     if (pattern) request = request.or(mediaSearch);
-    return request.order("updated_at", { ascending: false }).range(...rangeFor(kind));
+    return ordered(request, "original_filename").range(...rangeFor(kind));
   }
   let notesRequest = db.from("notes").select("id,title,plain_text,updated_at", { count: "exact", head: !shown("notes") }).eq("owner_id", user.id);
   if (pattern) notesRequest = notesRequest.or(`title.ilike.${pattern},plain_text.ilike.${pattern}`);
@@ -82,8 +88,8 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
 
   const [images, documents, notes, references] = await Promise.all([
     mediaQuery("images"), mediaQuery("documents"),
-    notesRequest.order("updated_at", { ascending: false }).range(...rangeFor("notes")),
-    referencesRequest.order("updated_at", { ascending: false }).range(...rangeFor("references")),
+    ordered(notesRequest).range(...rangeFor("notes")),
+    ordered(referencesRequest).range(...rangeFor("references")),
   ]);
   const error = images.error || documents.error || notes.error || references.error;
   const counts = { images: images.count || 0, documents: documents.count || 0, notes: notes.count || 0, references: references.count || 0 };
@@ -94,7 +100,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     shown("documents") ? (documents.data || []).map(mediaEntry) : [],
     shown("notes") ? (notes.data || []).map(noteEntry) : [],
     shown("references") ? (references.data || []).map(row => referenceEntry(row, externalImageReference(row.metadata as Record<string, unknown>)?.thumbnail)) : [],
-  ], view === "all" ? start : 0, size);
+  ], view === "all" ? start : 0, size, sort);
 
   // Images and reference covers load through cached thumbnails rather than full-size signed originals.
   const mediaIds = entries.filter(entry => entry.kind === "images" || entry.kind === "documents").map(entry => entry.id);
@@ -121,13 +127,13 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
 
   return <>
     <header className="page-header"><div><p className="eyebrow">Your source archive</p><h1 className="page-title">Library</h1><p className="page-description">Every image, document, note, and reference in one place. Filter by type or search across all of them.</p></div><Link className="button" href="/library/references">New reference</Link></header>
-    <form className="repository-search library-search" role="search">{view !== "all" && <input type="hidden" name="view" value={view} />}{layout !== "grid" && <input type="hidden" name="layout" value={layout} />}{tagIds.length > 0 && <input type="hidden" name="tags" value={tagIds.join(",")} />}{state.within && <input type="hidden" name="in" value={state.within} />}<label className="field"><span>Search {view === "all" ? "the library" : libraryLabels[view].toLowerCase()}</span><input name="q" type="search" defaultValue={search} placeholder="Titles, captions, notes, creators…" /></label><button className="button">Search</button>{search && <Link className="button" href={libraryHref({ ...state, q: "", page: 1 })}>Clear</Link>}</form>
-    <LibraryFilters active={view} search={search} layout={layout} counts={{ all: counts.images + counts.documents + counts.notes + counts.references, ...counts, ...(filtered ? { all: undefined, [view]: undefined } : {}) }} />
+    <form className="repository-search library-search" role="search">{view !== "all" && <input type="hidden" name="view" value={view} />}{layout !== "grid" && <input type="hidden" name="layout" value={layout} />}{sort !== "newest" && <input type="hidden" name="sort" value={sort} />}{tagIds.length > 0 && <input type="hidden" name="tags" value={tagIds.join(",")} />}{state.within && <input type="hidden" name="in" value={state.within} />}<label className="field"><span>Search {view === "all" ? "the library" : libraryLabels[view].toLowerCase()}</span><input name="q" type="search" defaultValue={search} placeholder="Titles, captions, notes, creators…" /></label><button className="button">Search</button>{search && <Link className="button" href={libraryHref({ ...state, q: "", page: 1 })}>Clear</Link>}</form>
+    <LibraryFilters active={view} search={search} layout={layout} sort={sort} counts={{ all: counts.images + counts.documents + counts.notes + counts.references, ...counts, ...(filtered ? { all: undefined, [view]: undefined } : {}) }} />
     <LibraryToolbar state={state} tags={mediaView ? chips : undefined} places={mediaView ? [{ label: "Projects", options: projects.map(option("project")) }, { label: "Research topics", options: topics.map(option("research_thread")) }, { label: "Boards", options: boards.map(option("board")) }] : undefined} />
     {query.uploaded && <p className="notice notice-success">Images saved to your library.</p>}
     {(error || query.error) && <p role="alert" className="notice notice-error">{query.error || "Unable to load the library. Please retry."}</p>}
     {!error && !entries.length && <div className="empty-state"><h2>{search || filtered ? "Nothing matches these filters" : view === "all" ? "Your library is empty" : `No ${libraryLabels[view].toLowerCase()} yet`}</h2><p>{search || filtered ? "Try another word, fewer tags, or a different place." : emptyHints[view]}</p></div>}
-    <LibraryGrid entries={gridEntries} layout={layout} selectable={mediaView} editable={view === "images" || view === "documents" || view === "notes"} tags={chips.map(tag => ({ id: tag.id, title: tag.name }))} projects={projects.map(row => ({ id: String(row.id), title: String(row.title || "Untitled") }))} />
+    <LibraryGrid entries={gridEntries} layout={layout} grouped={sort !== "title"} selectable={mediaView} editable={view === "images" || view === "documents" || view === "notes"} tags={chips.map(tag => ({ id: tag.id, title: tag.name }))} projects={projects.map(row => ({ id: String(row.id), title: String(row.title || "Untitled") }))} />
     <nav className="section-actions" aria-label="Library pages"><span className="record-meta">{total} {total === 1 ? "item" : "items"}</span>{page > 1 && <Link className="button" href={libraryHref({ ...state, page: page - 1 })}>Previous</Link>}{start + entries.length < total && <Link className="button" href={libraryHref({ ...state, page: page + 1 })}>Next</Link>}</nav>
   </>;
 }

@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { libraryHref, type LibraryLayout, type LibraryState } from "@/lib/library";
+import { libraryHref, librarySorts, sortLabels, type LibraryLayout, type LibrarySort, type LibraryState } from "@/lib/library";
 
 type Option = { value: string; label: string };
 const layoutLabels: Record<LibraryLayout, string> = { grid: "Grid", compact: "Compact", list: "List" };
@@ -18,6 +18,9 @@ export function LibraryToolbar({ state, tags, places }: { state: LibraryState; t
         <nav className="library-layouts" aria-label="Layout">
           {(Object.keys(layoutLabels) as LibraryLayout[]).map(item => <Link key={item} href={go({ layout: item })} aria-current={layout === item ? "page" : undefined}>{layoutLabels[item]}</Link>)}
         </nav>
+        <select className="library-within library-sort" aria-label="Sort" value={state.sort || "newest"} onChange={event => router.push(go({ sort: event.target.value as LibrarySort }))}>
+          {librarySorts.map(item => <option key={item} value={item}>{sortLabels[item]}</option>)}
+        </select>
         {places && places.some(group => group.options.length) && (
           <select className="library-within" aria-label="Show items used in" value={state.within || ""} onChange={event => router.push(go({ within: event.target.value || undefined }))}>
             <option value="">Used anywhere</option>
