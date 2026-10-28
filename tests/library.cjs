@@ -47,3 +47,9 @@ test('library filters keep only ids present in every list', () => {
   assert.deepEqual(library.intersectIds([['a', 'b', 'c', 'a'], ['c', 'a'], ['a', 'c', 'z']]), ['a', 'c']);
   assert.deepEqual(library.intersectIds([['a'], []]), []);
 });
+
+test('thumbnails live in the owner folder so storage policies allow them', () => {
+  const thumbs = load('lib/thumbnails.ts');
+  assert.equal(thumbs.thumbnailPath('owner-1', 'media-9'), 'owner-1/thumbs/media-9.webp');
+  assert.equal(thumbs.thumbnailUrl('media-9'), '/library/thumb/media-9');
+});

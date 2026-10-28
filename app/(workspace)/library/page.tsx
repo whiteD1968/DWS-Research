@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getSignedMediaUrlMap, type MediaRecord } from "@/lib/media";
+import { thumbnailUrl } from "@/lib/thumbnails";
 import { externalImageReference } from "@/lib/discover/images";
 import { intersectIds, libraryHref, libraryLabels, libraryPattern, mediaEntry, mergeEntries, noteEntry, pageSizeFor, parseLibraryLayout, parseLibraryView, parseTagIds, parseWithin, referenceEntry, type LibraryEntry, type LibraryKind, type LibraryState } from "@/lib/library";
 import { LibraryFilters } from "@/components/library-filters";
@@ -96,13 +96,9 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     shown("references") ? (references.data || []).map(row => referenceEntry(row, externalImageReference(row.metadata as Record<string, unknown>)?.thumbnail)) : [],
   ], view === "all" ? start : 0, size);
 
-  // Reference cover images live in media, so they are signed alongside the images on this page.
-  const coverIds = entries.filter(entry => entry.kind === "references" && entry.mediaId && !entry.thumbnail).map(entry => entry.mediaId!);
-  const { data: covers } = coverIds.length ? await db.from("media").select("id,bucket,storage_path").in("id", coverIds) : { data: [] };
-  const pageImages = (images.data || []).filter(row => entries.some(entry => entry.id === row.id));
+  // Images and reference covers load through cached thumbnails rather than full-size signed originals.
   const mediaIds = entries.filter(entry => entry.kind === "images" || entry.kind === "documents").map(entry => entry.id);
-  const [signed, entryTags, allTags, places] = await Promise.all([
-    getSignedMediaUrlMap([...pageImages, ...(covers || [])] as MediaRecord[]),
+  const [entryTags, allTags, places] = await Promise.all([
     mediaIds.length ? db.from("record_tags").select("record_id,tag_id").eq("owner_id", user.id).eq("record_type", "media").in("record_id", mediaIds).then(result => result.data || []) : Promise.resolve([] as Row[]),
     mediaView ? every(from => db.from("record_tags").select("tag_id").eq("owner_id", user.id).eq("record_type", "media").range(from, from + 999)) : Promise.resolve([] as Row[]),
     mediaView ? Promise.all((["projects", "research_threads", "boards"] as const).map(table => db.from(table).select("id,title").eq("owner_id", user.id).order("title").limit(300).then(result => result.data || []))) : Promise.resolve([[], [], []]),
@@ -117,7 +113,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const tagsByRecord = new Map<string, { id: string; name: string }[]>();
   entryTags.forEach(row => { const name = tagName.get(String(row.tag_id)); if (name) tagsByRecord.set(String(row.record_id), [...(tagsByRecord.get(String(row.record_id)) || []), { id: String(row.tag_id), name }]); });
 
-  const imageFor = (entry: LibraryEntry) => entry.thumbnail || (entry.kind === "documents" || !entry.mediaId ? null : signed.get(entry.mediaId) || null);
+  const imageFor = (entry: LibraryEntry) => entry.thumbnail || (entry.kind === "documents" || !entry.mediaId ? null : thumbnailUrl(entry.mediaId));
   const gridEntries = entries.map(entry => ({ ...entry, image: imageFor(entry), tags: tagsByRecord.get(entry.id) || [] }));
   const [projects, topics, boards] = places;
   const option = (kind: string) => (row: Row) => ({ value: `${kind}:${row.id}`, label: String(row.title || "Untitled") });

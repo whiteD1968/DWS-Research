@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { contentKinds, isContentKind } from "@/lib/content";
+import { thumbnailBucket, thumbnailPath } from "@/lib/thumbnails";
 
 export async function deleteContent(kind: string, id: string, confirmation: string) {
   const user = await requireUser();
@@ -14,6 +15,7 @@ export async function deleteContent(kind: string, id: string, confirmation: stri
   if (kind === "media" && data.storage_path) {
     if (data.bucket !== "research-media" || !data.storage_path.startsWith(`${user.id}/`)) throw new Error("File location could not be verified.");
     const removed = await db.storage.from(data.bucket).remove([data.storage_path]);
+    if (!removed.error && data.media_type === "image") await db.storage.from(thumbnailBucket).remove([thumbnailPath(user.id, id)]);
     if (removed.error) throw new Error("The file could not be deleted. Nothing has been removed from your library. Please retry.");
   }
   const result = await db.rpc("delete_research_content", { p_kind: kind, p_id: id });
