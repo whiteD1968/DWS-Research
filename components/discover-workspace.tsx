@@ -10,11 +10,11 @@ import { DiscoverResultCard } from "@/components/discover-result-card";
 import { BoardHandoff } from "@/components/board-handoff";
 import { DiscoverTopicAction } from "@/components/discover-topic-action";
 
-export function DiscoverWorkspace({ initial, collections, matches = {}, topics = [] }: {
-  initial?: ResearchSession; collections: { id: string; title: string }[]; matches?: Record<string, string>; topics?: { id: string; title: string }[];
+export function DiscoverWorkspace({ initial, initialQuery = "", collections, matches = {}, topics = [] }: {
+  initial?: ResearchSession; initialQuery?: string; collections: { id: string; title: string }[]; matches?: Record<string, string>; topics?: { id: string; title: string }[];
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState(initial?.query ?? "");
+  const [query, setQuery] = useState(initial?.query ?? initialQuery);
   const [filters, setFilters] = useState<DiscoverFilters>(initial?.filters ?? { freshness: "", topic: "", contentType: "" });
   const [selected, setSelected] = useState<string[]>([]);
   const [saved, setSaved] = useState({ ...matches, ...initial?.saved_items });
