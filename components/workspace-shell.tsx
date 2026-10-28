@@ -9,6 +9,7 @@ import { CommandSearch } from "@/components/command-search";
 
 const icons = {
   home: <><rect x="3" y="3" width="8" height="8" /><rect x="13" y="3" width="8" height="5" /><rect x="13" y="10" width="8" height="11" /><rect x="3" y="13" width="8" height="8" /></>,
+  journal: <><path d="M5 3h11l3 3v15H5z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
   research: <><circle cx="11" cy="11" r="6.5" /><path d="M16 16l5 5" /></>,
   library: <><rect x="3" y="4" width="4" height="16" /><rect x="9" y="4" width="4" height="16" /><path d="M15.5 4.8l3.8-.9 3.2 15.3-3.8.9z" /></>,
   canvas: <><rect x="3" y="3" width="18" height="18" /><rect x="6" y="7" width="6" height="5" /><rect x="13" y="12" width="5" height="6" /></>,
@@ -17,6 +18,7 @@ const icons = {
 // Each destination groups the routes that belong to it, so related pages share one menu item.
 const navItems = [
   { href: "/", label: "Home", icon: icons.home, routes: [] as string[] },
+  { href: "/journal", label: "Journal", icon: icons.journal, routes: ["/journal"] },
   { href: "/research", label: "Research", icon: icons.research, routes: ["/research", "/projects"] },
   { href: "/library", label: "Library", icon: icons.library, routes: ["/library", "/collections", "/discover"] },
   { href: "/boards", label: "Canvas", icon: icons.canvas, routes: ["/boards"] },

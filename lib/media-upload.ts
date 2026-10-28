@@ -104,7 +104,7 @@ export function buildStoragePath({
   fileName,
 }: {
   ownerId: string;
-  recordType: "references" | "projects" | "capture";
+  recordType: "references" | "projects" | "capture" | "journal";
   recordId: string;
   fileName: string;
 }) {
