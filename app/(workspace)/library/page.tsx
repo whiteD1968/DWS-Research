@@ -3,34 +3,75 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedMediaUrlMap, type MediaRecord } from "@/lib/media";
+import { externalImageReference } from "@/lib/discover/images";
+import { libraryLabels, libraryPageSize, libraryPattern, mediaEntry, mergeEntries, noteEntry, parseLibraryView, referenceEntry, type LibraryEntry, type LibraryKind } from "@/lib/library";
+import { LibraryFilters } from "@/components/library-filters";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
+
+const emptyHints: Record<string, string> = {
+  all: "Use Capture to add images, notes, and links. Files added in research topics, projects, and boards appear here too.",
+  images: "Use Capture to add images. Images uploaded within projects and boards appear here too.",
+  documents: "Upload a PDF in a research topic or project to add it here.",
+  notes: "Notes from research topics and boards appear here, ready to edit and reuse.",
+  references: "Save a precedent, book, or website as a reference, or keep one from Discover.",
+};
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ view?: string; q?: string; page?: string; uploaded?: string; error?: string }> }) {
   const user = await requireUser(); const db = await createClient(); const query = await searchParams;
-  const view = ["images", "documents", "notes"].includes(query.view || "") ? query.view! : "images";
-  const page = Math.max(1, Math.min(10000, Number(query.page) || 1)); const start = (Math.floor(page) - 1) * 36;
-  const search = (query.q || "").trim().slice(0, 120); const pattern = `%${search.replace(/[%_\\]/g, " ")}%`;
-  let request = db.from(view === "notes" ? "notes" : "media").select("*", { count: "exact" }).eq("owner_id", user.id).order("updated_at", { ascending: false });
-  if (view !== "notes") request = request.eq("media_type", view === "documents" ? "document" : "image");
-  if (search) request = request.ilike("title", pattern);
-  const { data, count, error } = await request.range(start, start + 35);
-  const items = data || []; const signed = view === "notes" ? new Map<string, string | null>() : await getSignedMediaUrlMap(items as MediaRecord[]);
-  const href = (n: number) => `/library?${new URLSearchParams({ view, q: search, page: String(n) })}`;
+  const view = parseLibraryView(query.view);
+  const page = Math.max(1, Math.min(10000, Math.floor(Number(query.page) || 1))); const start = (page - 1) * libraryPageSize;
+  const search = (query.q || "").trim().slice(0, 120); const pattern = libraryPattern(search);
+
+  // In "Everything", each kind returns its newest rows up to the end of this page, then they are merged by date.
+  const shown = (kind: LibraryKind) => view === "all" || view === kind;
+  const rangeFor = (kind: LibraryKind): [number, number] => view === "all" ? [0, start + libraryPageSize - 1] : view === kind ? [start, start + libraryPageSize - 1] : [0, 0];
+  const mediaQuery = (kind: "images" | "documents") => {
+    let request = db.from("media").select("*", { count: "exact", head: !shown(kind) }).eq("owner_id", user.id).eq("media_type", kind === "images" ? "image" : "document");
+    if (pattern) request = request.or(`title.ilike.${pattern},caption.ilike.${pattern},original_filename.ilike.${pattern}`);
+    return request.order("updated_at", { ascending: false }).range(...rangeFor(kind));
+  };
+  let notesRequest = db.from("notes").select("id,title,plain_text,updated_at", { count: "exact", head: !shown("notes") }).eq("owner_id", user.id);
+  if (pattern) notesRequest = notesRequest.or(`title.ilike.${pattern},plain_text.ilike.${pattern}`);
+  let referencesRequest = db.from("references").select("id,title,reference_type,creator,why_saved,description,primary_media_id,metadata,updated_at", { count: "exact", head: !shown("references") }).eq("owner_id", user.id);
+  if (pattern) referencesRequest = referencesRequest.or(`title.ilike.${pattern},why_saved.ilike.${pattern},creator.ilike.${pattern},description.ilike.${pattern}`);
+
+  const [images, documents, notes, references] = await Promise.all([
+    mediaQuery("images"), mediaQuery("documents"),
+    notesRequest.order("updated_at", { ascending: false }).range(...rangeFor("notes")),
+    referencesRequest.order("updated_at", { ascending: false }).range(...rangeFor("references")),
+  ]);
+  const error = images.error || documents.error || notes.error || references.error;
+  const counts = { images: images.count || 0, documents: documents.count || 0, notes: notes.count || 0, references: references.count || 0 };
+  const total = view === "all" ? counts.images + counts.documents + counts.notes + counts.references : counts[view];
+
+  const groups: LibraryEntry[][] = [
+    shown("images") ? (images.data || []).map(mediaEntry) : [],
+    shown("documents") ? (documents.data || []).map(mediaEntry) : [],
+    shown("notes") ? (notes.data || []).map(noteEntry) : [],
+    shown("references") ? (references.data || []).map(row => referenceEntry(row, externalImageReference(row.metadata)?.thumbnail)) : [],
+  ];
+  const entries = mergeEntries(groups, view === "all" ? start : 0, libraryPageSize);
+
+  // Reference cover images live in media, so they are signed alongside the images on this page.
+  const coverIds = entries.filter(entry => entry.kind === "references" && entry.mediaId && !entry.thumbnail).map(entry => entry.mediaId!);
+  const { data: covers } = coverIds.length ? await db.from("media").select("id,bucket,storage_path").in("id", coverIds) : { data: [] };
+  const signed = await getSignedMediaUrlMap([...(images.data || []).filter(row => entries.some(entry => entry.id === row.id)), ...(covers || [])] as MediaRecord[]);
+  const imageFor = (entry: LibraryEntry) => entry.thumbnail || (entry.kind === "documents" || !entry.mediaId ? null : signed.get(entry.mediaId) || null);
+  const editable = view === "images" || view === "documents" || view === "notes";
+
+  const href = (n: number) => { const params = new URLSearchParams({ page: String(n) }); if (view !== "all") params.set("view", view); if (search) params.set("q", search); return `/library?${params}`; };
   return <>
-    <header className="page-header"><div><p className="eyebrow">Your source archive</p><h1 className="page-title">Library</h1><p className="page-description">Images, documents, and notes to return to, reuse, and build upon.</p></div><Link className="button" href="/library/references">Saved references ↗</Link></header>
-    <nav className="mode-tabs" aria-label="Library repositories">{["images", "documents", "notes"].map(item => <Link key={item} aria-current={view === item ? "page" : undefined} className={`mode-tab ${view === item ? "mode-tab-active" : ""}`} href={`/library?view=${item}`}>{item[0].toUpperCase() + item.slice(1)}</Link>)}<Link className="mode-tab" href="/library/references">References</Link></nav>
-    <form className="repository-search" role="search"><input type="hidden" name="view" value={view} /><label className="field"><span>Find {view} by title</span><input name="q" defaultValue={search} placeholder={`Search ${view}…`} /></label><button className="button">Search</button>{search && <Link className="button" href={`/library?view=${view}`}>Clear</Link>}<span className="record-meta">{count || 0} items</span></form>
+    <header className="page-header"><div><p className="eyebrow">Your source archive</p><h1 className="page-title">Library</h1><p className="page-description">Every image, document, note, and reference in one place. Filter by type or search across all of them.</p></div><Link className="button" href="/library/references">New reference</Link></header>
+    <form className="repository-search library-search" role="search">{view !== "all" && <input type="hidden" name="view" value={view} />}<label className="field"><span>Search {view === "all" ? "the library" : libraryLabels[view].toLowerCase()}</span><input name="q" type="search" defaultValue={search} placeholder="Titles, captions, notes, creators…" /></label><button className="button">Search</button>{search && <Link className="button" href={view === "all" ? "/library" : `/library?view=${view}`}>Clear</Link>}</form>
+    <LibraryFilters active={view} search={search} counts={{ all: counts.images + counts.documents + counts.notes + counts.references, ...counts }} />
     {query.uploaded && <p className="notice notice-success">Images saved to your library.</p>}
     {(error || query.error) && <p role="alert" className="notice notice-error">{query.error || "Unable to load the library. Please retry."}</p>}
-    {!error && !items.length && <div className="empty-state"><h2>{search ? "No matching items" : `Your ${view} live here`}</h2><p>{search ? "Try another title or clear your search." : view === "images" ? "Use Capture to add images. Images uploaded within projects and boards appear here too." : view === "documents" ? "Upload a PDF in a Research Topic or Project to add it to this archive." : "Notes from Research Topics and Boards appear here, ready to edit and reuse."}</p><Link className="button" href="/research">Open research</Link></div>}
-    <div className={view === "images" ? "archive-grid" : "archive-list"}>{items.map(item => <article className="archive-card" key={item.id}>
-      {view === "images" && signed.get(item.id) && <a href={signed.get(item.id)!} target="_blank" rel="noreferrer" aria-label={`Open ${item.title || "image"}`}><img className="archive-image" src={signed.get(item.id)!} alt={item.alt_text || item.title || ""} loading="lazy" /></a>}
-      <div className="archive-card-body"><p className="eyebrow">{view === "notes" ? "Working note" : item.mime_type || view}</p><h2><Link href={`/library/items/${view === "notes" ? "note" : "media"}/${item.id}`}>{item.title || item.original_filename || "Untitled"}</Link></h2><p className="archive-caption">{view === "notes" ? item.plain_text : item.caption}</p>
-      {view === "documents" && signed.get(item.id) && <a className="button" href={signed.get(item.id)!} target="_blank" rel="noreferrer">Open document ↗</a>}
-      <Link className="source-details-link" href={`/library/items/${view === "notes" ? "note" : "media"}/${item.id}`}>Details &amp; used in ↗</Link>
-      <LibraryEditor kind={view === "notes" ? "note" : "media"} id={item.id} title={item.title || item.original_filename || "Untitled"} text={(view === "notes" ? item.plain_text : item.caption) || ""} altText={item.alt_text || ""} />
-      <DeleteContent stayOnPage kind={view === "notes" ? "note" : "media"} id={item.id} title={item.title || item.original_filename || "Untitled"} /></div>
-    </article>)}</div>
-    <nav className="section-actions" aria-label="Library pages">{page > 1 && <Link className="button" href={href(page - 1)}>Previous</Link>}{start + items.length < (count || 0) && <Link className="button" href={href(page + 1)}>Next</Link>}</nav>
+    {!error && !entries.length && <div className="empty-state"><h2>{search ? "Nothing matches that search" : view === "all" ? "Your library is empty" : `No ${libraryLabels[view].toLowerCase()} yet`}</h2><p>{search ? "Try another word or clear the search." : emptyHints[view]}</p></div>}
+    <div className="library-grid">{entries.map(entry => { const image = imageFor(entry); return <article className={`library-card library-card-${entry.kind}`} key={`${entry.kind}-${entry.id}`}>
+      {image ? <Link href={entry.href} className="library-card-media"><img src={image} alt={entry.altText} loading="lazy" referrerPolicy="no-referrer" /></Link> : null}
+      <div className="library-card-body"><p className="library-card-type">{entry.label}</p><h2><Link href={entry.href}>{entry.title}</Link></h2>{entry.text && <p className="library-card-text">{entry.text}</p>}
+      {editable && entry.kind !== "references" && <><LibraryEditor kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} text={entry.text} altText={entry.altText} /><DeleteContent stayOnPage kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} /></>}</div>
+    </article>; })}</div>
+    <nav className="section-actions" aria-label="Library pages"><span className="record-meta">{total} {total === 1 ? "item" : "items"}</span>{page > 1 && <Link className="button" href={href(page - 1)}>Previous</Link>}{start + entries.length < total && <Link className="button" href={href(page + 1)}>Next</Link>}</nav>
   </>;
 }
