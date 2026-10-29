@@ -78,7 +78,11 @@ export function reminderFor(deadline: string, today: string) {
   const days = deadlineDays(deadline, today);
   if (days < 1) return null;
   const lead = days > 7 ? 7 : 1;
-  const day = new Date(Date.parse(`${deadline}T00:00:00Z`) - lead * 86400000).toISOString().slice(0, 10);
+  return nineAmEastern(new Date(Date.parse(`${deadline}T00:00:00Z`) - lead * 86400000).toISOString().slice(0, 10));
+}
+
+// 9am in the studio's time zone on a calendar day, as an ISO instant (handles daylight saving).
+export function nineAmEastern(day: string) {
   const offset = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "shortOffset" }).formatToParts(new Date(`${day}T12:00:00Z`)).find(part => part.type === "timeZoneName")?.value.replace("GMT", "") || -5);
   return new Date(Date.parse(`${day}T09:00:00Z`) - offset * 3600000).toISOString();
 }
