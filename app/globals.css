@@ -2189,3 +2189,42 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .contact-links .dossier-results { margin-top: 6px; }
 @media (hover: none) { .contact-log li button, .contact-links li button { opacity: 1; } }
 @media (max-width: 600px) { .contact-log-add { grid-template-columns: 1fr auto; } .contact-log-add input[type="date"] { grid-column: 1 / -1; } .contact-log li { grid-template-columns: 1fr auto; } .contact-log li span { grid-column: 1 / -1; } }
+
+/* Practice dashboard on Home: four glance tiles, then Today beside the next two weeks, then recent work. */
+.glance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.glance-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); transition: border-color .15s, transform .15s; }
+.glance-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+.glance-tile span { font-size: 12px; color: var(--text-muted); }
+.glance-tile strong { font-size: 19px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glance-tile small { font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glance-tile-alert { border-color: var(--kiln); background: var(--kiln-muted); }
+.glance-tile-alert strong { color: var(--kiln); }
+.home-columns { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 16px; align-items: start; margin: 0 0 32px; }
+.home-columns .today-card { margin: 0; }
+.agenda { padding: 22px 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.agenda-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.agenda-head .eyebrow { margin: 0; }
+.agenda-days { list-style: none; margin: 0; padding: 0; }
+.agenda-day { padding: 10px 0; border-top: 1px solid var(--border); }
+.agenda-day:first-child { border-top: 0; }
+.agenda-day h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.agenda-today h3 { color: var(--accent); }
+.agenda-day ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.agenda-item { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: baseline; padding: 6px 8px; margin: 0 -8px; border-radius: 8px; }
+.agenda-item:hover { background: var(--surface-muted); }
+.agenda-item strong { font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-item small { grid-column: 2; font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-kind { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--accent-muted); color: var(--accent-strong); }
+.agenda-follow_up .agenda-kind { background: var(--surface-muted); color: var(--text-muted); }
+.agenda-review .agenda-kind, .agenda-overdue .agenda-kind { background: var(--kiln-muted); color: var(--kiln); }
+.agenda-empty { margin: 8px 0 0; font-size: 14px; color: var(--text-muted); }
+.home-recent { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.recent-work ul { list-style: none; margin: 0; padding: 0; }
+.recent-row { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.recent-row strong { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-row:hover strong { text-decoration: underline; text-underline-offset: 4px; }
+.recent-row small { font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-kind { font-size: 12px; color: var(--text-muted); }
+.recent-cv, .recent-accepted { color: var(--accent); }
+@media (max-width: 1100px) { .glance { grid-template-columns: 1fr 1fr; } .home-columns { grid-template-columns: 1fr; } .home-recent { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .glance, .home-recent { grid-template-columns: 1fr; } .agenda { padding: 16px; } }

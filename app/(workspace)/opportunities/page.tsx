@@ -6,7 +6,7 @@ import { OpportunityBoard } from "@/components/opportunity-board";
 import { OpportunityLeads, ScoutSettings } from "@/components/opportunity-leads";
 import { defaultSearches, leadFrom, leadParent, parseSearches, scoutSettingsParent, type Lead } from "@/lib/opportunity-scout";
 
-export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
+export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ new?: string; o?: string }> }) {
   const user = await requireUser(); const db = await createClient(); const params = await searchParams;
   const [{ data, error }, leadRows, scout] = await Promise.all([
     db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", opportunityParent).limit(1000),
@@ -32,7 +32,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       <div><span>Fees paid</span><strong>${stats.fees.toLocaleString("en-US", { maximumFractionDigits: 0 })}</strong></div>
     </section>
     <OpportunityLeads leads={leads} today={today} />
-    <OpportunityBoard key={params.new === "1" ? "new" : "board"} items={items} today={today} startOpen={params.new === "1"} />
+    <OpportunityBoard key={params.new === "1" ? "new" : params.o ? `o-${params.o}` : "board"} items={items} today={today} startOpen={params.new === "1"} openId={params.o} />
     <ScoutSettings searches={searches} lastRun={typeof scoutMeta.last_run === "string" ? scoutMeta.last_run : ""} lastError={typeof scoutMeta.last_error === "string" ? scoutMeta.last_error : ""} />
   </div>;
 }
