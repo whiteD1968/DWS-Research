@@ -8,6 +8,8 @@ import { thumbnailUrl } from "@/lib/thumbnails";
 import { formatDay, studioToday } from "@/lib/journal";
 import { RemindersList } from "@/components/reminders-list";
 import { dossierLinkGroup } from "@/lib/dossier";
+import { leadFrom, leadParent, type Lead } from "@/lib/opportunity-scout";
+import { OpportunityLeads, OpportunityScout } from "@/components/opportunity-leads";
 export default async function TodayPage() {
   const user = await requireUser(); const db = await createClient();
   const [projects, topics, references] = await Promise.all([
@@ -16,12 +18,14 @@ export default async function TodayPage() {
     db.from("references").select("id", { count: "exact", head: true }).eq("owner_id", user.id),
   ]);
   // Today's jot pad links to any project or topic; the strip shows the newest journal sketches and photos.
-  const [allProjects, allTopics, sketches, reminders] = await Promise.all([
+  const [allProjects, allTopics, sketches, reminders, leadRows] = await Promise.all([
     db.from("projects").select("id,title").eq("owner_id", user.id).order("title").limit(300),
     db.from("research_threads").select("id,title").eq("owner_id", user.id).order("title").limit(300),
     db.from("relationships").select("source_id,target_id").eq("owner_id", user.id).eq("source_type", "note").eq("relationship_type", "has_media").order("created_at", { ascending: false }).limit(8),
     db.from("notes").select("id,title,plain_text,parent_type,metadata").eq("owner_id", user.id).not("metadata->>remind_at", "is", null).is("metadata->>done_at", null).order("metadata->>remind_at", { ascending: true }).limit(30),
+    db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", leadParent).order("created_at", { ascending: false }).limit(40),
   ]);
+  const leads = (leadRows.data || []).map(leadFrom).filter((lead): lead is Lead => !!lead);
   const links = [
     { label: "Projects", options: (allProjects.data || []).map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) },
     { label: "Research topics", options: (allTopics.data || []).map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) },
@@ -34,6 +38,7 @@ export default async function TodayPage() {
       <RemindersList reminders={(reminders.data || []).map(row => ({ id: row.id, title: row.title || "", text: row.parent_type === "opportunity" ? `Deadline ${new Date(`${row.metadata?.deadline}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : (row.plain_text || "").slice(0, 160), remindAt: String(row.metadata?.remind_at || ""), href: row.parent_type === "opportunity" ? "/opportunities" : undefined }))} />
       {!!sketches.data?.length && <div className="today-sketches"><p className="eyebrow">Recent sketches</p><ul>{sketches.data.map(row => <li key={row.target_id}><Link href={`/library/items/media/${row.target_id}`}><img src={thumbnailUrl(row.target_id)} alt="Journal sketch" loading="lazy" /></Link></li>)}</ul></div>}
     </section>
+    <OpportunityLeads leads={leads} today={studioToday()} limit={4} showAllHref="/opportunities" /><OpportunityScout />
     <div className="desk-links"><Link href="/research"><span>01 / Investigate</span><strong>Research topics</strong></Link><Link href="/boards"><span>02 / Compose</span><strong>Visual boards</strong></Link><Link href="/library"><span>03 / Revisit</span><strong>Source library</strong><small>{references.count ?? "—"} saved references</small></Link></div>
     <section className="workspace-grid section-block">{[{ title: "Recent inquiries", href: "/research", result: topics }, { title: "Project work", href: "/projects", result: projects }].map(group => <section className="desk-section" key={group.href}><div className="section-heading"><h2>{group.title}</h2><Link href={group.href}>View all ↗</Link></div>{group.result.error ? <p role="alert">Could not load this section.</p> : group.result.data?.length ? group.result.data.map(item => <Link className="desk-row" key={item.id} href={`${group.href}/${item.id}`}><span className="record-meta">{item.status}</span><h3>{item.title}</h3></Link>) : <p className="panel-copy">Start your first {group.href === "/research" ? "research topic" : "project"} to see it here.</p>}</section>)}</section>
     <section className="section-block"><div className="section-heading"><h2>On the wall</h2><Link href="/boards">All boards ↗</Link></div><BoardList ownerId={user.id} preview /></section>
