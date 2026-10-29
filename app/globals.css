@@ -2017,3 +2017,47 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
   body, .workspace-main { background: #fff !important; } .dossier .page-description { display: none; }
   .dossier-section { break-inside: auto; } .dossier-evidence li { break-inside: avoid; } .dossier-tile, .dossier-review { border-color: #ccc; }
 }
+
+/* CV: log an accomplishment in a few taps, then export it for the InDesign template. */
+.cv-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 28px; }
+.cv-toolbar-count { margin-left: auto; font-size: 13px; color: var(--text-muted); }
+.cv-group { margin-bottom: 32px; }
+.cv-group-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.cv-group-title .text-button { font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 400; }
+.cv-group ul { list-style: none; margin: 0; padding: 0; }
+.cv-line { display: grid; grid-template-columns: 20px 92px minmax(0, 1fr) auto; align-items: baseline; gap: 12px; padding: 10px 8px; border-radius: 8px; transition: background .15s; }
+.cv-line:hover { background: var(--surface); }
+.cv-line-selected, .cv-line-selected:hover { background: var(--accent-muted); }
+.cv-line input[type="checkbox"] { width: 16px; height: 16px; margin: 0; align-self: center; }
+.cv-line-year { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 14px; }
+.cv-line-text { margin: 0; font-size: 15px; line-height: 1.5; }
+.cv-line-text a { font-size: 13px; color: var(--text-muted); }
+.cv-line-actions { display: flex; align-items: center; gap: 10px; font-size: 13px; opacity: .55; transition: opacity .15s; }
+.cv-line:hover .cv-line-actions, .cv-line-actions:focus-within { opacity: 1; }
+.cv-line-files { color: var(--text-muted); font-size: 12px; }
+@media (hover: none) { .cv-line-actions { opacity: 1; } }
+.cv-dialog { width: min(640px, calc(100vw - 32px)); }
+.cv-form { display: flex; flex-direction: column; gap: 14px; }
+.cv-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.cv-kind { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, border-color .15s, transform .12s; }
+.cv-kind:hover { border-color: var(--text); }
+.cv-kind:active { transform: scale(.96); }
+.cv-kind-on, .cv-kind-on:hover { background: var(--text); border-color: var(--text); color: var(--surface); }
+.cv-title { height: 48px; padding: 0 2px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; font: inherit; font-size: 20px; font-weight: 500; }
+.cv-title:focus { outline: none; border-bottom-color: var(--text); }
+.cv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cv-row-dates { grid-template-columns: 110px 150px 1fr; align-items: end; }
+.cv-wide { grid-column: 1 / -1; }
+.cv-more { justify-self: start; padding-bottom: 10px; }
+.cv-drop { display: block; padding: 14px; border: 1px dashed var(--border-strong, var(--border)); border-radius: 12px; font-size: 14px; color: var(--text-muted); text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+.cv-drop:hover { border-color: var(--text); background: var(--surface-muted); }
+.cv-drop ul { list-style: none; margin: 0; padding: 0; text-align: left; }
+.cv-drop li { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; color: var(--text); font-size: 13px; }
+.cv-drop li button { border: 0; background: transparent; color: var(--text-muted); font-size: 16px; cursor: pointer; }
+.cv-preview { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--surface-muted); font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.cv-preview::before { content: "On your CV"; display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.cv-form-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.cv-dossier { display: flex; align-items: center; gap: 8px; margin-right: auto; font-size: 13px; color: var(--text-muted); }
+.cv-dossier input { width: 16px; height: 16px; margin: 0; }
+.cv-error { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--kiln); }
+@media (max-width: 640px) { .cv-line { grid-template-columns: 20px minmax(0, 1fr); } .cv-line-year { grid-column: 2; } .cv-line-text, .cv-line-actions { grid-column: 2; } .cv-row, .cv-row-dates { grid-template-columns: 1fr 1fr; } }

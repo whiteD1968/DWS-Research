@@ -4,6 +4,7 @@ import { recordRoutes } from "@/lib/records";
 import { thumbnailUrl } from "@/lib/thumbnails";
 import { studioToday } from "@/lib/journal";
 import { daysUntil, dossierParent, dossierSections, dossierSettingsParent, evidenceKinds, evidenceLabels, evidenceType, parseReviewDate, type EvidenceKind } from "@/lib/dossier";
+import { cvCategory, cvFields, cvParent, cvYears } from "@/lib/cv";
 import { DossierView, type DossierItem } from "@/components/dossier-view";
 
 export default async function TenurePage() {
@@ -30,7 +31,8 @@ export default async function TenurePage() {
     for (const row of (data || []) as unknown as Record<string, unknown>[]) {
       const id = String(row.id);
       const title = String(row.title || row.original_filename || (kind === "note" ? String(row.plain_text || "").slice(0, 90) : "") || "Untitled");
-      const detail = kind === "note" && row.parent_type === "journal" ? `Journal · ${String((row.metadata as { entry_date?: string })?.entry_date || "")}` : kind === "reference" && row.creator ? `Reference · ${row.creator}` : kind === "media" ? (row.media_type === "image" ? "Image" : "Document") : evidenceLabels[kind];
+      const cv = kind === "note" && row.parent_type === cvParent ? cvFields(row) : null;
+      const detail = cv ? `CV · ${cvCategory(cv.category).one} · ${cvYears(cv)}` : kind === "note" && row.parent_type === "journal" ? `Journal · ${String((row.metadata as { entry_date?: string })?.entry_date || "")}` : kind === "reference" && row.creator ? `Reference · ${row.creator}` : kind === "media" ? (row.media_type === "image" ? "Image" : "Document") : evidenceLabels[kind];
       details.set(`${kind}:${id}`, { title, detail, image: kind === "media" && row.media_type === "image" ? thumbnailUrl(id) : null });
     }
   }));

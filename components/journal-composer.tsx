@@ -7,6 +7,7 @@ import { createJournalEntry } from "@/app/(workspace)/journal/actions";
 import { maxJournalImages } from "@/lib/journal";
 import { localDay } from "@/lib/quick-note";
 import { formatReminder, reminderPresets } from "@/lib/reminders";
+import { shrinkImage as shrink } from "@/lib/shrink-image";
 
 const SketchPad = dynamic(() => import("./sketch-pad"), { ssr: false, loading: () => <p className="sketch-pad-loading">Opening sketch pad…</p> });
 type Attachment = { file: File; url: string; sketch: boolean };
@@ -19,20 +20,6 @@ const placeholders: Record<Variant, string> = {
   quick: "Jot it down…",
   home: "What's on your mind today?",
 };
-
-// Phone photos are shrunk in the browser so an entry stays well under the upload limit.
-async function shrink(file: File) {
-  if (!file.type.startsWith("image/")) return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 2200 / Math.max(bitmap.width, bitmap.height));
-    if (scale === 1 && file.size < 1.5 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) return file;
-    const canvas = document.createElement("canvas"); canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", 0.84));
-    return blob ? new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
-  } catch { return file; }
-}
 
 // Drafts live in this browser only; storage can be unavailable (private windows), so every access is guarded.
 const readDraft = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || "null") as { title?: string; text?: string } | null; } catch { return null; } };

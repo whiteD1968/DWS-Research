@@ -10,7 +10,7 @@ type Section = (typeof dossierSections)[number] & { text: string; items: Dossier
 export function DossierView({ reviewDate, days, sections }: { reviewDate: string; days: number | null; sections: Section[] }) {
   return <div className="dossier">
     <header className="page-header"><div><p className="eyebrow">Tenure &amp; promotion</p><h1 className="page-title">Dossier</h1><p className="page-description">A statement and the evidence behind it, for each part of the case. Add work from anywhere in the studio, or file a journal entry here as you go.</p></div>
-      <div className="dossier-header-actions"><PrintDossier /></div></header>
+      <div className="dossier-header-actions"><PrintDossier /><Link className="button button-primary" href="/tenure/cv?new=1">+ Log accomplishment</Link></div></header>
 
     <section className="dossier-overview" aria-label="Overview">
       <div className="dossier-review"><p className="eyebrow">Review</p>{days !== null ? <><strong>{countdownLabel(days)}</strong><span>{new Date(`${reviewDate}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}</span></> : <strong>Set your review date</strong>}<ReviewDate value={reviewDate} /></div>
