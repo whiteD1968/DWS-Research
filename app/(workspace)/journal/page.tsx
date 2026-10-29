@@ -7,6 +7,7 @@ import { thumbnailUrl } from "@/lib/thumbnails";
 import { entryDay, formatDay, groupByDay, journalPageSize, journalParent, rhythmWeeks, studioToday } from "@/lib/journal";
 import { recordHref } from "@/lib/records";
 import { formatReminder } from "@/lib/reminders";
+import { dossierLinkGroup } from "@/lib/dossier";
 import { JournalComposer } from "@/components/journal-composer";
 import { JournalRhythm } from "@/components/journal-rhythm";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
@@ -58,7 +59,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
   return <>
     <header className="page-header"><div><p className="eyebrow">Studio journal</p><h1 className="page-title">Journal</h1><p className="page-description">Write, sketch, and photograph ideas as they come. Sketches and photos also land in your Library, tagged “journal”.</p></div></header>
     <JournalRhythm counts={counts} today={today} />
-    <JournalComposer links={[{ label: "Projects", options: projects.map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) }, { label: "Research topics", options: topics.map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) }]} />
+    <JournalComposer links={[{ label: "Projects", options: projects.map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) }, { label: "Research topics", options: topics.map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) }, dossierLinkGroup]} />
     <div className="journal-tools">
       <form className="journal-search" role="search">{sketchesOnly && <input type="hidden" name="sketches" value="1" />}<input name="q" type="search" defaultValue={search} placeholder="Search entries…" aria-label="Search entries" /><button className="button">Search</button>{search && <Link className="text-button" href={href({ q: "" })}>Clear</Link>}</form>
       <nav className="library-layouts" aria-label="Show"><Link href={href({ sketches: false })} aria-current={!sketchesOnly ? "page" : undefined}>All entries</Link><Link href={href({ sketches: true })} aria-current={sketchesOnly ? "page" : undefined}>With sketches & photos</Link></nav>

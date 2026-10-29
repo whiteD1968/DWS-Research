@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { allowedImageTypes, buildStoragePath, createMediaFromFile } from "@/lib/media-upload";
 import { journalParent, maxJournalImages, parseEntryDate, parseJournalLink } from "@/lib/journal";
 import { parseRemindAt } from "@/lib/reminders";
+import { dossierLinkGroup, parseDossierLink } from "@/lib/dossier";
+import { evidenceRow, sectionNoteId } from "@/lib/dossier-server";
 
 const files = (form: FormData, key: string) => form.getAll(key).filter((item): item is File => item instanceof File && item.size > 0);
 
@@ -12,7 +14,7 @@ export async function createJournalEntry(form: FormData) {
   const user = await requireUser();
   const text = getFormValue(form, "text") ?? ""; const title = getFormValue(form, "title");
   const day = parseEntryDate(form.get("entry_date"), new Date().toISOString().slice(0, 10));
-  const link = parseJournalLink(form.get("link"));
+  const link = parseJournalLink(form.get("link")); const dossier = parseDossierLink(form.get("link"));
   const sketches = files(form, "sketches"); const photos = files(form, "photos");
   const images = [...sketches.map(file => ({ file, sketch: true })), ...photos.map(file => ({ file, sketch: false }))];
   const remindAt = parseRemindAt(form.get("remind_at"));
@@ -44,13 +46,15 @@ export async function createJournalEntry(form: FormData) {
     for (const name of sketch ? ["journal", "sketch"] : ["journal"]) if (tagIds[name]) tags.push({ owner_id: user.id, record_type: "media", record_id: mediaId, tag_id: tagIds[name] });
   }
   if (link) links.push({ owner_id: user.id, source_type: link.kind, source_id: link.id, relationship_type: "has_note", target_type: "note", target_id: note.id, metadata: {} });
+  // Filed into the tenure dossier: the entry becomes evidence for that section.
+  if (dossier) links.push(evidenceRow(user.id, await sectionNoteId(db, user.id, dossier), "note", note.id));
   const onConflict = "source_type,source_id,relationship_type,target_type,target_id";
   const saved = await Promise.all([
     links.length ? db.from("relationships").upsert(links, { onConflict, ignoreDuplicates: true }) : { error: null },
     tags.length ? db.from("record_tags").upsert(tags, { onConflict: "record_type,record_id,tag_id", ignoreDuplicates: true }) : { error: null },
   ]);
   if (saved.some(result => result.error)) throw new Error("The entry saved, but some images could not be linked. Open it from the Library to finish.");
-  revalidatePath("/journal"); revalidatePath("/library");
+  revalidatePath("/journal"); revalidatePath("/library"); if (dossier) revalidatePath("/tenure");
   return note.id as string;
 }
 
@@ -63,6 +67,7 @@ export async function journalLinkOptions() {
   return [
     { label: "Projects", options: (projects.data || []).map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) },
     { label: "Research topics", options: (topics.data || []).map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) },
+    dossierLinkGroup,
   ];
 }
 
