@@ -13,6 +13,7 @@ const icons = {
   journal: <><path d="M5 3h11l3 3v15H5z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
   research: <><circle cx="11" cy="11" r="6.5" /><path d="M16 16l5 5" /></>,
   library: <><rect x="3" y="4" width="4" height="16" /><rect x="9" y="4" width="4" height="16" /><path d="M15.5 4.8l3.8-.9 3.2 15.3-3.8.9z" /></>,
+  opportunities: <><path d="M4 20V5" /><path d="M4 5h11l-2 3.5 2 3.5H4" /><path d="M17 20h3" /></>,
   tenure: <><path d="M12 3l9 4.5-9 4.5-9-4.5z" /><path d="M6 9.5V15c0 1.7 2.7 3 6 3s6-1.3 6-3V9.5" /><path d="M21 7.5V13" /></>,
   canvas: <><rect x="3" y="3" width="18" height="18" /><rect x="6" y="7" width="6" height="5" /><rect x="13" y="12" width="5" height="6" /></>,
 };
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/research", label: "Research", icon: icons.research, routes: ["/research", "/projects"] },
   { href: "/library", label: "Library", icon: icons.library, routes: ["/library", "/collections", "/discover"] },
   { href: "/boards", label: "Canvas", icon: icons.canvas, routes: ["/boards"] },
+  { href: "/opportunities", label: "Opportunities", icon: icons.opportunities, routes: ["/opportunities"] },
   { href: "/tenure", label: "Tenure", icon: icons.tenure, routes: ["/tenure"] },
 ];
 

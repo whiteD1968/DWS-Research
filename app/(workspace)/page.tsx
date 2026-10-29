@@ -20,7 +20,7 @@ export default async function TodayPage() {
     db.from("projects").select("id,title").eq("owner_id", user.id).order("title").limit(300),
     db.from("research_threads").select("id,title").eq("owner_id", user.id).order("title").limit(300),
     db.from("relationships").select("source_id,target_id").eq("owner_id", user.id).eq("source_type", "note").eq("relationship_type", "has_media").order("created_at", { ascending: false }).limit(8),
-    db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).not("metadata->>remind_at", "is", null).is("metadata->>done_at", null).order("metadata->>remind_at", { ascending: true }).limit(30),
+    db.from("notes").select("id,title,plain_text,parent_type,metadata").eq("owner_id", user.id).not("metadata->>remind_at", "is", null).is("metadata->>done_at", null).order("metadata->>remind_at", { ascending: true }).limit(30),
   ]);
   const links = [
     { label: "Projects", options: (allProjects.data || []).map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) },
@@ -31,7 +31,7 @@ export default async function TodayPage() {
     <section className="today-card" aria-label="Today">
       <div className="today-card-head"><div><p className="eyebrow">Today</p><h2>{formatDay(studioToday())}</h2></div><Link className="text-button" href="/journal">Open journal ↗</Link></div>
       <JournalComposer variant="home" links={links} />
-      <RemindersList reminders={(reminders.data || []).map(row => ({ id: row.id, title: row.title || "", text: (row.plain_text || "").slice(0, 160), remindAt: String(row.metadata?.remind_at || "") }))} />
+      <RemindersList reminders={(reminders.data || []).map(row => ({ id: row.id, title: row.title || "", text: row.parent_type === "opportunity" ? `Deadline ${new Date(`${row.metadata?.deadline}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : (row.plain_text || "").slice(0, 160), remindAt: String(row.metadata?.remind_at || ""), href: row.parent_type === "opportunity" ? "/opportunities" : undefined }))} />
       {!!sketches.data?.length && <div className="today-sketches"><p className="eyebrow">Recent sketches</p><ul>{sketches.data.map(row => <li key={row.target_id}><Link href={`/library/items/media/${row.target_id}`}><img src={thumbnailUrl(row.target_id)} alt="Journal sketch" loading="lazy" /></Link></li>)}</ul></div>}
     </section>
     <div className="desk-links"><Link href="/research"><span>01 / Investigate</span><strong>Research topics</strong></Link><Link href="/boards"><span>02 / Compose</span><strong>Visual boards</strong></Link><Link href="/library"><span>03 / Revisit</span><strong>Source library</strong><small>{references.count ?? "—"} saved references</small></Link></div>

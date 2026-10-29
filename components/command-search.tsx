@@ -53,6 +53,7 @@ export function CommandSearch() {
             <button className="command-option" type="button" onClick={() => { dialog.current?.close(); openQuickNote(); }}><strong>New note</strong><span>⌘J</span></button>
             <button className="command-option" type="button" onClick={() => { dialog.current?.close(); openQuickNote({ sketch: true }); }}><strong>New sketch</strong><span>Opens the sketch pad</span></button>
             <button className="command-option" type="button" onClick={() => { dialog.current?.close(); router.push("/tenure/cv?new=1"); }}><strong>Log accomplishment</strong><span>Add a show, publication, or talk to your CV</span></button>
+            <button className="command-option" type="button" onClick={() => { dialog.current?.close(); router.push("/opportunities?new=1"); }}><strong>Add opportunity</strong><span>Track a call, grant, or residency</span></button>
           </div>
         </form>
       </dialog>

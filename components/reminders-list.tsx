@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { completeReminder, rescheduleReminder } from "@/app/(workspace)/journal/actions";
 import { formatReminder, reminderBucket, reminderPresets } from "@/lib/reminders";
 
-export type Reminder = { id: string; title: string; text: string; remindAt: string };
+export type Reminder = { id: string; title: string; text: string; remindAt: string; href?: string };
 const bucketLabels = { overdue: "Overdue", today: "Today", upcoming: "Upcoming" } as const;
 
 export function RemindersList({ reminders }: { reminders: Reminder[] }) {
@@ -37,7 +37,7 @@ export function RemindersList({ reminders }: { reminders: Reminder[] }) {
         const checked = done.includes(item.id);
         return <li key={item.id} className={checked ? "reminder reminder-done" : "reminder"}>
           <button type="button" className="reminder-check" aria-label={`Mark “${item.title || item.text}” done`} aria-pressed={checked} disabled={checked} onClick={() => complete(item.id)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9" /></svg></button>
-          <Link href={`/library/items/note/${item.id}`} className="reminder-body"><strong>{item.title || item.text}</strong>{item.title && item.text && <span>{item.text}</span>}</Link>
+          <Link href={item.href || `/library/items/note/${item.id}`} className="reminder-body"><strong>{item.title || item.text}</strong>{item.title && item.text && <span>{item.text}</span>}</Link>
           <span className="reminder-when">{formatReminder(item.remindAt)}</span>
           <div className="reminder-snooze">
             <button type="button" className="text-button" aria-expanded={snoozing === item.id} disabled={checked} onClick={() => setSnoozing(current => current === item.id ? null : item.id)}>Snooze</button>
