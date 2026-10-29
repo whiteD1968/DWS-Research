@@ -35,9 +35,11 @@ const within = (pathname: string, route: string) => pathname === route || pathna
 export function WorkspaceShell({
   children,
   userEmail,
+  dueReminders = 0,
 }: {
   children: React.ReactNode;
   userEmail?: string;
+  dueReminders?: number;
 }) {
   const pathname = usePathname();
   if (/^\/boards\/[^/]+$/.test(pathname)) return <>{children}</>;
@@ -65,6 +67,7 @@ export function WorkspaceShell({
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">{item.icon}</svg>
                 <span>{item.label}</span>
+                {item.href === "/" && dueReminders > 0 && <span className="nav-badge" aria-label={`${dueReminders} reminders due`}>{dueReminders}</span>}
               </Link>
             );
           })}

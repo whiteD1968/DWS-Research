@@ -4,6 +4,7 @@ import { getFormValue, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { allowedImageTypes, buildStoragePath, createMediaFromFile } from "@/lib/media-upload";
 import { journalParent, maxJournalImages, parseEntryDate, parseJournalLink } from "@/lib/journal";
+import { parseRemindAt } from "@/lib/reminders";
 
 const files = (form: FormData, key: string) => form.getAll(key).filter((item): item is File => item instanceof File && item.size > 0);
 
@@ -14,7 +15,9 @@ export async function createJournalEntry(form: FormData) {
   const link = parseJournalLink(form.get("link"));
   const sketches = files(form, "sketches"); const photos = files(form, "photos");
   const images = [...sketches.map(file => ({ file, sketch: true })), ...photos.map(file => ({ file, sketch: false }))];
+  const remindAt = parseRemindAt(form.get("remind_at"));
   if (!text && !images.length) throw new Error("Write something or add a sketch first.");
+  if (remindAt && !text && !title) throw new Error("Add a few words so the reminder says what to do.");
   if (text.length > 50000 || (title?.length ?? 0) > 200) throw new Error("This entry is too long to save.");
   if (images.length > maxJournalImages) throw new Error(`Add up to ${maxJournalImages} images per entry.`);
   if (images.some(({ file }) => !allowedImageTypes.has(file.type) || file.size > 8 * 1024 * 1024)) throw new Error("Images must be JPEG, PNG, or WebP and under 8 MB.");
@@ -24,7 +27,7 @@ export async function createJournalEntry(form: FormData) {
     const { data } = await db.from(link.kind === "project" ? "projects" : "research_threads").select("id").eq("owner_id", user.id).eq("id", link.id).maybeSingle();
     if (!data) throw new Error("That project or topic is unavailable. Refresh and try again.");
   }
-  const { data: note, error } = await db.from("notes").insert({ owner_id: user.id, title, plain_text: text, parent_type: journalParent, content: [], metadata: { entry_date: day } }).select("id").single();
+  const { data: note, error } = await db.from("notes").insert({ owner_id: user.id, title, plain_text: text, parent_type: journalParent, content: [], metadata: { entry_date: day, ...(remindAt ? { remind_at: remindAt } : {}) } }).select("id").single();
   if (error || !note) throw new Error("Could not save this entry. Please retry.");
 
   // Images become ordinary library media, tagged so they can be found again from the Library filters.
@@ -61,4 +64,25 @@ export async function journalLinkOptions() {
     { label: "Projects", options: (projects.data || []).map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) },
     { label: "Research topics", options: (topics.data || []).map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) },
   ];
+}
+
+// Reminder changes merge into the note's metadata so its journal day and other details are kept.
+async function updateReminder(id: string, change: (meta: Record<string, unknown>) => Record<string, unknown>) {
+  const user = await requireUser(); const db = await createClient();
+  if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error("That reminder is unavailable.");
+  const { data: note } = await db.from("notes").select("metadata").eq("owner_id", user.id).eq("id", id).maybeSingle();
+  if (!note) throw new Error("That reminder is unavailable. Refresh and try again.");
+  const { error } = await db.from("notes").update({ metadata: change({ ...(note.metadata as Record<string, unknown> || {}) }) }).eq("owner_id", user.id).eq("id", id);
+  if (error) throw new Error("Could not update the reminder. Please retry.");
+  revalidatePath("/", "layout");
+}
+
+export async function completeReminder(id: string, done = true) {
+  await updateReminder(id, meta => { if (done) meta.done_at = new Date().toISOString(); else delete meta.done_at; return meta; });
+}
+
+export async function rescheduleReminder(id: string, remindAt: string | null) {
+  const next = remindAt === null ? null : parseRemindAt(remindAt);
+  if (remindAt !== null && !next) throw new Error("Choose a valid time.");
+  await updateReminder(id, meta => { if (next) { meta.remind_at = next; delete meta.done_at; } else { delete meta.remind_at; delete meta.done_at; } return meta; });
 }

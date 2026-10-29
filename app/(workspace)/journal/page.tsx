@@ -6,11 +6,19 @@ import { libraryPattern } from "@/lib/library";
 import { thumbnailUrl } from "@/lib/thumbnails";
 import { entryDay, formatDay, groupByDay, journalPageSize, journalParent, rhythmWeeks, studioToday } from "@/lib/journal";
 import { recordHref } from "@/lib/records";
+import { formatReminder } from "@/lib/reminders";
 import { JournalComposer } from "@/components/journal-composer";
 import { JournalRhythm } from "@/components/journal-rhythm";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
 
 type Row = Record<string, unknown>;
+
+// A bell chip shows when the entry carries a reminder; a completed one is shown struck through.
+function reminderChip(metadata: unknown) {
+  const meta = (metadata || {}) as { remind_at?: unknown; done_at?: unknown };
+  if (typeof meta.remind_at !== "string") return null;
+  return <span className={`journal-reminder${meta.done_at ? " journal-reminder-done" : ""}`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg>{formatReminder(meta.remind_at)}</span>;
+}
 
 export default async function JournalPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; sketches?: string }> }) {
   const user = await requireUser(); const db = await createClient(); const query = await searchParams;
@@ -64,7 +72,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
         {title && <h3><Link href={`/library/items/note/${id}`}>{title}</Link></h3>}
         {entry.plain_text ? <p className="journal-entry-text">{String(entry.plain_text)}</p> : null}
         {images.length > 0 && <ul className={`journal-entry-images journal-entry-images-${Math.min(images.length, 3)}`}>{images.map(mediaId => <li key={mediaId}><Link href={`/library/items/media/${mediaId}`}><img src={thumbnailUrl(mediaId)} alt={title ? `Image for ${title}` : "Journal image"} loading="lazy" /></Link></li>)}</ul>}
-        <div className="journal-entry-foot">{linksFor(id).map(link => <Link key={link.key} className="library-tag" href={link.href}>{titles.get(link.key)}</Link>)}<Link className="text-button" href={`/library/items/note/${id}`}>Open</Link><LibraryEditor kind="note" id={id} title={title || "Journal entry"} text={String(entry.plain_text || "")} /><DeleteContent stayOnPage kind="note" id={id} title={title || formatDay(group.day)} /></div>
+        <div className="journal-entry-foot">{reminderChip(entry.metadata)}{linksFor(id).map(link => <Link key={link.key} className="library-tag" href={link.href}>{titles.get(link.key)}</Link>)}<Link className="text-button" href={`/library/items/note/${id}`}>Open</Link><LibraryEditor kind="note" id={id} title={title || "Journal entry"} text={String(entry.plain_text || "")} /><DeleteContent stayOnPage kind="note" id={id} title={title || formatDay(group.day)} /></div>
       </article>; })}
     </section>)}</div>
     <nav className="section-actions" aria-label="Journal pages">{page > 1 && <Link className="button" href={href({ page: page - 1 })}>Newer</Link>}{start + entries.length < total && <Link className="button" href={href({ page: page + 1 })}>Older</Link>}</nav>

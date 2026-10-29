@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createJournalEntry } from "@/app/(workspace)/journal/actions";
 import { maxJournalImages } from "@/lib/journal";
 import { localDay } from "@/lib/quick-note";
+import { formatReminder, reminderPresets } from "@/lib/reminders";
 
 const SketchPad = dynamic(() => import("./sketch-pad"), { ssr: false, loading: () => <p className="sketch-pad-loading">Opening sketch pad…</p> });
 type Attachment = { file: File; url: string; sketch: boolean };
@@ -47,6 +48,7 @@ export function JournalComposer({ links, variant = "page", autoSketch = false, o
   const [sketching, setSketching] = useState(autoSketch);
   const [status, setStatus] = useState<{ tone: "saved" | "error" | "draft"; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const [remindAt, setRemindAt] = useState(""); const [reminding, setReminding] = useState(false);
 
   // The draft and today's date come from the browser, so they are read after hydration rather than during render.
   useEffect(() => {
@@ -63,19 +65,21 @@ export function JournalComposer({ links, variant = "page", autoSketch = false, o
   const full = attachments.length >= maxJournalImages;
   const add = (file: File, sketch: boolean) => setAttachments(current => current.length >= maxJournalImages ? current : [...current, { file, url: URL.createObjectURL(file), sketch }]);
   const empty = !body.trim() && !attachments.length;
+  const pick = (date: Date) => { setRemindAt(date.toISOString()); setReminding(false); };
 
   function save() {
     if (empty || pending) return;
     const data = new FormData();
     data.set("title", title); data.set("text", body); data.set("entry_date", day || localDay()); data.set("link", link);
+    if (remindAt) data.set("remind_at", remindAt);
     attachments.forEach(item => data.append(item.sketch ? "sketches" : "photos", item.file));
     setStatus(null);
     start(async () => {
       try {
         await createJournalEntry(data);
         attachments.forEach(item => URL.revokeObjectURL(item.url));
-        setAttachments([]); setTitle(""); setBody(""); setLink(""); writeDraft(draftKey, null);
-        setStatus({ tone: "saved", text: "Saved" });
+        setAttachments([]); setTitle(""); setBody(""); setLink(""); setRemindAt(""); setReminding(false); writeDraft(draftKey, null);
+        setStatus({ tone: "saved", text: remindAt ? "Reminder set" : "Saved" });
         router.refresh(); onSaved?.();
       } catch (error) { setStatus({ tone: "error", text: error instanceof Error ? error.message : "Could not save. Please retry." }); }
     });
@@ -89,9 +93,15 @@ export function JournalComposer({ links, variant = "page", autoSketch = false, o
       </div>}
       <textarea ref={text} className="journal-text" value={body} onChange={event => editBody(event.target.value)} rows={variant === "page" ? 5 : 3} maxLength={50000} placeholder={placeholders[variant]} aria-label="Entry text" />
       {attachments.length > 0 && <ul className="journal-attachments">{attachments.map((item, index) => <li key={item.url}><img src={item.url} alt={item.sketch ? "Sketch" : "Photo"} /><span>{item.sketch ? "Sketch" : "Photo"}</span><button type="button" aria-label="Remove image" onClick={() => { URL.revokeObjectURL(item.url); setAttachments(current => current.filter((_, i) => i !== index)); }}>×</button></li>)}</ul>}
+      {reminding && <div className="journal-remind" role="group" aria-label="Remind me">
+        {reminderPresets().map(preset => <button key={preset.label} type="button" className="journal-remind-chip" onClick={() => pick(preset.at)}>{preset.label}</button>)}
+        <label className="journal-remind-custom"><span>Pick a time</span><input type="datetime-local" onChange={event => { const date = new Date(event.target.value); if (!Number.isNaN(date.getTime())) setRemindAt(date.toISOString()); }} /></label>
+      </div>}
       <div className="journal-composer-actions">
         <button className="journal-tool" type="button" disabled={pending || full} onClick={() => setSketching(true)} title="Sketch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z" /><path d="M14 6l3 3" /></svg><span>Sketch</span></button>
         <label className={`journal-tool${pending || full ? " journal-tool-disabled" : ""}`} title="Photo of a sketch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg><span>Photo</span><input type="file" accept="image/*" capture="environment" multiple hidden disabled={pending || full} onChange={async event => { const picked = [...(event.target.files || [])]; event.target.value = ""; for (const file of picked) add(await shrink(file), false); }} /></label>
+        <button className={`journal-tool${remindAt ? " journal-tool-on" : ""}`} type="button" disabled={pending} aria-expanded={reminding} onClick={() => setReminding(open => !open)} title="Remind me"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg><span>{remindAt ? formatReminder(remindAt, new Date(), null) : "Remind"}</span></button>
+        {remindAt && <button className="journal-remind-clear" type="button" aria-label="Remove reminder" onClick={() => setRemindAt("")}>×</button>}
         {links.some(group => group.options.length) && <select className="journal-link" value={link} onChange={event => setLink(event.target.value)} aria-label="Link to a project or topic"><option value="">No project</option>{links.map(group => group.options.length > 0 && <optgroup key={group.label} label={group.label}>{group.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select>}
         <span className={`journal-status${status ? ` journal-status-${status.tone}` : ""}`} role="status" key={status?.text}>{status?.tone === "saved" && <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}{status?.text}</span>
         <button className="button button-primary journal-save" disabled={pending || empty} aria-keyshortcuts="Meta+Enter Control+Enter">{pending ? "Saving…" : "Save"}<kbd>⌘↩</kbd></button>
