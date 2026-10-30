@@ -3,16 +3,19 @@ import { createClient } from "@/lib/supabase/server";
 import { studioToday } from "@/lib/journal";
 import { opportunityFrom, opportunityParent, seasonStats, sortByDeadline, type Opportunity } from "@/lib/opportunities";
 import { OpportunityBoard } from "@/components/opportunity-board";
+import { kitFrom, kitParent, type KitItem } from "@/lib/kit";
 import { OpportunityLeads, ScoutSettings } from "@/components/opportunity-leads";
 import { defaultSearches, leadFrom, leadParent, parseSearches, scoutSettingsParent, type Lead } from "@/lib/opportunity-scout";
 
 export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ new?: string; o?: string }> }) {
   const user = await requireUser(); const db = await createClient(); const params = await searchParams;
-  const [{ data, error }, leadRows, scout] = await Promise.all([
+  const [{ data, error }, leadRows, scout, kitRows] = await Promise.all([
     db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", opportunityParent).limit(1000),
     db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", leadParent).order("created_at", { ascending: false }).limit(100),
     db.from("notes").select("metadata").eq("owner_id", user.id).eq("parent_type", scoutSettingsParent).limit(1).maybeSingle(),
+    db.from("notes").select("id,title,plain_text,metadata,updated_at").eq("owner_id", user.id).eq("parent_type", kitParent).order("updated_at", { ascending: false }).limit(500),
   ]);
+  const kit = (kitRows.data || []).map(kitFrom).filter((item): item is KitItem => !!item);
   const leads = (leadRows.data || []).map(leadFrom).filter((lead): lead is Lead => !!lead);
   const scoutMeta = (scout.data?.metadata || {}) as Record<string, unknown>;
   const searches = scout.data ? parseSearches(scoutMeta.searches) : defaultSearches;
@@ -32,7 +35,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       <div><span>Fees paid</span><strong>${stats.fees.toLocaleString("en-US", { maximumFractionDigits: 0 })}</strong></div>
     </section>
     <OpportunityLeads leads={leads} today={today} />
-    <OpportunityBoard key={params.new === "1" ? "new" : params.o ? `o-${params.o}` : "board"} items={items} today={today} startOpen={params.new === "1"} openId={params.o} />
+    <OpportunityBoard key={params.new === "1" ? "new" : params.o ? `o-${params.o}` : "board"} items={items} today={today} startOpen={params.new === "1"} openId={params.o} kit={kit} />
     <ScoutSettings searches={searches} lastRun={typeof scoutMeta.last_run === "string" ? scoutMeta.last_run : ""} lastError={typeof scoutMeta.last_error === "string" ? scoutMeta.last_error : ""} />
   </div>;
 }

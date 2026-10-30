@@ -55,6 +55,7 @@ export function CommandSearch() {
             <button className="command-option" type="button" onClick={() => { dialog.current?.close(); router.push("/tenure/cv?new=1"); }}><strong>Log accomplishment</strong><span>Add a show, publication, or talk to your CV</span></button>
             <button className="command-option" type="button" onClick={() => { dialog.current?.close(); router.push("/opportunities?new=1"); }}><strong>Add opportunity</strong><span>Track a call, grant, or residency</span></button>
             <button className="command-option" type="button" onClick={() => { dialog.current?.close(); router.push("/contacts?new=1"); }}><strong>Add contact</strong><span>A curator, juror, or collaborator</span></button>
+            <button className="command-option" type="button" onClick={() => { dialog.current?.close(); router.push("/kit"); }}><strong>Application kit</strong><span>Copy a bio, statement, or image list</span></button>
           </div>
         </form>
       </dialog>

@@ -575,3 +575,15 @@ items, and the next run continues from there. The morning cron job (see above) s
 every connected library. Items deleted in Zotero stay in the Library. The key is kept in
 the owner's `zotero_settings` note under row-level security and is never sent to the
 browser. No migration is needed.
+
+## Application kit
+
+Practice → Kit stores reusable application materials as `kit` notes: short and long
+bios, artist, research, teaching and diversity statements, proposals, cover letters,
+budgets, and image sets. Image sets pick images from the Library and hold per-image
+title, year, medium and dimensions. Each item shows word and character counts, has
+*Copy*, and exports to Word, with an image set exporting as a numbered image list. On
+an opportunity, each checklist line can attach a kit item. The site suggests a match
+(for example, "Artist statement (500 words)" suggests the newest artist statement), and
+*Download packet* exports every attached item, in checklist order, as one .docx with
+named paragraph styles. No migration is needed.

@@ -25,14 +25,14 @@ const navItems = [
   { href: "/research", label: "Research", icon: icons.research, routes: ["/research", "/projects"] },
   { href: "/library", label: "Library", icon: icons.library, routes: ["/library", "/collections", "/discover"] },
   { href: "/boards", label: "Canvas", icon: icons.canvas, routes: ["/boards"] },
-  { href: "/opportunities", label: "Practice", icon: icons.opportunities, routes: ["/opportunities", "/contacts"] },
+  { href: "/opportunities", label: "Practice", icon: icons.opportunities, routes: ["/opportunities", "/contacts", "/kit"] },
   { href: "/tenure", label: "Tenure", icon: icons.tenure, routes: ["/tenure"] },
 ];
 
 const sectionTabs = [
   { routes: ["/research", "/projects"], label: "Research sections", tabs: [{ href: "/research", label: "Topics" }, { href: "/projects", label: "Projects" }] },
   { routes: ["/library", "/collections", "/discover"], label: "Library sections", tabs: [{ href: "/library", label: "Library" }, { href: "/collections", label: "Collections" }, { href: "/discover", label: "Discover" }] },
-  { routes: ["/opportunities", "/contacts"], label: "Practice sections", tabs: [{ href: "/opportunities", label: "Opportunities" }, { href: "/contacts", label: "Contacts" }] },
+  { routes: ["/opportunities", "/contacts", "/kit"], label: "Practice sections", tabs: [{ href: "/opportunities", label: "Opportunities" }, { href: "/contacts", label: "Contacts" }, { href: "/kit", label: "Kit" }] },
   { routes: ["/tenure"], label: "Tenure sections", tabs: [{ href: "/tenure", label: "Dossier" }, { href: "/tenure/cv", label: "CV" }] },
 ];
 
