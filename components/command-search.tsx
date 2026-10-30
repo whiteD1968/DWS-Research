@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { openQuickNote } from "@/lib/quick-note";
 
 export function CommandSearch() {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -49,6 +50,8 @@ export function CommandSearch() {
           <div className="command-actions">
             <button className="command-option" type="submit"><strong>Search my workspace</strong><span>Enter</span></button>
             <button className="command-option" type="button" onClick={() => go("web")}><strong>Search the web in Discover</strong><span>Images, papers, projects</span></button>
+            <button className="command-option" type="button" onClick={() => { dialog.current?.close(); openQuickNote(); }}><strong>New note</strong><span>⌘J</span></button>
+            <button className="command-option" type="button" onClick={() => { dialog.current?.close(); openQuickNote({ sketch: true }); }}><strong>New sketch</strong><span>Opens the sketch pad</span></button>
           </div>
         </form>
       </dialog>

@@ -102,7 +102,7 @@ export function mediaEntry(row: Row): LibraryEntry {
 }
 
 export function noteEntry(row: Row): LibraryEntry {
-  return { kind: "notes", id: str(row.id), title: str(row.title) || "Untitled note", label: "Note", text: str(row.plain_text), href: `/library/items/note/${str(row.id)}`, mediaId: null, thumbnail: null, altText: "", updatedAt: str(row.updated_at), tags: [] };
+  return { kind: "notes", id: str(row.id), title: str(row.title) || (row.parent_type === "journal" ? "Journal entry" : "Untitled note"), label: row.parent_type === "journal" ? "Journal" : "Note", text: str(row.plain_text), href: `/library/items/note/${str(row.id)}`, mediaId: null, thumbnail: null, altText: "", updatedAt: str(row.updated_at), tags: [] };
 }
 
 export function referenceEntry(row: Row, externalThumbnail?: string | null): LibraryEntry {
