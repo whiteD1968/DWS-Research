@@ -599,6 +599,10 @@ the same way. The caption and alt text fill those fields only when they are empt
 were written by an earlier description; anything typed by hand is kept. Alt text is now
 searched too. Selecting images and choosing *Describe with AI* re-describes them. The
 morning cron job describes new uploads. Results are kept in `media.metadata.ai_tags`.
+The prompt lists each existing tag with how many images use it and flags any on more
+than 30% of the library, so Claude reaches for specific tags; generic filler tags are
+dropped. Raising `imageTagVersion` offers every image described under older rules
+again, and a re-description unlinks the AI tags it no longer gives.
 Set `ANTHROPIC_API_KEY` in Vercel. Run
 `supabase/migrations/20261030170000_media_description_keeps_order.sql` so describing an
 image doesn't move it to the top of "Newest".

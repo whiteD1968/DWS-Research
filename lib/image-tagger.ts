@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { aiTagRecord, apiKeyProblem, imageTagModel, redactSecrets, undescribedFilter, imageTagPrompt, imageTagSchema, imageTagSystem, nextText, parseImageDescription, type ImageDescription } from "@/lib/image-tags";
+import { aiTagRecord, apiKeyProblem, imageTagModel, imageTagVersion, redactSecrets, staleAiTags, undescribedFilter, imageTagPrompt, imageTagSchema, imageTagSystem, nextText, parseImageDescription, type ImageDescription, type TagUse } from "@/lib/image-tags";
 import { thumbnailBucket, thumbnailPath, thumbnailWidth } from "@/lib/thumbnails";
 
 type Media = { id: string; title: string | null; bucket: string; storage_path: string | null; alt_text: string | null; caption: string | null; metadata: Record<string, unknown> | null };
@@ -25,7 +25,7 @@ async function imageBytes(db: SupabaseClient, ownerId: string, media: Media) {
   } catch { return null; }
 }
 
-async function describe(client: Anthropic, bytes: Buffer, existing: string[], title: string, withFallback = true): Promise<ImageDescription | null> {
+async function describe(client: Anthropic, bytes: Buffer, uses: TagUse[], total: number, title: string, withFallback = true): Promise<ImageDescription | null> {
   const request = {
     model: imageTagModel,
     max_tokens: 4000,
@@ -33,7 +33,7 @@ async function describe(client: Anthropic, bytes: Buffer, existing: string[], ti
     system: imageTagSystem,
     messages: [{ role: "user", content: [
       { type: "image", source: { type: "base64", media_type: "image/webp", data: bytes.toString("base64") } },
-      { type: "text", text: imageTagPrompt(existing, title) },
+      { type: "text", text: imageTagPrompt(uses, title, total) },
     ] }],
   } satisfies Anthropic.Beta.MessageCreateParamsNonStreaming;
   let response;
@@ -41,15 +41,15 @@ async function describe(client: Anthropic, bytes: Buffer, existing: string[], ti
     response = withFallback ? await client.beta.messages.create({ ...request, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" }) : await client.beta.messages.create(request);
   } catch (problem) {
     // An account that can't use refusal fallbacks gets a 400 for the parameter; the plain request still works.
-    if (withFallback && problem instanceof Anthropic.BadRequestError) return describe(client, bytes, existing, title, false);
+    if (withFallback && problem instanceof Anthropic.BadRequestError) return describe(client, bytes, uses, total, title, false);
     throw problem;
   }
   if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") return null;
   const text = response.content.flatMap(block => (block.type === "text" ? [block.text] : [])).join("");
-  return parseImageDescription(text, existing);
+  return parseImageDescription(text, uses.map(use => use.name));
 }
 
-async function save(db: SupabaseClient, ownerId: string, media: Media, result: ImageDescription | null, error = "") {
+async function save(db: SupabaseClient, ownerId: string, media: Media, result: ImageDescription | null, error = "", usage?: Map<string, number>) {
   const previous = aiTagRecord(media.metadata);
   const at = new Date().toISOString();
   if (!result) {
@@ -60,14 +60,34 @@ async function save(db: SupabaseClient, ownerId: string, media: Media, result: I
     const { data: tags } = await db.from("tags").upsert(result.tags.map(name => ({ owner_id: ownerId, name })), { onConflict: "owner_id,name" }).select("id");
     if (tags?.length) await db.from("record_tags").upsert(tags.map(tag => ({ owner_id: ownerId, record_type: "media", record_id: media.id, tag_id: tag.id })), { onConflict: "record_type,record_id,tag_id", ignoreDuplicates: true });
   }
+  // Tags the previous description added and this one doesn't keep are taken off the image.
+  const stale = staleAiTags(previous?.tags, result.tags);
+  if (stale.length) {
+    const { data: old } = await db.from("tags").select("id").eq("owner_id", ownerId).in("name", stale);
+    if (old?.length) await db.from("record_tags").delete().eq("owner_id", ownerId).eq("record_type", "media").eq("record_id", media.id).in("tag_id", old.map(tag => tag.id));
+  }
+  if (usage) {
+    stale.forEach(name => usage.set(name, Math.max(0, (usage.get(name) || 1) - 1)));
+    result.tags.filter(name => !(previous?.tags || []).includes(name)).forEach(name => usage.set(name, (usage.get(name) || 0) + 1));
+  }
   const caption = nextText(media.caption, previous?.caption, result.caption);
   const alt = nextText(media.alt_text, previous?.alt_text, result.altText);
   // The media trigger leaves updated_at alone when only the description changes, so images keep their place under "newest".
   await db.from("media").update({
     ...(caption ? { caption } : {}), ...(alt ? { alt_text: alt } : {}),
-    metadata: { ...(media.metadata || {}), ai_tags: { tags: result.tags, caption: result.caption, alt_text: result.altText, model: imageTagModel, at } },
+    metadata: { ...(media.metadata || {}), ai_tags: { tags: result.tags, caption: result.caption, alt_text: result.altText, model: imageTagModel, v: imageTagVersion, at } },
   }).eq("owner_id", ownerId).eq("id", media.id);
   return true;
+}
+
+async function imageTagLinks(db: SupabaseClient, ownerId: string) {
+  const ids: string[] = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data } = await db.from("record_tags").select("tag_id").eq("owner_id", ownerId).eq("record_type", "media").range(from, from + 999);
+    ids.push(...(data || []).map(row => String(row.tag_id)));
+    if (!data || data.length < 1000) break;
+  }
+  return ids;
 }
 
 export async function countUndescribed(db: SupabaseClient, ownerId: string) {
@@ -83,8 +103,16 @@ export async function describeImagesFor(db: SupabaseClient, ownerId: string, { i
   request = ids ? request.in("id", ids) : request.or(undescribedFilter).order("created_at", { ascending: false });
   const { data, error: loadError } = await request.limit(limit);
   if (loadError) throw new Error("Could not load your images.");
-  const { data: tagRows } = await db.from("tags").select("name").eq("owner_id", ownerId).order("name").limit(300);
-  const existing = (tagRows || []).map(row => String(row.name));
+  // How often each tag is used on images, so very common ones can be flagged in the prompt.
+  const [{ data: tagRows }, links, { count: total }] = await Promise.all([
+    db.from("tags").select("id,name").eq("owner_id", ownerId).limit(1000),
+    imageTagLinks(db, ownerId),
+    db.from("media").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("media_type", "image"),
+  ]);
+  const nameOf = new Map((tagRows || []).map(row => [String(row.id), String(row.name)]));
+  const usage = new Map<string, number>();
+  links.forEach(id => { const name = nameOf.get(id); if (name) usage.set(name, (usage.get(name) || 0) + 1); });
+  const uses = () => [...usage].filter(([, count]) => count > 0).map(([name, count]) => ({ name, count }));
 
   // Each request gets less time than the server function has left, so a slow reply can't outlive the request.
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY!.trim(), maxRetries: 0, timeout: 25000 });
@@ -96,8 +124,8 @@ export async function describeImagesFor(db: SupabaseClient, ownerId: string, { i
     await Promise.all(batch.map(async media => {
       try {
         const bytes = await imageBytes(db, ownerId, media);
-        const result = bytes ? await describe(client, bytes, existing, media.title || "") : null;
-        if (await save(db, ownerId, media, result)) { described += 1; result?.tags.forEach(tag => { if (!existing.includes(tag)) existing.push(tag); }); } else failed += 1;
+        const result = bytes ? await describe(client, bytes, uses(), total ?? 0, media.title || "") : null;
+        if (await save(db, ownerId, media, result, "", usage)) described += 1; else failed += 1;
       } catch (problem) {
         if (problem instanceof Anthropic.AuthenticationError || problem instanceof Anthropic.PermissionDeniedError) stopped = "Anthropic turned down the API key. Check ANTHROPIC_API_KEY in Vercel.";
         else if (problem instanceof Anthropic.RateLimitError) stopped = "Claude is busy right now. Try again in a minute.";
