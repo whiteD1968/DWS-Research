@@ -2,7 +2,7 @@ import { agenda } from "@/lib/practice";
 import { studioToday } from "@/lib/journal";
 import type { Contact } from "@/lib/contacts";
 import type { Opportunity } from "@/lib/opportunities";
-import type { Lead } from "@/lib/opportunity-scout";
+import { looksLikeListing, type Lead } from "@/lib/opportunity-scout";
 
 // The morning email: what's due today, the week's deadlines, people to follow up with, and new scout leads.
 
@@ -52,7 +52,7 @@ export function buildDigest({ reminders, opportunities, contacts, leads, reviewD
   const followUps = items.filter(item => item.kind === "follow_up" && (item.overdue || item.day === today)).map(item => ({ title: item.title, detail: item.detail, href: baseUrl + item.href }));
   const review = items.find(item => item.kind === "review");
   const since = now.getTime() - 26 * 3600000;
-  const fresh = leads.filter(lead => Date.parse(lead.foundAt) >= since).slice(0, 5).map(lead => ({ title: lead.title, detail: [lead.source, lead.deadline ? `Due ${shortDate(lead.deadline)}` : ""].filter(Boolean).join(" · "), href: `${baseUrl}/opportunities` }));
+  const fresh = leads.filter(lead => Date.parse(lead.foundAt) >= since && (!lead.deadline || lead.deadline >= today) && !looksLikeListing(lead.title)).slice(0, 5).map(lead => ({ title: lead.title, detail: [lead.source, lead.deadline ? `Due ${shortDate(lead.deadline)}` : ""].filter(Boolean).join(" · "), href: `${baseUrl}/opportunities` }));
 
   const sections = [
     { heading: "Today", lines: due },

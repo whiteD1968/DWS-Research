@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { studioToday } from "@/lib/journal";
 import { opportunityParent } from "@/lib/opportunities";
-import { defaultSearches, guessDeadline, guessKind, leadKey, leadParent, parseSearches, scoutDue, scoutSettingsParent } from "@/lib/opportunity-scout";
+import { cleanTitle, defaultSearches, guessDeadline, looksLikeListing, guessKind, leadKey, leadParent, parseSearches, scoutDue, scoutSettingsParent } from "@/lib/opportunity-scout";
 
 type Db = SupabaseClient;
 type Hit = { title: string; url: string; description: string; source: string };
@@ -48,8 +48,8 @@ export async function scoutFor(db: Db, ownerId: string, force = false) {
       seen.add(key); newKeys.push(key);
       const text = `${hit.title} ${hit.description}`;
       const { deadline, past } = guessDeadline(text, today);
-      if (past) continue;
-      fresh.push({ owner_id: ownerId, title: hit.title, plain_text: hit.description, parent_type: leadParent, content: [], metadata: { url: hit.url, source: hit.source, query, found_at: new Date().toISOString(), deadline, kind: guessKind(text) } });
+      if (past || looksLikeListing(hit.title)) continue;
+      fresh.push({ owner_id: ownerId, title: cleanTitle(hit.title, hit.source), plain_text: hit.description, parent_type: leadParent, content: [], metadata: { url: hit.url, source: hit.source, query, found_at: new Date().toISOString(), deadline, kind: guessKind(text) } });
     }
   }
   const added = fresh.slice(0, 20);
