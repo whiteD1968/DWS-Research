@@ -41,3 +41,22 @@ test('the kind of opportunity is guessed from the wording', () => {
   assert.equal(scout.guessKind('Assistant Professor of Ceramics'), 'job');
   assert.equal(scout.guessKind('Something else'), 'other');
 });
+test('day-first dates and recently passed yearless dates are read correctly', () => {
+  assert.deepEqual(scout.guessDeadline('Apply by 18 October 2026', '2026-10-30'), { deadline: '', past: true });
+  assert.deepEqual(scout.guessDeadline('Deadline: 3 December 2026', '2026-10-30'), { deadline: '2026-12-03', past: false });
+  assert.deepEqual(scout.guessDeadline('Open calls ending soon. Deadline Oct 20', '2026-10-30'), { deadline: '', past: true });
+  assert.deepEqual(scout.guessDeadline('Apply by Mar 3', '2026-10-30'), { deadline: '2027-03-03', past: false });
+});
+test('directory and roundup pages are recognised', () => {
+  assert.equal(scout.looksLikeListing('All Open Calls for Artists (Full Directory) | Arthead'), true);
+  assert.equal(scout.looksLikeListing('Open calls ending soon - ACAVA'), true);
+  assert.equal(scout.looksLikeListing('25 Artist Residencies to Apply for This Winter'), false);
+  assert.equal(scout.looksLikeListing('Top residencies for sculptors'), true);
+  assert.equal(scout.looksLikeListing('Summer Artist Residency 2027 at Ferme Saint Siméon'), false);
+});
+test('a trailing site name is trimmed from titles', () => {
+  assert.equal(scout.cleanTitle('Entries open for Artist Residency at Ferme Saint Siméon in France - fundsforNGOs', 'fundsforNGOs'), 'Entries open for Artist Residency at Ferme Saint Siméon in France');
+  assert.equal(scout.cleanTitle('All Open Calls for Artists | Arthead', 'Arthead'), 'All Open Calls for Artists');
+  assert.equal(scout.cleanTitle('Funding for Artists - DCLA', 'City of New York'), 'Funding for Artists - DCLA');
+  assert.equal(scout.cleanTitle('Call to Artists - Apply by Dec 1, 2026 · OpenCall', 'OpenCall'), 'Call to Artists - Apply by Dec 1, 2026');
+});
