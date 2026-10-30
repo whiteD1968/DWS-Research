@@ -7,6 +7,11 @@ import { compareEntries, intersectIds, libraryHref, libraryLabels, libraryPatter
 import { LibraryFilters } from "@/components/library-filters";
 import { LibraryToolbar } from "@/components/library-toolbar";
 import { LibraryGrid } from "@/components/library-grid";
+import { ImageDescribe } from "@/components/image-describe";
+import { countUndescribed, imageTaggingReady } from "@/lib/image-tagger";
+
+// Describing images runs as a server action from this page, a batch per call.
+export const maxDuration = 60;
 
 const emptyHints: Record<string, string> = {
   all: "Use Capture to add images, notes, and links. Files added in research topics, projects, and boards appear here too.",
@@ -59,7 +64,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   };
   const shown = (kind: LibraryKind) => view === "all" || view === kind;
   const rangeFor = (kind: LibraryKind): [number, number] => view === "all" ? [0, start + size - 1] : view === kind ? [start, start + size - 1] : [0, 0];
-  const mediaSearch = `title.ilike.${pattern},caption.ilike.${pattern},original_filename.ilike.${pattern}`;
+  const mediaSearch = `title.ilike.${pattern},caption.ilike.${pattern},alt_text.ilike.${pattern},original_filename.ilike.${pattern}`;
   async function mediaQuery(kind: "images" | "documents"): Promise<Result> {
     const type = kind === "images" ? "image" : "document";
     if (view === kind && filterIds) {
@@ -86,10 +91,11 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   let referencesRequest = db.from("references").select("id,title,reference_type,creator,why_saved,description,primary_media_id,metadata,updated_at", { count: "exact", head: !shown("references") }).eq("owner_id", user.id);
   if (pattern) referencesRequest = referencesRequest.or(`title.ilike.${pattern},why_saved.ilike.${pattern},creator.ilike.${pattern},description.ilike.${pattern}`);
 
-  const [images, documents, notes, references] = await Promise.all([
+  const [images, documents, notes, references, undescribed] = await Promise.all([
     mediaQuery("images"), mediaQuery("documents"),
     ordered(notesRequest).range(...rangeFor("notes")),
     ordered(referencesRequest).range(...rangeFor("references")),
+    view === "images" ? countUndescribed(db, user.id) : Promise.resolve(0),
   ]);
   const error = images.error || documents.error || notes.error || references.error;
   const counts = { images: images.count || 0, documents: documents.count || 0, notes: notes.count || 0, references: references.count || 0 };
@@ -130,10 +136,11 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     <form className="repository-search library-search" role="search">{view !== "all" && <input type="hidden" name="view" value={view} />}{layout !== "grid" && <input type="hidden" name="layout" value={layout} />}{sort !== "newest" && <input type="hidden" name="sort" value={sort} />}{tagIds.length > 0 && <input type="hidden" name="tags" value={tagIds.join(",")} />}{state.within && <input type="hidden" name="in" value={state.within} />}<label className="field"><span>Search {view === "all" ? "the library" : libraryLabels[view].toLowerCase()}</span><input name="q" type="search" defaultValue={search} placeholder="Titles, captions, notes, creators…" /></label><button className="button">Search</button>{search && <Link className="button" href={libraryHref({ ...state, q: "", page: 1 })}>Clear</Link>}</form>
     <LibraryFilters active={view} search={search} layout={layout} sort={sort} counts={{ all: counts.images + counts.documents + counts.notes + counts.references, ...counts, ...(filtered ? { all: undefined, [view]: undefined } : {}) }} />
     <LibraryToolbar state={state} tags={mediaView ? chips : undefined} places={mediaView ? [{ label: "Projects", options: projects.map(option("project")) }, { label: "Research topics", options: topics.map(option("research_thread")) }, { label: "Boards", options: boards.map(option("board")) }] : undefined} />
+    {view === "images" && <ImageDescribe undescribed={undescribed} ready={imageTaggingReady()} />}
     {query.uploaded && <p className="notice notice-success">Images saved to your library.</p>}
     {(error || query.error) && <p role="alert" className="notice notice-error">{query.error || "Unable to load the library. Please retry."}</p>}
     {!error && !entries.length && <div className="empty-state"><h2>{search || filtered ? "Nothing matches these filters" : view === "all" ? "Your library is empty" : `No ${libraryLabels[view].toLowerCase()} yet`}</h2><p>{search || filtered ? "Try another word, fewer tags, or a different place." : emptyHints[view]}</p></div>}
-    <LibraryGrid entries={gridEntries} layout={layout} grouped={sort !== "title"} selectable={mediaView} editable={view === "images" || view === "documents" || view === "notes"} tags={chips.map(tag => ({ id: tag.id, title: tag.name }))} projects={projects.map(row => ({ id: String(row.id), title: String(row.title || "Untitled") }))} />
+    <LibraryGrid entries={gridEntries} layout={layout} grouped={sort !== "title"} selectable={mediaView} editable={view === "images" || view === "documents" || view === "notes"} describable={view === "images" && imageTaggingReady()} tags={chips.map(tag => ({ id: tag.id, title: tag.name }))} projects={projects.map(row => ({ id: String(row.id), title: String(row.title || "Untitled") }))} />
     <nav className="section-actions" aria-label="Library pages"><span className="record-meta">{total} {total === 1 ? "item" : "items"}</span>{page > 1 && <Link className="button" href={libraryHref({ ...state, page: page - 1 })}>Previous</Link>}{start + entries.length < total && <Link className="button" href={libraryHref({ ...state, page: page + 1 })}>Next</Link>}</nav>
   </>;
 }
