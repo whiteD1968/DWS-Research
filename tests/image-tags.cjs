@@ -37,3 +37,11 @@ test('the prompt lists existing tags', () => {
   assert.equal(tags.aiTagRecord({ ai_tags: { tags: ['a'] } }).tags[0], 'a');
   assert.equal(tags.aiTagRecord({}), null);
 });
+test('a pasted command instead of a key is caught, and keys never reach an error message', () => {
+  assert.equal(tags.apiKeyProblem(' sk-ant-api03-abcDEF_12-x \n'), '');
+  assert.match(tags.apiKeyProblem('curl https://api.anthropic.com/v1/messages --header "x-api-key: sk-ant-abc"'), /isn't just a key/);
+  assert.match(tags.apiKeyProblem(''), /isn't set up/);
+  const shown = tags.redactSecrets('Headers.append: "Bearer curl https://api.anthropic.com --header "x-api-key: sk-ant-usr-1mgEvUO_dD7-pX" \\');
+  assert.doesNotMatch(shown, /sk-ant-usr|1mgEvUO/);
+  assert.match(shown, /\[key hidden\]|\[hidden\]/);
+});

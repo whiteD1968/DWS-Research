@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { aiTagRecord, imageTagModel, imageTagPrompt, imageTagSchema, imageTagSystem, nextText, parseImageDescription, type ImageDescription } from "@/lib/image-tags";
+import { aiTagRecord, apiKeyProblem, imageTagModel, redactSecrets, undescribedFilter, imageTagPrompt, imageTagSchema, imageTagSystem, nextText, parseImageDescription, type ImageDescription } from "@/lib/image-tags";
 import { thumbnailBucket, thumbnailPath, thumbnailWidth } from "@/lib/thumbnails";
 
 type Media = { id: string; title: string | null; bucket: string; storage_path: string | null; alt_text: string | null; caption: string | null; metadata: Record<string, unknown> | null };
@@ -71,22 +71,23 @@ async function save(db: SupabaseClient, ownerId: string, media: Media, result: I
 }
 
 export async function countUndescribed(db: SupabaseClient, ownerId: string) {
-  const { count } = await db.from("media").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("media_type", "image").not("storage_path", "is", null).is("metadata->ai_tags", null);
+  const { count } = await db.from("media").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("media_type", "image").not("storage_path", "is", null).or(undescribedFilter);
   return count ?? 0;
 }
 
 // Describes the given images, or the next undescribed ones, until the limit or the time budget runs out.
 export async function describeImagesFor(db: SupabaseClient, ownerId: string, { ids, limit = 6, deadline = Date.now() + 50000 }: { ids?: string[]; limit?: number; deadline?: number } = {}): Promise<DescribeResult> {
-  if (!imageTaggingReady()) throw new Error("Image tagging isn't set up yet. Add ANTHROPIC_API_KEY in Vercel.");
+  const keyProblem = apiKeyProblem(process.env.ANTHROPIC_API_KEY);
+  if (keyProblem) throw new Error(keyProblem);
   let request = db.from("media").select(columns).eq("owner_id", ownerId).eq("media_type", "image").not("storage_path", "is", null);
-  request = ids ? request.in("id", ids) : request.is("metadata->ai_tags", null).order("created_at", { ascending: false });
+  request = ids ? request.in("id", ids) : request.or(undescribedFilter).order("created_at", { ascending: false });
   const { data, error: loadError } = await request.limit(limit);
   if (loadError) throw new Error("Could not load your images.");
   const { data: tagRows } = await db.from("tags").select("name").eq("owner_id", ownerId).order("name").limit(300);
   const existing = (tagRows || []).map(row => String(row.name));
 
   // Each request gets less time than the server function has left, so a slow reply can't outlive the request.
-  const client = new Anthropic({ maxRetries: 0, timeout: 25000 });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY!.trim(), maxRetries: 0, timeout: 25000 });
   let described = 0; let failed = 0; let stopped = ""; let firstError = "";
   const queue = [...(data || []) as Media[]];
   // Three at a time keeps a batch inside one server request without tripping rate limits.
@@ -103,9 +104,10 @@ export async function describeImagesFor(db: SupabaseClient, ownerId: string, { i
         else if (problem instanceof Anthropic.APIError && problem.status === 400 && /credit|billing/i.test(problem.message)) stopped = "Your Anthropic account is out of credit.";
         else {
           // Marked as failed, with the reason, so the next batch moves on instead of retrying the same images forever.
-          firstError ||= problem instanceof Error ? problem.message.slice(0, 300) : "Unknown error";
+          const reason = redactSecrets(problem instanceof Error ? problem.message : "Unknown error");
+          firstError ||= reason;
           failed += 1;
-          await save(db, ownerId, media, null, problem instanceof Error ? problem.message.slice(0, 300) : "").catch(() => null);
+          await save(db, ownerId, media, null, reason).catch(() => null);
         }
       }
     }));
