@@ -65,7 +65,7 @@ export async function setOpportunityStatus(id: string, status: string) {
 
 export async function setOpportunityMaterials(id: string, materials: Material[]) {
   if (!Array.isArray(materials) || materials.length > 30) throw new Error("Keep the checklist to 30 items.");
-  const clean = materials.map(item => ({ label: String(item?.label ?? "").trim().slice(0, 120), done: Boolean(item?.done) })).filter(item => item.label);
+  const clean = materials.map(item => ({ label: String(item?.label ?? "").trim().slice(0, 120), done: Boolean(item?.done), ...(uuid.test(String(item?.kit || "")) ? { kit: String(item.kit) } : {}) })).filter(item => item.label);
   const { user, db, meta } = await owned(id);
   const { error } = await db.from("notes").update({ metadata: { ...meta, materials: clean } }).eq("owner_id", user.id).eq("id", id);
   if (error) throw new Error("Could not save the checklist. Please retry.");

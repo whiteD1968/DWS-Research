@@ -34,15 +34,16 @@ export function parseStatus(value: unknown): OpportunityStatus | null {
 }
 export const stageOf = (status: OpportunityStatus) => (status === "accepted" || status === "declined" || status === "withdrawn" ? "decided" : status);
 
-export type Material = { label: string; done: boolean };
+export type Material = { label: string; done: boolean; kit?: string };
 export type Opportunity = { id: string; title: string; notes: string; kind: OpportunityKind; organization: string; location: string; deadline: string; url: string; fee: string; award: string; status: OpportunityStatus; materials: Material[]; cvEntryId: string; decidedAt: string };
 
 const str = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const kitId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function opportunityFrom(row: { id?: unknown; title?: unknown; plain_text?: unknown; metadata?: unknown }): Opportunity | null {
   const meta = (row.metadata || {}) as Record<string, unknown>;
   const kind = parseOpportunityKind(meta.kind);
   if (!kind) return null;
-  const materials = Array.isArray(meta.materials) ? meta.materials.flatMap(item => item && typeof item === "object" && typeof (item as Material).label === "string" ? [{ label: (item as Material).label, done: Boolean((item as Material).done) }] : []) : [];
+  const materials = Array.isArray(meta.materials) ? meta.materials.flatMap(item => item && typeof item === "object" && typeof (item as Material).label === "string" ? [{ label: (item as Material).label, done: Boolean((item as Material).done), ...(kitId.test(String((item as Material).kit || "")) ? { kit: (item as Material).kit } : {}) }] : []) : [];
   return { id: str(row.id), title: str(row.title), notes: str(row.plain_text), kind, organization: str(meta.organization), location: str(meta.location), deadline: str(meta.deadline), url: str(meta.url), fee: str(meta.fee), award: str(meta.award), status: parseStatus(meta.status) ?? "interested", materials, cvEntryId: str(meta.cv_entry_id), decidedAt: str(meta.decided_at) };
 }
 

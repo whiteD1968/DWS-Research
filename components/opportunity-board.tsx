@@ -5,10 +5,12 @@ import { linkOpportunityCv, saveOpportunity, setOpportunityMaterials, setOpportu
 import { deadlineLabel, deadlineTone, opportunityKind, opportunityKinds, opportunityStages, stageOf, statusLabels, type Material, type Opportunity, type OpportunityStatus } from "@/lib/opportunities";
 import { CvEntryForm } from "@/components/cv-entry-form";
 import { DeleteContent } from "@/components/content-controls";
+import { CopyButton } from "@/components/kit-library";
+import { imageCaption, kitKind, suggestKit, type KitItem } from "@/lib/kit";
 
 type Panel = { mode: "new" } | { mode: "view"; id: string } | { mode: "edit"; id: string } | { mode: "cv"; id: string } | null;
 
-export function OpportunityBoard({ items, today, startOpen = false, openId }: { items: Opportunity[]; today: string; startOpen?: boolean; openId?: string }) {
+export function OpportunityBoard({ items, today, startOpen = false, openId, kit = [] }: { items: Opportunity[]; today: string; startOpen?: boolean; openId?: string; kit?: KitItem[] }) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>(startOpen ? { mode: "new" } : openId && items.some(item => item.id === openId) ? { mode: "view", id: openId } : null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -38,7 +40,7 @@ export function OpportunityBoard({ items, today, startOpen = false, openId }: { 
     <dialog ref={dialog} className="content-dialog opp-dialog" aria-label="Opportunity" onClose={() => { setPanel(null); if (startOpen || openId) router.replace("/opportunities", { scroll: false }); }}>
       {panel?.mode === "new" && <OpportunityForm onDone={() => setPanel(null)} />}
       {panel?.mode === "edit" && current && <OpportunityForm item={current} onDone={() => setPanel({ mode: "view", id: current.id })} />}
-      {panel?.mode === "view" && current && <OpportunityDetail item={current} today={today} onEdit={() => setPanel({ mode: "edit", id: current.id })} onLogCv={() => setPanel({ mode: "cv", id: current.id })} onClose={() => setPanel(null)} />}
+      {panel?.mode === "view" && current && <OpportunityDetail item={current} today={today} kit={kit} onEdit={() => setPanel({ mode: "edit", id: current.id })} onLogCv={() => setPanel({ mode: "cv", id: current.id })} onClose={() => setPanel(null)} />}
       {panel?.mode === "cv" && current && <><p className="eyebrow">Log to CV</p><CvEntryForm prefill={{ category: opportunityKind(current.kind).cv, title: current.title, venue: current.organization, location: current.location, date: today.slice(0, 4), url: current.url }} onDone={async id => { if (id) { try { await linkOpportunityCv(current.id, id); router.refresh(); } catch { /* the CV entry is saved either way */ } } setPanel({ mode: "view", id: current.id }); }} /></>}
     </dialog>
   </>;
@@ -75,7 +77,7 @@ const nextSteps: Partial<Record<OpportunityStatus, { status: OpportunityStatus; 
   submitted: [{ status: "accepted", label: "Accepted" }, { status: "declined", label: "Not selected" }],
 };
 
-function OpportunityDetail({ item, today, onEdit, onLogCv, onClose }: { item: Opportunity; today: string; onEdit: () => void; onLogCv: () => void; onClose: () => void }) {
+function OpportunityDetail({ item, today, kit, onEdit, onLogCv, onClose }: { item: Opportunity; today: string; kit: KitItem[]; onEdit: () => void; onLogCv: () => void; onClose: () => void }) {
   const router = useRouter();
   const [materials, setMaterials] = useState<Material[]>(item.materials);
   const [adding, setAdding] = useState("");
@@ -102,10 +104,20 @@ function OpportunityDetail({ item, today, onEdit, onLogCv, onClose }: { item: Op
 
     {!decided && <section className="opp-materials" aria-label="Materials">
       <h3>Materials <span>{ready}/{materials.length}</span></h3>
-      <ul>{materials.map((material, index) => <li key={`${material.label}-${index}`} className={material.done ? "opp-material-done" : ""}>
-        <label><input type="checkbox" checked={material.done} onChange={() => saveList(materials.map((entry, i) => i === index ? { ...entry, done: !entry.done } : entry))} /> {material.label}</label>
-        <button type="button" aria-label={`Remove ${material.label}`} onClick={() => saveList(materials.filter((_, i) => i !== index))}>×</button>
-      </li>)}</ul>
+      <ul>{materials.map((material, index) => {
+        const attached = material.kit ? kit.find(entry => entry.id === material.kit) : undefined;
+        const suggestion = !material.kit ? suggestKit(material.label, kit) : null;
+        const attach = (kitId: string | undefined) => saveList(materials.map((entry, i) => i === index ? (kitId ? { ...entry, kit: kitId, done: true } : { label: entry.label, done: entry.done }) : entry));
+        return <li key={`${material.label}-${index}`} className={material.done ? "opp-material-done" : ""}>
+          <label><input type="checkbox" checked={material.done} onChange={() => saveList(materials.map((entry, i) => i === index ? { ...entry, done: !entry.done } : entry))} /> {material.label}</label>
+          <button type="button" aria-label={`Remove ${material.label}`} onClick={() => saveList(materials.filter((_, i) => i !== index))}>×</button>
+          {attached ? <div className="opp-kit opp-kit-on"><span title={kitKind(attached.kind).label}>From kit: {attached.title}</span><CopyButton text={attached.kind === "image_set" ? attached.images.map((image, n) => `${n + 1}. ${imageCaption(image)}`).join("\n") : attached.text} /><button type="button" className="text-button" onClick={() => attach(undefined)}>Detach</button></div>
+            : kit.length > 0 && <div className="opp-kit">
+              {suggestion && <button type="button" className="text-button" onClick={() => attach(suggestion.id)}>Use “{suggestion.title}”</button>}
+              <select value="" aria-label={`Attach a kit item to ${material.label}`} onChange={event => event.target.value && attach(event.target.value)}><option value="">{suggestion ? "Or pick…" : "Attach from kit…"}</option>{kit.map(entry => <option key={entry.id} value={entry.id}>{kitKind(entry.kind).label}: {entry.title}</option>)}</select>
+            </div>}
+        </li>;
+      })}</ul>
       <form className="opp-material-add" onSubmit={event => { event.preventDefault(); if (adding.trim()) { saveList([...materials, { label: adding.trim(), done: false }]); setAdding(""); } }}><input value={adding} onChange={event => setAdding(event.target.value)} placeholder="Add an item" aria-label="Add a material" maxLength={120} /></form>
     </section>}
 
@@ -113,6 +125,7 @@ function OpportunityDetail({ item, today, onEdit, onLogCv, onClose }: { item: Op
       {(nextSteps[item.status] || []).map(step => <button key={step.status} type="button" className={step.status === "accepted" || step.status === "preparing" || step.status === "submitted" ? "button button-primary" : "button"} disabled={pending} onClick={() => move(step.status)}>{step.label}</button>)}
       {decided && <button type="button" className="button" disabled={pending} onClick={() => move("submitted")}>Reopen</button>}
       {!decided && item.status !== "submitted" && <button type="button" className="text-button" disabled={pending} onClick={() => move("withdrawn")}>Not applying</button>}
+      {materials.some(material => material.kit) && <a className="button" href={`/opportunities/${item.id}/packet`}>Download packet</a>}
       <span className="opp-actions-spacer" />
       <button type="button" className="text-button" onClick={onEdit}>Edit</button>
       <DeleteContent stayOnPage kind="note" id={item.id} title={item.title} />
