@@ -7,17 +7,15 @@ import { contentKinds, type ContentKind } from "@/lib/content";
 export function DeleteContent({ kind, id, title, stayOnPage = false }: { kind: ContentKind; id: string; title: string; stayOnPage?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
-  const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
-  return <><button type="button" className="button button-danger-quiet" onClick={() => { setError(""); setConfirmation(""); dialog.current?.showModal(); }}>Delete {contentKinds[kind].label}</button>
+  return <><button type="button" className="button button-danger-quiet" onClick={() => { setError(""); dialog.current?.showModal(); }}>Delete {contentKinds[kind].label}</button>
     <dialog ref={dialog} className="content-dialog" aria-label={`Delete ${title}`} onCancel={e => { if (pending) e.preventDefault(); }}>
-      <form className="form-stack" onSubmit={e => { e.preventDefault(); start(async () => { try { const destination = await deleteContent(kind, id, confirmation); dialog.current?.close(); if (!stayOnPage) router.push(destination); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "Deletion failed."); } }); }}>
-        <p className="eyebrow">Delete {contentKinds[kind].label}</p><h2>{title}</h2>
-        <p>This permanently deletes this {contentKinds[kind].label}. {kind === "media" ? "The uploaded file and all its links will be removed." : kind === "board" ? "The board layout and drawing will be removed. Source records remain in your library." : kind === "research_session" ? "Saved references and boards remain available." : "Links to this record will be removed. Other source records, files, notes, and boards remain available."} Existing board cards for a deleted source show “Source removed”.</p>
-        <label className="field"><span>Type DELETE to confirm</span><input autoFocus value={confirmation} onChange={e => setConfirmation(e.target.value)} autoComplete="off" disabled={pending} /></label>
+      <form className="form-stack" onSubmit={e => { e.preventDefault(); start(async () => { try { const destination = await deleteContent(kind, id, "DELETE"); dialog.current?.close(); if (!stayOnPage) router.push(destination); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "Deletion failed."); } }); }}>
+        <p className="eyebrow">Delete {contentKinds[kind].label}</p><h2>Delete “{title}”?</h2>
+        <p>{kind === "board" ? "The board goes away; its sources stay in your Library." : kind === "research_session" ? "Its saved references and boards stay in your Library." : "It will be removed everywhere it’s used."} This can’t be undone.</p>
         {error && <p role="alert" className="notice notice-error">{error}</p>}
-        <div className="inline-actions"><button className="button" type="button" disabled={pending} onClick={() => dialog.current?.close()}>Cancel</button><button className="button button-danger" disabled={pending || confirmation !== "DELETE"}>{pending ? "Deleting…" : "Permanently delete"}</button></div>
+        <div className="inline-actions"><button className="button button-danger" disabled={pending}>{pending ? "Deleting…" : "Yes, delete"}</button><button className="button" type="button" autoFocus disabled={pending} onClick={() => dialog.current?.close()}>No</button></div>
       </form>
     </dialog></>;
 }

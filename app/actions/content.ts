@@ -7,7 +7,7 @@ import { thumbnailBucket, thumbnailPath } from "@/lib/thumbnails";
 
 export async function deleteContent(kind: string, id: string, confirmation: string) {
   const user = await requireUser();
-  if (!isContentKind(kind) || confirmation !== "DELETE") throw new Error("Confirm the deletion by typing DELETE.");
+  if (!isContentKind(kind) || confirmation !== "DELETE") throw new Error("Confirm the deletion first.");
   const db = await createClient();
   const { data, error } = await db.from(contentKinds[kind].table).select("*").eq("id", id).eq("owner_id", user.id).single();
   if (error || !data) throw new Error("This content is unavailable. Refresh and try again.");

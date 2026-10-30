@@ -54,7 +54,7 @@ export async function addMediaToProject(ids: string[], projectId: string) {
 }
 
 export async function deleteMediaMany(ids: string[], confirmation: string) {
-  if (confirmation !== "DELETE") throw new Error("Confirm the deletion by typing DELETE.");
+  if (confirmation !== "DELETE") throw new Error("Confirm the deletion first.");
   const { ids: media } = await ownedMedia(ids);
   // One at a time through the single-item path, so each file is removed from storage before its record.
   let deleted = 0;
