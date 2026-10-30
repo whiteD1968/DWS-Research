@@ -1,6 +1,7 @@
 "use server";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { siteUrl } from "@/lib/digest-run";
 import { calendarParent, calendarTokenPattern, newCalendarToken } from "@/lib/calendar-feed";
 
 async function feedToken(reset: boolean) {
@@ -17,7 +18,9 @@ async function feedToken(reset: boolean) {
   return token;
 }
 
+// The production address, so a link copied from a preview deployment still works in Outlook or Google.
+const feedBase = () => siteUrl("");
 // The private feed token, created the first time it's asked for.
-export async function calendarFeedToken() { return feedToken(false); }
+export async function calendarFeedToken() { return { token: await feedToken(false), base: feedBase() }; }
 // A new token stops every calendar subscribed with the old link.
-export async function resetCalendarFeed() { return feedToken(true); }
+export async function resetCalendarFeed() { return { token: await feedToken(true), base: feedBase() }; }
