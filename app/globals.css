@@ -2061,3 +2061,86 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .cv-dossier input { width: 16px; height: 16px; margin: 0; }
 .cv-error { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--kiln); }
 @media (max-width: 640px) { .cv-line { grid-template-columns: 20px minmax(0, 1fr); } .cv-line-year { grid-column: 2; } .cv-line-text, .cv-line-actions { grid-column: 2; } .cv-row, .cv-row-dates { grid-template-columns: 1fr 1fr; } }
+
+/* Opportunities: a four-stage board with deadline pills and a materials checklist per application. */
+.opp-stats { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+.opp-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); min-width: 0; }
+.opp-stats span { font-size: 12px; color: var(--text-muted); }
+.opp-stats strong { font-size: 22px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opp-stats small { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+.opp-toolbar { margin-bottom: 16px; }
+.opp-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.opp-column { display: flex; flex-direction: column; gap: 10px; min-height: 160px; padding: 12px; border-radius: 14px; background: var(--surface-muted); }
+.opp-column h2 { display: flex; align-items: center; gap: 8px; margin: 2px 4px 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.opp-column h2 span { font-weight: 400; }
+.opp-card { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
+.opp-card:hover { transform: translateY(-1px); border-color: var(--border-strong, var(--border)); box-shadow: 0 6px 18px rgba(0,0,0,.07); }
+.opp-card:active { transform: scale(.985); }
+.opp-card strong { font-size: 15px; font-weight: 550; line-height: 1.3; }
+.opp-card-kind { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.opp-card-org { font-size: 13px; color: var(--text-muted); }
+.opp-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.opp-card-declined, .opp-card-withdrawn { opacity: .6; }
+.opp-pill { padding: 2px 8px; border-radius: 10px; background: var(--surface-muted); font-size: 12px; white-space: nowrap; }
+.opp-pill-soon { background: var(--kiln-muted, #fce7db); color: var(--kiln); font-weight: 550; }
+.opp-pill-closed { color: var(--text-muted); text-decoration: line-through; }
+.opp-pill-accepted { background: var(--accent-muted); color: var(--accent); font-weight: 600; }
+.opp-progress { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.opp-progress::before { content: ""; width: 44px; height: 4px; border-radius: 2px; background: var(--surface-muted); }
+.opp-progress > span { position: absolute; left: 0; top: 50%; height: 4px; max-width: 44px; margin-top: -2px; border-radius: 2px; background: var(--accent); }
+.opp-empty { margin: 4px; font-size: 13px; color: var(--text-muted); }
+.opp-dialog { width: min(640px, calc(100vw - 32px)); }
+.opp-form { display: flex; flex-direction: column; gap: 14px; }
+.opp-hint { margin: 0; font-size: 13px; color: var(--text-muted); }
+.opp-detail h2 { margin: 2px 0 4px; font-size: 24px; }
+.opp-detail-org { margin: 0 0 16px; color: var(--text-muted); }
+.opp-facts { display: grid; gap: 8px; margin: 0 0 16px; }
+.opp-facts div { display: grid; grid-template-columns: 90px 1fr; gap: 12px; font-size: 14px; }
+.opp-facts dt { color: var(--text-muted); }
+.opp-facts dd { margin: 0; }
+.opp-tone-soon { color: var(--kiln); font-weight: 550; }
+.opp-notes { margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; background: var(--surface-muted); font-size: 14px; white-space: pre-wrap; }
+.opp-accepted { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 16px; padding: 14px 16px; border-radius: 12px; background: var(--accent-muted); font-size: 14px; animation: journal-pop .25s ease-out; }
+.opp-accepted .button { margin-left: auto; }
+.opp-logged { margin: 0 0 16px; font-size: 14px; color: var(--accent); }
+.opp-materials h3 { display: flex; gap: 8px; margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.opp-materials h3 span { font-weight: 400; }
+.opp-materials ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.opp-materials li { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.opp-materials li label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.opp-materials li input { width: 16px; height: 16px; margin: 0; }
+.opp-material-done label { color: var(--text-muted); text-decoration: line-through; }
+.opp-materials li button { border: 0; background: transparent; color: var(--text-muted); font-size: 16px; cursor: pointer; opacity: 0; }
+.opp-materials li:hover button, .opp-materials li button:focus-visible { opacity: 1; }
+.opp-material-add input { height: 34px; font-size: 14px; }
+.opp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; }
+.opp-actions-spacer { flex: 1; }
+@media (max-width: 1100px) { .opp-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } .opp-stats { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .opp-board, .opp-stats { grid-template-columns: 1fr; } .opp-column { min-height: 0; } }
+@media (hover: none) { .opp-materials li button { opacity: 1; } }
+
+/* Opportunity scout: new leads on Home and above the board, plus the saved-search settings. */
+.leads { margin: 0 0 28px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.leads-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.leads-head .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; }
+.leads-head .eyebrow span { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 11px; letter-spacing: 0; }
+.leads-head > span { display: flex; gap: 14px; }
+.leads ul { list-style: none; margin: 0; padding: 0; }
+.lead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); transition: opacity .3s, transform .3s; animation: journal-pop .25s ease-out; }
+.lead:first-child { border-top: 0; }
+.lead-tracked { opacity: .55; }
+.lead-body { min-width: 0; }
+.lead-body a { color: inherit; text-decoration: none; }
+.lead-body a:hover strong { text-decoration: underline; }
+.lead-body strong { display: block; font-weight: 550; line-height: 1.35; }
+.lead-body span { display: block; margin-top: 2px; font-size: 12px; color: var(--text-muted); }
+.lead-body p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lead-actions { display: flex; align-items: center; gap: 10px; }
+.lead-done { font-size: 13px; color: var(--accent); font-weight: 550; }
+.scout-settings { margin-top: 32px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.scout-settings summary { display: flex; justify-content: space-between; gap: 12px; font-weight: 550; cursor: pointer; }
+.scout-settings summary span { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.scout-settings p { margin: 12px 0; font-size: 13px; color: var(--text-muted); }
+.scout-settings textarea { width: 100%; margin-bottom: 10px; font-family: inherit; font-size: 14px; line-height: 1.6; }
+.scout-status { font-size: 13px; color: var(--text-muted); }
+@media (max-width: 600px) { .lead { grid-template-columns: 1fr; gap: 8px; } }

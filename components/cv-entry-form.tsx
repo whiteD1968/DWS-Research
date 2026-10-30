@@ -12,14 +12,15 @@ export type CvEntry = CvFields & { id: string; notes: string };
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // A short form for logging something the moment it's done; the citation preview shows how it will read on the CV.
-export function CvEntryForm({ entry, onDone }: { entry?: CvEntry; onDone: () => void }) {
+export function CvEntryForm({ entry, prefill, onDone }: { entry?: CvEntry; prefill?: Partial<CvEntry>; onDone: (id?: string) => void }) {
   const router = useRouter();
-  const [category, setCategory] = useState<CvCategory>(entry?.category ?? "group_exhibition");
-  const [values, setValues] = useState({ title: entry?.title ?? "", venue: entry?.venue ?? "", location: entry?.location ?? "", people: entry?.people ?? "", url: entry?.url ?? "", notes: entry?.notes ?? "" });
-  const [year, setYear] = useState(() => entry?.date.slice(0, 4) ?? String(new Date().getFullYear()));
-  const [month, setMonth] = useState(entry?.date.slice(5, 7) ?? "");
-  const [endYear, setEndYear] = useState(entry?.end_date.slice(0, 4) ?? "");
-  const [more, setMore] = useState(Boolean(entry && (entry.people || entry.url || entry.end_date || entry.notes)));
+  const seed: Partial<CvEntry> | undefined = entry ?? prefill;
+  const [category, setCategory] = useState<CvCategory>(seed?.category ?? "group_exhibition");
+  const [values, setValues] = useState({ title: seed?.title ?? "", venue: seed?.venue ?? "", location: seed?.location ?? "", people: seed?.people ?? "", url: seed?.url ?? "", notes: seed?.notes ?? "" });
+  const [year, setYear] = useState(() => seed?.date?.slice(0, 4) ?? String(new Date().getFullYear()));
+  const [month, setMonth] = useState(seed?.date?.slice(5, 7) ?? "");
+  const [endYear, setEndYear] = useState(seed?.end_date?.slice(0, 4) ?? "");
+  const [more, setMore] = useState(Boolean(seed && (seed.people || seed.url || seed.end_date || seed.notes)));
   const [files, setFiles] = useState<File[]>([]);
   const [dossier, setDossier] = useState(true);
   const [error, setError] = useState("");
@@ -48,7 +49,7 @@ export function CvEntryForm({ entry, onDone }: { entry?: CvEntry; onDone: () => 
           if (uploadError) throw new Error(`The entry saved, but ${file.name} didn't upload. Edit the entry to try again.`);
           await finishCvPdf(id, uploadId, file.name);
         }
-        router.refresh(); onDone();
+        router.refresh(); onDone(id);
       } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not save. Please retry."); }
     });
   }
@@ -89,7 +90,7 @@ export function CvEntryForm({ entry, onDone }: { entry?: CvEntry; onDone: () => 
     <div className="cv-form-actions">
       {!entry && <label className="cv-dossier"><input type="checkbox" checked={dossier} onChange={event => setDossier(event.target.checked)} /> Add to dossier · {sectionLabel(kind.section)}</label>}
       {error && <p className="cv-error" role="alert">{error}</p>}
-      <button type="button" className="button" onClick={onDone} disabled={pending}>Cancel</button>
+      <button type="button" className="button" onClick={() => onDone()} disabled={pending}>Cancel</button>
       <button className="button button-primary" disabled={pending || !values.title.trim()}>{pending ? "Saving…" : entry ? "Save" : "Log it"}</button>
     </div>
   </form>;
