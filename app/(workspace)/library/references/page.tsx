@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getSignedMediaUrlMap, type MediaRecord } from "@/lib/media";
 import { LibraryFilters } from "@/components/library-filters";
 import { getSearchParam, type PageSearchParams } from "@/lib/search-params";
+import { ZoteroConnect } from "@/components/zotero-connect";
+import { zoteroParent, zoteroSettingsFrom } from "@/lib/zotero";
 
 type ReferenceRecord = {
   id: string;
@@ -55,6 +57,10 @@ export default async function ReferencesPage({
 
   const mediaById = new Map((media ?? []).map((item) => [item.id, item]));
   const signedUrls = await getSignedMediaUrlMap(media ?? []);
+  // The key itself never leaves the server; the panel only needs to know a connection exists.
+  const { data: zoteroRow } = await supabase.from("notes").select("metadata").eq("parent_type", zoteroParent).order("created_at").limit(1).maybeSingle();
+  const zotero = zoteroSettingsFrom(zoteroRow?.metadata);
+  const zoteroStatus = { connected: !!(zotero.userId && zotero.apiKey), username: String((zoteroRow?.metadata as { username?: unknown } | undefined)?.username || ""), collection: zotero.collection, lastSync: zotero.lastSync, lastError: zotero.lastError, imported: zotero.imported, pending: zotero.resumeStart > 0 };
 
   return (
     <>
@@ -69,6 +75,8 @@ export default async function ReferencesPage({
         </div>
         <span className="status-pill">{references?.length ?? 0} records</span>
       </section>
+
+      <ZoteroConnect status={zoteroStatus} />
 
       {created ? <p className="notice notice-success">Reference saved.</p> : null}
       {error ? <p className="notice notice-error">{error}</p> : null}

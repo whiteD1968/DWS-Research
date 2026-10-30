@@ -64,7 +64,7 @@ export async function searchEvidence(query: string) {
   const user = await requireUser(); const db = await createClient();
   const results = await Promise.all(evidenceKinds.map(async kind => {
     let request = db.from(recordRoutes[kind].table).select(kind === "media" ? "id,title,original_filename" : "id,title").eq("owner_id", user.id).ilike("title", `%${text}%`);
-    if (kind === "note") request = request.or(`parent_type.is.null,parent_type.not.in.(${dossierParent},${dossierSettingsParent},opportunity_settings,opportunity_lead,calendar_settings,digest_settings)`);
+    if (kind === "note") request = request.or(`parent_type.is.null,parent_type.not.in.(${dossierParent},${dossierSettingsParent},opportunity_settings,opportunity_lead,calendar_settings,digest_settings,zotero_settings)`);
     const { data } = await request.order("updated_at", { ascending: false }).limit(5);
     return ((data || []) as unknown as { id: string; title: string | null; original_filename?: string | null }[]).map(row => ({ value: `${kind}:${row.id}`, label: row.title || row.original_filename || "Untitled", kind: evidenceLabels[kind] }));
   }));
