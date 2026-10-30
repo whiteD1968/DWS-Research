@@ -15,12 +15,12 @@ export function CalendarSubscribe() {
   const webcal = feed.replace(/^https?:/, "webcal:");
 
   function open() {
-    setOrigin(window.location.origin); dialog.current?.showModal(); setError("");
-    if (!token) start(async () => { try { setToken(await calendarFeedToken()); } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not load your calendar link."); } });
+    dialog.current?.showModal(); setError("");
+    if (!token) start(async () => { try { const feed = await calendarFeedToken(); setToken(feed.token); setOrigin(feed.base || window.location.origin); } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not load your calendar link."); } });
   }
   function reset() {
     setConfirming(false); setError("");
-    start(async () => { try { setToken(await resetCalendarFeed()); setCopied(false); } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not reset the link."); } });
+    start(async () => { try { const feed = await resetCalendarFeed(); setToken(feed.token); setOrigin(feed.base || window.location.origin); setCopied(false); } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not reset the link."); } });
   }
   async function copy() {
     try { await navigator.clipboard.writeText(feed); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setError("Copy didn’t work. Select the link and copy it by hand."); }
