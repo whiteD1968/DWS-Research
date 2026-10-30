@@ -32,7 +32,7 @@ export function ImageDescribe({ undescribed, ready }: { undescribed: number; rea
   if (!ready) return undescribed > 0 ? <p className="image-describe image-describe-off">Automatic tagging is ready to turn on: add an <code>ANTHROPIC_API_KEY</code> in Vercel, then come back here.</p> : null;
   if (!left && !message) return null;
   return <div className="image-describe" role="region" aria-label="Describe images">
-    <p>{running ? `Describing… ${done} done, ${left} to go.` : message || `${left} ${left === 1 ? "image is" : "images are"} ready to describe: new uploads, or images described before the latest tagging rules. Claude writes a caption, alt text, and specific tags for each so they turn up in search and tag filters.`}</p>
+    <p>{running ? `Describing… ${done} done, ${left} to go.` : message || `${left} ${left === 1 ? "image is" : "images are"} ready to describe: new uploads, or images described before the latest tagging rules. Claude writes a readable title (replacing file names), a caption, alt text, and specific tags for each so they turn up in search and tag filters.`}</p>
     {running ? <button type="button" className="button" onClick={() => { stop.current = true; }}>Stop after this batch</button>
       : left > 0 && <button type="button" className="button button-primary" onClick={go}>Describe {left === 1 ? "it" : `${left} images`}</button>}
   </div>;
