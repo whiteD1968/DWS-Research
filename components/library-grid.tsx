@@ -19,7 +19,6 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
   const [status, setStatus] = useState("");
   const [pending, start] = useTransition();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [confirmation, setConfirmation] = useState("");
 
   // Shift-click selects the whole run between the last click and this one, like a file browser.
   function toggle(index: number, shift: boolean) {
@@ -70,7 +69,7 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
           <option value="">Add to project…</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
         </select>}
         {describable && <button className="button" type="button" disabled={pending || selected.length > 30} title={selected.length > 30 ? "Select up to 30 images" : "Write a caption, alt text, and tags with Claude"} onClick={() => { run(() => describeSelectedImages(selected), result => { const r = result as { described: number; failed: number; stopped: string; error: string }; return r.stopped || `Described ${r.described} ${r.described === 1 ? "image" : "images"}.${r.failed ? ` ${r.failed} couldn’t be read${r.error ? `: ${r.error}` : "."}` : ""}`; }); }}>Describe with AI</button>}
-        <button className="button button-danger-quiet" type="button" disabled={pending} onClick={() => { setConfirmation(""); setStatus(""); dialog.current?.showModal(); }}>Delete</button>
+        <button className="button button-danger-quiet" type="button" disabled={pending} onClick={() => { setStatus(""); dialog.current?.showModal(); }}>Delete</button>
         <button className="text-button" type="button" disabled={pending} onClick={() => setSelected(entries.map(entry => entry.id))}>Select page</button>
         <button className="text-button" type="button" disabled={pending} onClick={() => { setSelected([]); setStatus(""); }}>Clear</button>
         {status && <p className="library-batch-status" role="status">{status}</p>}
@@ -78,11 +77,10 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
     </div>}
 
     <dialog ref={dialog} className="content-dialog" aria-label="Delete selected items" onCancel={event => { if (pending) event.preventDefault(); }}>
-      <form className="form-stack" onSubmit={event => { event.preventDefault(); const ids = selected; dialog.current?.close(); run(() => deleteMediaMany(ids, confirmation), `Deleted ${ids.length} ${ids.length === 1 ? "item" : "items"}.`); }}>
-        <p className="eyebrow">Delete {selected.length} {selected.length === 1 ? "item" : "items"}</p>
-        <p>This permanently deletes the selected files and removes them from every project, topic, and board. Board cards for them will show “Source removed”.</p>
-        <label className="field"><span>Type DELETE to confirm</span><input autoFocus value={confirmation} onChange={event => setConfirmation(event.target.value)} autoComplete="off" /></label>
-        <div className="inline-actions"><button className="button" type="button" onClick={() => dialog.current?.close()}>Cancel</button><button className="button button-danger" disabled={confirmation !== "DELETE"}>Permanently delete</button></div>
+      <form className="form-stack" onSubmit={event => { event.preventDefault(); const ids = selected; dialog.current?.close(); run(() => deleteMediaMany(ids, "DELETE"), `Deleted ${ids.length} ${ids.length === 1 ? "item" : "items"}.`); }}>
+        <p className="eyebrow">Delete {selected.length} {selected.length === 1 ? "item" : "items"}</p><h2>Delete {selected.length === 1 ? "this item" : `these ${selected.length} items`}?</h2>
+        <p>They will be removed from every project, topic, and board. This can’t be undone.</p>
+        <div className="inline-actions"><button className="button button-danger">Yes, delete</button><button className="button" type="button" autoFocus onClick={() => dialog.current?.close()}>No</button></div>
       </form>
     </dialog>
   </>;
