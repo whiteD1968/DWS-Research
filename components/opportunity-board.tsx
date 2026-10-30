@@ -8,9 +8,9 @@ import { DeleteContent } from "@/components/content-controls";
 
 type Panel = { mode: "new" } | { mode: "view"; id: string } | { mode: "edit"; id: string } | { mode: "cv"; id: string } | null;
 
-export function OpportunityBoard({ items, today, startOpen = false }: { items: Opportunity[]; today: string; startOpen?: boolean }) {
+export function OpportunityBoard({ items, today, startOpen = false, openId }: { items: Opportunity[]; today: string; startOpen?: boolean; openId?: string }) {
   const router = useRouter();
-  const [panel, setPanel] = useState<Panel>(startOpen ? { mode: "new" } : null);
+  const [panel, setPanel] = useState<Panel>(startOpen ? { mode: "new" } : openId && items.some(item => item.id === openId) ? { mode: "view", id: openId } : null);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (panel) { if (!dialog.current?.open) dialog.current?.showModal(); } else dialog.current?.close(); }, [panel]);
   const current = panel && panel.mode !== "new" ? items.find(item => item.id === panel.id) : undefined;
@@ -35,7 +35,7 @@ export function OpportunityBoard({ items, today, startOpen = false }: { items: O
         }) : <p className="opp-empty">{stage.key === "interested" ? "Calls and grants you might apply for." : stage.key === "preparing" ? "Move things here once you start the application." : stage.key === "submitted" ? "Waiting to hear back." : "Results land here."}</p>}
       </section>;
     })}</div>
-    <dialog ref={dialog} className="content-dialog opp-dialog" aria-label="Opportunity" onClose={() => { setPanel(null); if (startOpen) router.replace("/opportunities", { scroll: false }); }}>
+    <dialog ref={dialog} className="content-dialog opp-dialog" aria-label="Opportunity" onClose={() => { setPanel(null); if (startOpen || openId) router.replace("/opportunities", { scroll: false }); }}>
       {panel?.mode === "new" && <OpportunityForm onDone={() => setPanel(null)} />}
       {panel?.mode === "edit" && current && <OpportunityForm item={current} onDone={() => setPanel({ mode: "view", id: current.id })} />}
       {panel?.mode === "view" && current && <OpportunityDetail item={current} today={today} onEdit={() => setPanel({ mode: "edit", id: current.id })} onLogCv={() => setPanel({ mode: "cv", id: current.id })} onClose={() => setPanel(null)} />}
