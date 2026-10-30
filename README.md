@@ -545,3 +545,20 @@ See [the workspace audit](docs/research-workspace-audit.md) for edit/delete cove
 ## Source coordination
 
 Use **Search workspace** to find saved titles across repositories. Images, documents, and notes now have source-detail pages with **Used in** links. See [the coordination milestone](docs/source-coordination-build.md) for coverage and verification limits. Run `npm test` for the full regression suite.
+
+## Calendar feed and morning email
+
+**Calendar feed.** Home → Next two weeks → *Add to calendar* creates a private link
+(`/calendar/<token>.ics`) that Google, Apple, or Outlook can subscribe to. It carries
+open opportunity deadlines, contact follow-ups, the tenure review date, and other
+reminders. *Reset link* issues a new token and cuts off old subscriptions. Apply
+`supabase/migrations/20261030140000_calendar_feed.sql` first: it adds the
+`calendar_feed(token)` function, which anonymous callers may run and which returns only
+event fields for a valid token.
+
+**Morning email.** Home → *Morning email* turns on a 7am Eastern digest of today's
+reminders, the week's deadlines, due follow-ups, and new scout leads. Quiet mornings send
+nothing. `vercel.json` schedules `/api/cron/digest` at 11:00 and 12:00 UTC, and the route
+sends only on the run that falls at 7am in New York. The same job runs the opportunity
+scout, so leads arrive even on days the site isn't opened. Set `SUPABASE_SECRET_KEY`,
+`CRON_SECRET`, and `RESEND_API_KEY` in Vercel. *Send a test now* checks the setup.

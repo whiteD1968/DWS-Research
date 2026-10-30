@@ -2228,3 +2228,19 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .recent-cv, .recent-accepted { color: var(--accent); }
 @media (max-width: 1100px) { .glance { grid-template-columns: 1fr 1fr; } .home-columns { grid-template-columns: 1fr; } .home-recent { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .glance, .home-recent { grid-template-columns: 1fr; } .agenda { padding: 16px; } }
+
+/* Calendar feed: one private link to subscribe from Google, Apple, or Outlook. */
+.calendar-dialog h2 { margin: 0 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.calendar-copy { margin: 0 0 16px; color: var(--text-muted); }
+.calendar-link { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.calendar-link input { height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: var(--surface-muted); min-width: 0; }
+.calendar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.calendar-actions .is-disabled { opacity: .5; pointer-events: none; }
+.calendar-notes { margin: 0 0 16px; padding-left: 18px; font-size: 13px; color: var(--text-muted); display: grid; gap: 6px; }
+.calendar-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 14px; }
+.calendar-confirm { font-size: 13px; color: var(--text-muted); }
+.agenda-tools { display: flex; gap: 14px; }
+.digest-toggle { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-weight: 550; }
+.calendar-dialog .field { margin-bottom: 14px; }
+.digest-message { margin: 0 0 12px; font-size: 14px; color: var(--accent-strong); }
+.digest-buttons { display: flex; gap: 8px; }

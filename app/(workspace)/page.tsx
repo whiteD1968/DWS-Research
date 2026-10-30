@@ -16,6 +16,7 @@ import { dossierParent, dossierSettingsParent, evidenceType, parseReviewDate } f
 import { cvCategory, cvFields, cvParent } from "@/lib/cv";
 import { agenda, glance, recentWork, summaryLine, type RecentItem } from "@/lib/practice";
 import { PracticeAgenda, PracticeGlance, RecentWork } from "@/components/practice-dashboard";
+import { digestParent, digestSettingsFrom } from "@/lib/digest";
 
 export default async function TodayPage() {
   const user = await requireUser(); const db = await createClient();
@@ -24,7 +25,7 @@ export default async function TodayPage() {
     db.from("research_threads").select("id,title,question,status").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(4),
   ]);
   // The practice side: deadlines, people, the dossier, and what's been logged lately.
-  const [oppRows, contactRows, statementRows, settings, evidence, cvRows, journalRows] = await Promise.all([
+  const [oppRows, contactRows, statementRows, settings, evidence, cvRows, journalRows, digestRow] = await Promise.all([
     db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", opportunityParent).limit(1000),
     db.from("notes").select("id,title,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", contactParent).limit(5000),
     db.from("notes").select("id,plain_text,metadata").eq("owner_id", user.id).eq("parent_type", dossierParent).order("created_at"),
@@ -32,6 +33,7 @@ export default async function TodayPage() {
     db.from("relationships").select("id", { count: "exact", head: true }).eq("owner_id", user.id).eq("relationship_type", evidenceType),
     db.from("notes").select("id,title,metadata,created_at").eq("owner_id", user.id).eq("parent_type", cvParent).order("created_at", { ascending: false }).limit(1000),
     db.from("notes").select("id,title,plain_text,created_at").eq("owner_id", user.id).eq("parent_type", journalParent).order("created_at", { ascending: false }).limit(6),
+    db.from("notes").select("metadata").eq("owner_id", user.id).eq("parent_type", digestParent).order("created_at").limit(1).maybeSingle(),
   ]);
   // Today's jot pad links to any project or topic; the strip shows the newest journal sketches and photos.
   const [allProjects, allTopics, sketches, reminders, leadRows] = await Promise.all([
@@ -71,7 +73,7 @@ export default async function TodayPage() {
       <RemindersList reminders={(reminders.data || []).map(row => ({ id: row.id, title: row.title || "", text: row.parent_type === "contact" ? "Follow up" : row.parent_type === "opportunity" ? `Deadline ${new Date(`${row.metadata?.deadline}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : (row.plain_text || "").slice(0, 160), remindAt: String(row.metadata?.remind_at || ""), href: row.parent_type === "opportunity" ? `/opportunities?o=${row.id}` : row.parent_type === "contact" ? `/contacts?c=${row.id}` : undefined }))} />
       {!!sketches.data?.length && <div className="today-sketches"><p className="eyebrow">Recent sketches</p><ul>{sketches.data.map(row => <li key={row.target_id}><Link href={`/library/items/media/${row.target_id}`}><img src={thumbnailUrl(row.target_id)} alt="Journal sketch" loading="lazy" /></Link></li>)}</ul></div>}
     </section>
-    <PracticeAgenda groups={groups} />
+    <PracticeAgenda groups={groups} digest={digestSettingsFrom(digestRow.data?.metadata, user.email || "")} digestError={String((digestRow.data?.metadata as { last_error?: unknown } | undefined)?.last_error || "")} />
     </div>
     <OpportunityLeads leads={leads} today={today} limit={4} showAllHref="/opportunities" /><OpportunityScout />
     <section className="home-recent section-block"><RecentWork items={recent} />{[{ title: "Recent inquiries", href: "/research", result: topics }, { title: "Project work", href: "/projects", result: projects }].map(group => <section className="desk-section" key={group.href}><div className="section-heading"><h2>{group.title}</h2><Link href={group.href}>View all ↗</Link></div>{group.result.error ? <p role="alert">Could not load this section.</p> : group.result.data?.length ? group.result.data.map(item => <Link className="desk-row" key={item.id} href={`${group.href}/${item.id}`}><span className="record-meta">{item.status}</span><h3>{item.title}</h3></Link>) : <p className="panel-copy">Start your first {group.href === "/research" ? "research topic" : "project"} to see it here.</p>}</section>)}</section>
