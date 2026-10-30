@@ -44,7 +44,7 @@ test('Used in includes note parent and surfaces query failures instead of report
  const api=load('lib/record-usage.ts',{'@/lib/supabase/server':{createClient:async()=>db},'@/lib/records':routes});assert.equal((await api.recordUsage('owner','note','n'))[0].title,'Parent');
  const broken=load('lib/record-usage.ts',{'@/lib/supabase/server':{createClient:async()=>database({},'relationships')},'@/lib/records':routes});await assert.rejects(broken.recordUsage('owner','media','m'),/locations/);
 });
-function actions(db,authenticated=true){return load('app/actions/content.ts',{'next/cache':{revalidatePath(){}},'@/lib/auth':{requireUser:async()=>{if(!authenticated)throw Error('Authentication required');return {id:'owner'};}},'@/lib/supabase/server':{createClient:async()=>db},'@/lib/content':content});}
+function actions(db,authenticated=true){return load('app/actions/content.ts',{'next/cache':{revalidatePath(){}},'@/lib/auth':{requireUser:async()=>{if(!authenticated)throw Error('Authentication required');return {id:'owner'};}},'@/lib/supabase/server':{createClient:async()=>db},'@/lib/content':content,'@/lib/thumbnails':load('lib/thumbnails.ts')});}
 test('content actions reject unauthenticated, foreign and unconfirmed deletion before touching Storage',async()=>{
  const db=database({media:[{id:'m',owner_id:'other',storage_path:'other/m.png',bucket:'research-media'}]});
  await assert.rejects(actions(db,false).deleteContent('media','m','DELETE'),/Authentication/);
@@ -52,6 +52,11 @@ test('content actions reject unauthenticated, foreign and unconfirmed deletion b
  await assert.rejects(actions(db).deleteContent('__proto__','m','DELETE'),/Confirm/);
  await assert.rejects(actions(db).deleteContent('media','m','DELETE'),/unavailable/);
  assert.equal(db.calls.filter(c=>['remove','rpc'].includes(c[0])).length,0);
+});
+test('deleting an image also removes its cached thumbnail',async()=>{
+ const db=database({media:[{id:'m',owner_id:'owner',storage_path:'owner/m.png',bucket:'research-media',media_type:'image'}]});
+ await actions(db).deleteContent('media','m','DELETE');
+ assert.deepEqual(db.calls.filter(c=>['remove','rpc'].includes(c[0])).map(c=>c[0]),['remove','remove','rpc']);
 });
 test('Storage failure retains the library record; cleanup failure can be retried',async()=>{
  const tables={media:[{id:'m',owner_id:'owner',storage_path:'owner/m.pdf',bucket:'research-media',media_type:'document'}]};
