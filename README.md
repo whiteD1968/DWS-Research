@@ -587,3 +587,18 @@ an opportunity, each checklist line can attach a kit item. The site suggests a m
 (for example, "Artist statement (500 words)" suggests the newest artist statement), and
 *Download packet* exports every attached item, in checklist order, as one .docx with
 named paragraph styles. No migration is needed.
+
+## Image descriptions
+
+Library → Images shows how many images haven't been described yet and a *Describe*
+button. Claude (`claude-opus-5-5`, low effort, with server-side refusal fallback)
+reads each image's cached thumbnail and returns a one-sentence caption, alt text, and
+three to six lowercase tags, reusing the library's existing tag names where they fit.
+Tags are linked like hand-made ones, so they appear in the tag filter and can be removed
+the same way. The caption and alt text fill those fields only when they are empty or
+were written by an earlier description; anything typed by hand is kept. Alt text is now
+searched too. Selecting images and choosing *Describe with AI* re-describes them. The
+morning cron job describes new uploads. Results are kept in `media.metadata.ai_tags`.
+Set `ANTHROPIC_API_KEY` in Vercel. Run
+`supabase/migrations/20261030170000_media_description_keeps_order.sql` so describing an
+image doesn't move it to the top of "Newest".

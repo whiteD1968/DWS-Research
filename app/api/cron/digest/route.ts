@@ -6,6 +6,7 @@ import { syncZoteroFor } from "@/lib/zotero-sync";
 import { gatherDigest, sendDigest, siteUrl } from "@/lib/digest-run";
 import { scoutFor } from "@/lib/scout-run";
 import { studioToday } from "@/lib/journal";
+import { describeImagesFor, imageTaggingReady } from "@/lib/image-tagger";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -52,5 +53,15 @@ export async function GET(request: Request) {
       results.push({ owner, status: "failed" });
     }
   }
-  return Response.json({ ran: now.toISOString(), zotero: synced, results });
+  // Then images uploaded since yesterday get their captions and tags, within what's left of the run.
+  const described: { owner: string; status: string }[] = [];
+  if (isMorningRun(now) && imageTaggingReady()) {
+    const { data: pending } = await db.from("media").select("owner_id").eq("media_type", "image").not("storage_path", "is", null).is("metadata->ai_tags", null).limit(500);
+    for (const owner of new Set((pending || []).map(row => row.owner_id as string))) {
+      if (Date.now() - now.getTime() > 80000) break;
+      try { const result = await describeImagesFor(db, owner, { limit: 30, deadline: now.getTime() + 105000 }); described.push({ owner, status: `described ${result.described}, ${result.remaining} left` }); }
+      catch { described.push({ owner, status: "failed" }); }
+    }
+  }
+  return Response.json({ ran: now.toISOString(), zotero: synced, results, images: described });
 }
