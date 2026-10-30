@@ -22,9 +22,9 @@ export function DeleteContent({ kind, id, title, stayOnPage = false }: { kind: C
     </dialog></>;
 }
 
-export function LibraryEditor({ kind, id, title, text, altText = "" }: { kind: "media" | "note"; id: string; title: string; text: string; altText?: string }) {
+export function LibraryEditor({ kind, id, title, text, altText = "", children }: { kind: "media" | "note"; id: string; title: string; text: string; altText?: string; children?: React.ReactNode }) {
   const [pending, start] = useTransition(); const [status, setStatus] = useState(""); const router = useRouter();
-  return <details className="library-editor"><summary>Edit {kind === "media" ? "details" : "note"}</summary><form className="form-stack" onSubmit={e => { e.preventDefault(); const form = new FormData(e.currentTarget); start(async () => { try { await editLibraryContent(kind, id, { title: String(form.get("title")), text: String(form.get("text")), altText: String(form.get("alt_text") || "") }); setStatus("Saved."); router.refresh(); } catch (e) { setStatus(e instanceof Error ? e.message : "Unable to save."); } }); }}>
+  return <details className="library-editor"><summary>Edit {kind === "media" ? "details" : "note"}</summary>{children}<form className="form-stack" onSubmit={e => { e.preventDefault(); const form = new FormData(e.currentTarget); start(async () => { try { await editLibraryContent(kind, id, { title: String(form.get("title")), text: String(form.get("text")), altText: String(form.get("alt_text") || "") }); setStatus("Saved."); router.refresh(); } catch (e) { setStatus(e instanceof Error ? e.message : "Unable to save."); } }); }}>
     <label className="field"><span>Title</span><input name="title" defaultValue={title} maxLength={200} required /></label>
     <label className="field"><span>{kind === "media" ? "Caption / description" : "Note"}</span><textarea name="text" defaultValue={text} rows={5} maxLength={50000} /></label>
     {kind === "media" && <label className="field"><span>Image description for accessibility</span><input name="alt_text" defaultValue={altText} maxLength={2000} /></label>}
