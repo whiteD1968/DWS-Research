@@ -16,11 +16,12 @@ import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts"
 import { copyRecoveredBoard } from "@/app/(workspace)/boards/recovery-actions";
 import type { BoardTransfer } from "@/lib/boards/handoff";
 import { applyBoardTransfer } from "@/lib/boards/transfer";
+import { similarImages, type ImageFeatures } from "@/lib/similar";
 const components = { StylePanel: null };
 type ImageJob = { id: string; file: File; point?: { x: number; y: number }; uploaded: boolean };
-export type BoardCanvasProps = { board: { id: string; title: string; description: string | null; research_thread_id: string | null; updated_at: string; snapshot: unknown; metadata: { composition?: Composition; generated_from?: string; source_id?: string } }; records: BoardRecord[]; ownerId: string; transfer?: BoardTransfer };
+export type BoardCanvasProps = { board: { id: string; title: string; description: string | null; research_thread_id: string | null; updated_at: string; snapshot: unknown; metadata: { composition?: Composition; generated_from?: string; source_id?: string } }; records: BoardRecord[]; ownerId: string; transfer?: BoardTransfer; images?: ImageFeatures[] };
 
-export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, persist = saveBoard, recoveryDraft, recoveryWarning = "", transfer }: BoardCanvasProps & { persist?: typeof saveBoard; recoveryDraft?: BoardDraft; recoveryWarning?: string }) {
+export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, images = [], persist = saveBoard, recoveryDraft, recoveryWarning = "", transfer }: BoardCanvasProps & { persist?: typeof saveBoard; recoveryDraft?: BoardDraft; recoveryWarning?: string }) {
   const source = board.research_thread_id ? { href: `/research/${board.research_thread_id}/boards`, label: "Research Topic" }
     : board.metadata?.generated_from === "collection" && board.metadata.source_id ? { href: `/collections/${encodeURIComponent(board.metadata.source_id)}`, label: "Collection" }
     : board.metadata?.generated_from === "discover" && board.metadata.source_id ? { href: `/discover/sessions/${encodeURIComponent(board.metadata.source_id)}`, label: "Discover session" }
@@ -37,7 +38,20 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
   const [picker, setPicker] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
-  const filteredRecords = useMemo(() => records.filter(r => (!filter || (filter === "media" ? r.type === "media" && !!r.image : r.type === filter)) && `${r.title} ${r.subtitle} ${r.creator || ""} ${r.body || ""}`.toLowerCase().includes(query.toLowerCase())), [records, filter, query]);
+  // Images on the canvas, read when "Like this board" is opened, so suggestions follow what is on the board now.
+  const [onBoard, setOnBoard] = useState<string[]>([]);
+  const suggestions = useMemo(() => filter !== "similar" ? [] : similarImages(onBoard, images, 30).flatMap(match => {
+    const record = recordMap.get(`media:${match.id}`);
+    return record?.image && `${record.title} ${match.shared.join(" ")}`.toLowerCase().includes(query.toLowerCase()) ? [{ record, shared: match.shared }] : [];
+  }), [filter, onBoard, images, recordMap, query]);
+  function chooseFilter(value: string) {
+    if (value === "similar") setOnBoard([...new Set((editor.current?.getCurrentPageShapes() || []).flatMap(shape => {
+      const key = (shape.props as { recordKey?: unknown }).recordKey;
+      return typeof key === "string" && key.startsWith("media:") ? [key.slice(6)] : [];
+    }))]);
+    setFilter(value);
+  }
+  const filteredRecords = useMemo(() => filter === "similar" ? [] : records.filter(r => (!filter || (filter === "media" ? r.type === "media" && !!r.image : r.type === filter)) && `${r.title} ${r.subtitle} ${r.creator || ""} ${r.body || ""}`.toLowerCase().includes(query.toLowerCase())), [records, filter, query]);
   const [title, setTitle] = useState(board.title);
   const [description, setDescription] = useState(board.description || "");
   const [details, setDetails] = useState(false);
@@ -227,12 +241,17 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, p
     {picker && <aside className="board-picker" aria-label="Add research">
       <div className="board-picker-heading"><strong>Add research</strong><button type="button" aria-label="Close Add drawer" onClick={() => setPicker(false)}>×</button></div>
       <input aria-label="Search research" placeholder="Search title, creator or text" value={query} onChange={e => setQuery(e.target.value)} />
-      <div className="board-picker-filters" role="group" aria-label="Record type">{[["", "All"], ["reference", "References"], ["media", "Images"], ["document", "Documents"], ["note", "Notes"], ["theme", "Themes"], ["project", "Projects"], ["collection", "Collections"]].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
+      <div className="board-picker-filters" role="group" aria-label="Record type">{[["", "All"], ["reference", "References"], ["media", "Images"], ["document", "Documents"], ["note", "Notes"], ["theme", "Themes"], ["project", "Projects"], ["collection", "Collections"], ...(images.length ? [["similar", "Like this board"]] : [])].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => chooseFilter(value)}>{label}</button>)}</div>
       <div className="board-picker-results">{filteredRecords.map(r => <button key={r.key} onClick={() => { if (place(r)) setPicker(false); }}>
         {r.image ? <img src={r.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" /> : <span className="board-picker-kind" aria-hidden="true">{r.type === "document" ? "DOC" : r.type === "note" ? "Aa" : r.type === "theme" ? "#" : "↗"}</span>}
         <span><strong>{r.title}</strong><small>{r.type}{r.creator ? ` · ${r.creator}` : ""}</small></span>
       </button>)}
-      {!filteredRecords.length && <p className="board-picker-empty">No matching records.</p>}</div>
+      {suggestions.map(({ record: r, shared }) => <button key={r.key} onClick={() => { if (place(r)) setPicker(false); }}>
+        <img src={r.image} alt="" loading="lazy" decoding="async" />
+        <span><strong>{r.title}</strong><small>{shared.length ? `Shares ${shared.join(", ")}` : "Similar description"}</small></span>
+      </button>)}
+      {filter === "similar" && !suggestions.length && <p className="board-picker-empty">{onBoard.length ? "No close matches in your Library yet." : "Add images from your Library to this board, then look here for similar ones."}</p>}
+      {filter !== "similar" && !filteredRecords.length && <p className="board-picker-empty">No matching records.</p>}</div>
       <div className="board-picker-tools"><small>Sketch & annotate</small><div className="board-form-row">{["text", "note", "draw", "arrow", "frame", "geo"].map(tool => <button key={tool} className="button" onClick={() => { editor.current?.setCurrentTool(tool); setPicker(false); }}>{tool === "draw" ? "Sketch" : tool === "geo" ? "Rectangle" : tool === "note" ? "Sticky" : tool}</button>)}</div></div>
     </aside>}
     {conversion && <div role="dialog" aria-modal="true" aria-label="Convert loose text" className="board-conversion"><form onSubmit={async e => { e.preventDefault(); setBusy(true); try { const record = await convertBoardText(board.id, conversion.id, conversion.type, conversion.title, conversion.text); setRecords(prev => [...prev.filter(r => r.key !== record.key), record]); const ed = editor.current; const shape = ed?.getShape(conversion.shapeId as RecordShape["id"]); if (ed && shape) { const point = ed.getShapePageBounds(shape)?.point; ed.run(() => { if (!place(record, point)) throw new Error("Record saved, but placement failed. Try again when the editor is available."); ed.deleteShapes([shape.id]); }); } setConversion(null); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><h2>Convert to {conversion.type}</h2><label>Title<input required value={conversion.title} onChange={e => setConversion({ ...conversion, title: e.target.value })} /></label><label>Text<textarea required value={conversion.text} onChange={e => setConversion({ ...conversion, text: e.target.value })} /></label><button disabled={busy} className="button">Create {conversion.type}</button><button type="button" className="button" onClick={() => setConversion(null)}>Cancel</button></form></div>}
