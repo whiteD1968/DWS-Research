@@ -1,5 +1,8 @@
 import Link from "next/link";
 import type { agenda, Glance, RecentItem } from "@/lib/practice";
+import { CalendarSubscribe } from "@/components/calendar-subscribe";
+import { MorningEmail } from "@/components/morning-email";
+import type { DigestSettings } from "@/lib/digest";
 
 const kindLabels = { deadline: "Deadline", follow_up: "Follow up", review: "Review" } as const;
 const recentLabels = { cv: "Logged to CV", journal: "Journal", accepted: "Accepted", contact: "In touch" } as const;
@@ -30,9 +33,9 @@ export function PracticeGlance({ glance }: { glance: Glance }) {
   </section>;
 }
 
-export function PracticeAgenda({ groups }: { groups: ReturnType<typeof agenda> }) {
+export function PracticeAgenda({ groups, digest, digestError }: { groups: ReturnType<typeof agenda>; digest: DigestSettings; digestError: string }) {
   return <section className="agenda" aria-label="Next two weeks">
-    <div className="agenda-head"><p className="eyebrow">Next two weeks</p><Link className="text-button" href="/opportunities">Board ↗</Link></div>
+    <div className="agenda-head"><p className="eyebrow">Next two weeks</p><span className="agenda-tools"><MorningEmail settings={digest} lastError={digestError} /><CalendarSubscribe /></span></div>
     {groups.length ? <ol className="agenda-days">{groups.map(group => <li key={group.day} className={group.label === "Today" ? "agenda-day agenda-today" : "agenda-day"}>
       <h3>{group.label}</h3>
       <ul>{group.items.map(item => <li key={`${item.kind}-${item.href}`}>

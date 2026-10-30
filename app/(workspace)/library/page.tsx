@@ -81,7 +81,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     if (pattern) request = request.or(mediaSearch);
     return ordered(request, "original_filename").range(...rangeFor(kind));
   }
-  let notesRequest = db.from("notes").select("id,title,plain_text,parent_type,updated_at", { count: "exact", head: !shown("notes") }).eq("owner_id", user.id).or("parent_type.is.null,parent_type.not.in.(dossier_settings,opportunity_settings,opportunity_lead,contact)");
+  let notesRequest = db.from("notes").select("id,title,plain_text,parent_type,updated_at", { count: "exact", head: !shown("notes") }).eq("owner_id", user.id).or("parent_type.is.null,parent_type.not.in.(dossier_settings,opportunity_settings,opportunity_lead,contact,calendar_settings,digest_settings)");
   if (pattern) notesRequest = notesRequest.or(`title.ilike.${pattern},plain_text.ilike.${pattern}`);
   let referencesRequest = db.from("references").select("id,title,reference_type,creator,why_saved,description,primary_media_id,metadata,updated_at", { count: "exact", head: !shown("references") }).eq("owner_id", user.id);
   if (pattern) referencesRequest = referencesRequest.or(`title.ilike.${pattern},why_saved.ilike.${pattern},creator.ilike.${pattern},description.ilike.${pattern}`);
