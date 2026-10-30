@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { addMediaToProject, deleteMediaMany, tagMedia, untagMedia } from "@/app/actions/library";
 import { describeSelectedImages } from "@/app/(workspace)/library/describe-actions";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
+import { ItemTags } from "@/components/item-tags";
 import { groupByMonth, type LibraryEntry, type LibraryLayout } from "@/lib/library";
 
 export type GridEntry = LibraryEntry & { image: string | null };
@@ -49,7 +50,7 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
         <div className="library-card-body"><p className="library-card-type">{entry.label}</p><h2><Link href={entry.href}>{entry.title}</Link></h2>
           {entry.text && <p className="library-card-text">{entry.text}</p>}
           {entry.tags.length > 0 && <ul className="library-card-tags" aria-label="Tags">{entry.tags.map(tag => <li key={tag.id}>{tag.name}</li>)}</ul>}
-          {editable && layout === "grid" && entry.kind !== "references" && <><LibraryEditor kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} text={entry.text} altText={entry.altText} /><DeleteContent stayOnPage kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} /></>}
+          {editable && layout === "grid" && entry.kind !== "references" && <><LibraryEditor kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} text={entry.text} altText={entry.altText}>{entry.kind === "images" && <div className="field"><span>Tags</span><ItemTags id={entry.id} tags={entry.tags} /></div>}</LibraryEditor><DeleteContent stayOnPage kind={entry.kind === "notes" ? "note" : "media"} id={entry.id} title={entry.title} /></>}
         </div>
       </article>;
     })}</div></section>)}
