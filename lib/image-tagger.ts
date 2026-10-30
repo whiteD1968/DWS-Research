@@ -1,14 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { aiTagRecord, apiKeyProblem, imageTagModel, imageTagVersion, redactSecrets, staleAiTags, undescribedFilter, imageTagPrompt, imageTagSchema, imageTagSystem, nextText, parseImageDescription, type ImageDescription, type TagUse } from "@/lib/image-tags";
+import { aiTagRecord, apiKeyProblem, nextTitle, imageTagModel, imageTagVersion, redactSecrets, staleAiTags, undescribedFilter, imageTagPrompt, imageTagSchema, imageTagSystem, nextText, parseImageDescription, type ImageDescription, type TagUse } from "@/lib/image-tags";
 import { thumbnailBucket, thumbnailPath, thumbnailWidth } from "@/lib/thumbnails";
 
-type Media = { id: string; title: string | null; bucket: string; storage_path: string | null; alt_text: string | null; caption: string | null; metadata: Record<string, unknown> | null };
+type Media = { id: string; title: string | null; original_filename: string | null; bucket: string; storage_path: string | null; alt_text: string | null; caption: string | null; metadata: Record<string, unknown> | null };
 export type DescribeResult = { described: number; failed: number; remaining: number; stopped: string; error: string };
 
 export const imageTaggingReady = () => !!process.env.ANTHROPIC_API_KEY;
-const columns = "id,title,bucket,storage_path,alt_text,caption,metadata";
+const columns = "id,title,original_filename,bucket,storage_path,alt_text,caption,metadata";
 
 // The cached library thumbnail is plenty for describing an image and keeps each request small; it is made here if missing.
 async function imageBytes(db: SupabaseClient, ownerId: string, media: Media) {
@@ -72,10 +72,11 @@ async function save(db: SupabaseClient, ownerId: string, media: Media, result: I
   }
   const caption = nextText(media.caption, previous?.caption, result.caption);
   const alt = nextText(media.alt_text, previous?.alt_text, result.altText);
+  const title = nextTitle(media.title, media.original_filename, previous?.title, result.title);
   // The media trigger leaves updated_at alone when only the description changes, so images keep their place under "newest".
   await db.from("media").update({
-    ...(caption ? { caption } : {}), ...(alt ? { alt_text: alt } : {}),
-    metadata: { ...(media.metadata || {}), ai_tags: { tags: result.tags, caption: result.caption, alt_text: result.altText, model: imageTagModel, v: imageTagVersion, at } },
+    ...(title ? { title } : {}), ...(caption ? { caption } : {}), ...(alt ? { alt_text: alt } : {}),
+    metadata: { ...(media.metadata || {}), ai_tags: { tags: result.tags, title: result.title, caption: result.caption, alt_text: result.altText, model: imageTagModel, v: imageTagVersion, at } },
   }).eq("owner_id", ownerId).eq("id", media.id);
   return true;
 }
