@@ -20,7 +20,9 @@ export function ImageDescribe({ undescribed, ready }: { undescribed: number; rea
         const result = await describeNextImages();
         total += result.described; failed += result.failed; setDone(total); setLeft(result.remaining);
         if (result.stopped) { setMessage(result.stopped); break; }
-        if (!result.remaining || (!result.described && !result.failed)) break;
+        // A batch where nothing worked stops the run and shows why, rather than trying the next batch the same way.
+        if (!result.described && result.failed) { setMessage(`Claude couldn’t describe these images. ${result.error ? `The error was: “${result.error}”` : ""}`); break; }
+        if (!result.remaining || !result.described) break;
       }
       setMessage(current => current || `Described ${total} ${total === 1 ? "image" : "images"}.${failed ? ` ${failed} couldn’t be read; select them and try again.` : ""}`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Something went wrong. Please retry."); }

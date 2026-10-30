@@ -5,7 +5,7 @@ import { aiTagRecord, imageTagModel, imageTagPrompt, imageTagSchema, imageTagSys
 import { thumbnailBucket, thumbnailPath, thumbnailWidth } from "@/lib/thumbnails";
 
 type Media = { id: string; title: string | null; bucket: string; storage_path: string | null; alt_text: string | null; caption: string | null; metadata: Record<string, unknown> | null };
-export type DescribeResult = { described: number; failed: number; remaining: number; stopped: string };
+export type DescribeResult = { described: number; failed: number; remaining: number; stopped: string; error: string };
 
 export const imageTaggingReady = () => !!process.env.ANTHROPIC_API_KEY;
 const columns = "id,title,bucket,storage_path,alt_text,caption,metadata";
@@ -25,29 +25,35 @@ async function imageBytes(db: SupabaseClient, ownerId: string, media: Media) {
   } catch { return null; }
 }
 
-async function describe(client: Anthropic, bytes: Buffer, existing: string[], title: string): Promise<ImageDescription | null> {
-  const response = await client.beta.messages.create({
+async function describe(client: Anthropic, bytes: Buffer, existing: string[], title: string, withFallback = true): Promise<ImageDescription | null> {
+  const request = {
     model: imageTagModel,
     max_tokens: 4000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
     output_config: { effort: "low", format: { type: "json_schema", schema: imageTagSchema } },
     system: imageTagSystem,
     messages: [{ role: "user", content: [
       { type: "image", source: { type: "base64", media_type: "image/webp", data: bytes.toString("base64") } },
       { type: "text", text: imageTagPrompt(existing, title) },
     ] }],
-  });
+  } satisfies Anthropic.Beta.MessageCreateParamsNonStreaming;
+  let response;
+  try {
+    response = withFallback ? await client.beta.messages.create({ ...request, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" }) : await client.beta.messages.create(request);
+  } catch (problem) {
+    // An account that can't use refusal fallbacks gets a 400 for the parameter; the plain request still works.
+    if (withFallback && problem instanceof Anthropic.BadRequestError) return describe(client, bytes, existing, title, false);
+    throw problem;
+  }
   if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") return null;
   const text = response.content.flatMap(block => (block.type === "text" ? [block.text] : [])).join("");
   return parseImageDescription(text, existing);
 }
 
-async function save(db: SupabaseClient, ownerId: string, media: Media, result: ImageDescription | null) {
+async function save(db: SupabaseClient, ownerId: string, media: Media, result: ImageDescription | null, error = "") {
   const previous = aiTagRecord(media.metadata);
   const at = new Date().toISOString();
   if (!result) {
-    await db.from("media").update({ metadata: { ...(media.metadata || {}), ai_tags: { ...(previous || {}), failed: true, at } } }).eq("owner_id", ownerId).eq("id", media.id);
+    await db.from("media").update({ metadata: { ...(media.metadata || {}), ai_tags: { ...(previous || {}), failed: true, error: error || "No description came back.", at } } }).eq("owner_id", ownerId).eq("id", media.id);
     return false;
   }
   if (result.tags.length) {
@@ -70,20 +76,21 @@ export async function countUndescribed(db: SupabaseClient, ownerId: string) {
 }
 
 // Describes the given images, or the next undescribed ones, until the limit or the time budget runs out.
-export async function describeImagesFor(db: SupabaseClient, ownerId: string, { ids, limit = 12, deadline = Date.now() + 40000 }: { ids?: string[]; limit?: number; deadline?: number } = {}): Promise<DescribeResult> {
+export async function describeImagesFor(db: SupabaseClient, ownerId: string, { ids, limit = 6, deadline = Date.now() + 50000 }: { ids?: string[]; limit?: number; deadline?: number } = {}): Promise<DescribeResult> {
   if (!imageTaggingReady()) throw new Error("Image tagging isn't set up yet. Add ANTHROPIC_API_KEY in Vercel.");
   let request = db.from("media").select(columns).eq("owner_id", ownerId).eq("media_type", "image").not("storage_path", "is", null);
   request = ids ? request.in("id", ids) : request.is("metadata->ai_tags", null).order("created_at", { ascending: false });
-  const { data, error } = await request.limit(limit);
-  if (error) throw new Error("Could not load your images.");
+  const { data, error: loadError } = await request.limit(limit);
+  if (loadError) throw new Error("Could not load your images.");
   const { data: tagRows } = await db.from("tags").select("name").eq("owner_id", ownerId).order("name").limit(300);
   const existing = (tagRows || []).map(row => String(row.name));
 
-  const client = new Anthropic({ maxRetries: 1, timeout: 30000 });
-  let described = 0; let failed = 0; let stopped = "";
+  // Each request gets less time than the server function has left, so a slow reply can't outlive the request.
+  const client = new Anthropic({ maxRetries: 0, timeout: 25000 });
+  let described = 0; let failed = 0; let stopped = ""; let firstError = "";
   const queue = [...(data || []) as Media[]];
   // Three at a time keeps a batch inside one server request without tripping rate limits.
-  while (queue.length && !stopped && Date.now() < deadline - 8000) {
+  while (queue.length && !stopped && Date.now() < deadline - 27000) {
     const batch = queue.splice(0, 3);
     await Promise.all(batch.map(async media => {
       try {
@@ -94,9 +101,14 @@ export async function describeImagesFor(db: SupabaseClient, ownerId: string, { i
         if (problem instanceof Anthropic.AuthenticationError || problem instanceof Anthropic.PermissionDeniedError) stopped = "Anthropic turned down the API key. Check ANTHROPIC_API_KEY in Vercel.";
         else if (problem instanceof Anthropic.RateLimitError) stopped = "Claude is busy right now. Try again in a minute.";
         else if (problem instanceof Anthropic.APIError && problem.status === 400 && /credit|billing/i.test(problem.message)) stopped = "Your Anthropic account is out of credit.";
-        else failed += 1;
+        else {
+          // Marked as failed, with the reason, so the next batch moves on instead of retrying the same images forever.
+          firstError ||= problem instanceof Error ? problem.message.slice(0, 300) : "Unknown error";
+          failed += 1;
+          await save(db, ownerId, media, null, problem instanceof Error ? problem.message.slice(0, 300) : "").catch(() => null);
+        }
       }
     }));
   }
-  return { described, failed, remaining: ids ? 0 : await countUndescribed(db, ownerId), stopped };
+  return { described, failed, remaining: ids ? 0 : await countUndescribed(db, ownerId), stopped, error: firstError };
 }
