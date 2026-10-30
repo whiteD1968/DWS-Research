@@ -11,6 +11,7 @@ import { PdfPageResearch } from "@/components/pdf-page-research";
 import { libraryImages } from "@/lib/similar-images";
 import { similarImages } from "@/lib/similar";
 import { thumbnailUrl } from "@/lib/thumbnails";
+import { ItemTags } from "@/components/item-tags";
 
 export default async function LibraryItemPage({ params }: { params: Promise<{kind: string; id: string}> }) {
   const {kind,id} = await params; if (kind !== "media" && kind !== "note") notFound();
@@ -33,7 +34,7 @@ export default async function LibraryItemPage({ params }: { params: Promise<{kin
       {kind === "media" && <div className="detail-actions">{url ? <a className="button" href={url} target="_blank" rel="noreferrer">Open original ↗</a> : <p role="status">The file could not be opened. Refresh to retry.</p>}</div>}
       {kind === "media" && item.source_page && typeof item.metadata?.source_document_id === "string" && <p className="source-text"><Link href={`/library/items/media/${item.metadata.source_document_id}`}>View source PDF, page {item.source_page} ↗</Link></p>}
       <p className="source-text">{kind === "note" ? item.plain_text : item.caption}</p>
-      {self && self.tags.length > 0 && <ul className="item-tags" aria-label="Tags">{self.tags.map((tag, index) => <li key={self.tagIds[index]}><Link href={`/library?view=images&tags=${encodeURIComponent(self.tagIds[index])}`}>{tag}</Link></li>)}</ul>}
+      {self && <ItemTags id={id} tags={self.tagIds.map((tagId, index) => ({ id: tagId, name: self.tags[index] }))} />}
       {self && <section className="similar-images" aria-labelledby="similar-heading"><h2 id="similar-heading">More like this</h2>
         {similar.length ? <ul>{similar.map(match => <li key={match.id}><Link href={`/library/items/media/${match.id}`}><img src={thumbnailUrl(match.id)} alt={match.image.title} loading="lazy" /><span>{match.shared.length ? match.shared.join(", ") : "Similar description"}</span></Link></li>)}</ul>
           : <p className="similar-empty">{self.tags.length || self.text ? "Nothing else in your Library looks close to this yet." : "Describe this image with AI in the Library to find similar ones."}</p>}
