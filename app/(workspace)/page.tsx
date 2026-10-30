@@ -7,6 +7,7 @@ import { JournalComposer } from "@/components/journal-composer";
 import { thumbnailUrl } from "@/lib/thumbnails";
 import { formatDay, studioToday } from "@/lib/journal";
 import { RemindersList } from "@/components/reminders-list";
+import { dossierLinkGroup } from "@/lib/dossier";
 export default async function TodayPage() {
   const user = await requireUser(); const db = await createClient();
   const [projects, topics, references] = await Promise.all([
@@ -24,6 +25,7 @@ export default async function TodayPage() {
   const links = [
     { label: "Projects", options: (allProjects.data || []).map(row => ({ value: `project:${row.id}`, label: row.title || "Untitled" })) },
     { label: "Research topics", options: (allTopics.data || []).map(row => ({ value: `research_thread:${row.id}`, label: row.title || "Untitled" })) },
+    dossierLinkGroup,
   ];
   return <><header className="page-header"><div><p className="eyebrow">Dustin White Studio / Research desk</p><h1 className="page-title">Space to think.</h1><p className="page-description">Return to an inquiry, gather a new perspective, or compose your next direction.</p></div><Link className="button button-primary" href="/discover">Discover sources ↗</Link></header>
     <section className="today-card" aria-label="Today">
