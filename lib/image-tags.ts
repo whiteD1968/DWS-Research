@@ -59,3 +59,16 @@ export function nextText(current: unknown, previousAi: unknown, fresh: string) {
   if (!fresh) return null;
   return !now || (typeof previousAi === "string" && now === previousAi.trim()) ? fresh : null;
 }
+
+// The key should be one token. A pasted example command or stray quotes fail inside the HTTP client with the whole value in the message.
+export function apiKeyProblem(value: unknown) {
+  const key = typeof value === "string" ? value.trim() : "";
+  if (!key) return "Image tagging isn't set up yet. Add ANTHROPIC_API_KEY in Vercel.";
+  return /^sk-ant-[A-Za-z0-9_-]+$/.test(key) ? "" : "The ANTHROPIC_API_KEY value in Vercel isn't just a key. Replace it with the key alone: one line starting with sk-ant-, with no quotes, spaces, or command around it. Then redeploy.";
+}
+
+// Errors are shown in the Library and saved with the image, so anything shaped like a key is blanked out first.
+export const redactSecrets = (text: string) => text.replace(/sk-ant-[A-Za-z0-9_-]+/g, "[key hidden]").replace(/(x-api-key|authorization|bearer)\S*\s*[:=]?\s*\S+/gi, "$1 [hidden]").slice(0, 300);
+
+// Images that failed before are tried again alongside ones never described.
+export const undescribedFilter = "metadata->ai_tags.is.null,metadata->ai_tags->>failed.eq.true";
