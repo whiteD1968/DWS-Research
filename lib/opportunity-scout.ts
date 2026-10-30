@@ -29,16 +29,28 @@ export function leadKey(url: string) {
   } catch { return ""; }
 }
 
+const recentlyClosedDays = 120;
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 // Picks out a deadline written the usual ways ("Deadline: March 3, 2027", "due 3/3/2027", "Apply by Mar 3").
 export function guessDeadline(text: string, today: string) {
   const lower = text.toLowerCase();
   const candidates: string[] = [];
   const iso = (y: number, m: number, d: number) => (m >= 1 && m <= 12 && d >= 1 && d <= 31 ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : "");
+  // A date without a year that passed in the last few months is a closed call, not next year's.
+  const yearless = (month: number, day: number) => {
+    const thisYear = iso(Number(today.slice(0, 4)), month, day);
+    return thisYear >= today || daysBetween(thisYear, today) <= recentlyClosedDays ? thisYear : iso(Number(today.slice(0, 4)) + 1, month, day);
+  };
+  const monthNumber = (name: string) => months.findIndex(month => month.startsWith(name.slice(0, 3))) + 1;
   for (const match of lower.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d{2}))?/g)) {
-    const month = months.findIndex(name => name.startsWith(match[1].slice(0, 3))) + 1;
-    const year = match[3] ? Number(match[3]) : Number(today.slice(0, 4)) + (iso(Number(today.slice(0, 4)), month, Number(match[2])) < today ? 1 : 0);
-    candidates.push(iso(year, month, Number(match[2])));
+    const month = monthNumber(match[1]);
+    candidates.push(match[3] ? iso(Number(match[3]), month, Number(match[2])) : yearless(month, Number(match[2])));
+  }
+  // "18 October 2026", the way many European and UK calls write it.
+  for (const match of lower.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?(?:,?\s+(20\d{2}))?/g)) {
+    const month = monthNumber(match[2]);
+    candidates.push(match[3] ? iso(Number(match[3]), month, Number(match[1])) : yearless(month, Number(match[1])));
   }
   for (const match of lower.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/g)) candidates.push(iso(Number(match[3]), Number(match[1]), Number(match[2])));
   const near = /deadline|due|apply by|closes|submissions? (?:close|end)/.test(lower);
@@ -63,11 +75,29 @@ export function guessKind(text: string): OpportunityKind {
 }
 export const kindExists = (kind: string) => opportunityKinds.some(option => option.key === kind);
 
+// Directory and roundup pages list other calls rather than being one, so the scout skips them.
+const listingPattern = /\b(?:full directory|directory of|list of|all (?:open )?calls|calls? ending soon|ending soon|this (?:week|month)'?s? (?:open )?calls|roundup|round-up|(?:\d+|top|best) (?:open calls|opportunities|residencies|grants|competitions|calls for artists))\b/i;
+export const looksLikeListing = (title: string) => listingPattern.test(title);
+
+// Search results often end with the site's name ("… - fundsforNGOs", "… | Arthead"), which the lead already shows as its source.
+const squash = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, "");
+export function cleanTitle(title: string, source: string) {
+  const site = squash(source);
+  let text = title.trim();
+  for (let round = 0; round < 2 && site; round += 1) {
+    const match = text.match(/^(.{12,}?)\s+[-|–—·:]\s+([^-|–—·]{2,60})$/);
+    const tail = match ? squash(match[2]) : "";
+    if (!match || !tail || !(tail === site || (tail.length >= 4 && (site.includes(tail) || tail.includes(site))))) break;
+    text = match[1].trim();
+  }
+  return text;
+}
+
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 export function leadFrom(row: { id?: unknown; title?: unknown; plain_text?: unknown; metadata?: unknown }): Lead | null {
   const meta = (row.metadata || {}) as Record<string, unknown>;
   const url = str(meta.url);
   if (!url) return null;
   const kind = kindExists(str(meta.kind)) ? (str(meta.kind) as OpportunityKind) : "other";
-  return { id: str(row.id), title: str(row.title) || url, url, source: str(meta.source), summary: str(row.plain_text), query: str(meta.query), foundAt: str(meta.found_at), deadline: str(meta.deadline), kind };
+  return { id: str(row.id), title: cleanTitle(str(row.title), str(meta.source)) || url, url, source: str(meta.source), summary: str(row.plain_text), query: str(meta.query), foundAt: str(meta.found_at), deadline: str(meta.deadline), kind };
 }
