@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addMediaToProject, deleteMediaMany, tagMedia, untagMedia } from "@/app/actions/library";
+import { describeSelectedImages } from "@/app/(workspace)/library/describe-actions";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
 import { groupByMonth, type LibraryEntry, type LibraryLayout } from "@/lib/library";
 
 export type GridEntry = LibraryEntry & { image: string | null };
 type Option = { id: string; title: string };
 
-export function LibraryGrid({ entries, layout, grouped = false, selectable, editable, tags, projects }: { entries: GridEntry[]; layout: LibraryLayout; grouped?: boolean; selectable: boolean; editable: boolean; tags: Option[]; projects: Option[] }) {
+export function LibraryGrid({ entries, layout, grouped = false, selectable, editable, describable = false, tags, projects }: { entries: GridEntry[]; layout: LibraryLayout; grouped?: boolean; selectable: boolean; editable: boolean; describable?: boolean; tags: Option[]; projects: Option[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<number | null>(null);
@@ -29,10 +30,10 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
     } else setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
     setAnchor(index);
   }
-  function run(task: () => Promise<unknown>, done: string) {
+  function run(task: () => Promise<unknown>, done: string | ((result: unknown) => string)) {
     setStatus("");
     start(async () => {
-      try { await task(); setStatus(done); setSelected([]); router.refresh(); }
+      try { const result = await task(); setStatus(typeof done === "string" ? done : done(result)); setSelected([]); router.refresh(); }
       catch (error) { setStatus(error instanceof Error ? error.message : "Something went wrong. Please retry."); }
     });
   }
@@ -67,6 +68,7 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
         {projects.length > 0 && <select className="library-batch-select" value="" disabled={pending} aria-label="Add to a project" onChange={event => { const project = projects.find(item => item.id === event.target.value); if (project) run(() => addMediaToProject(selected, project.id), `Added to ${project.title}.`); }}>
           <option value="">Add to project…</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
         </select>}
+        {describable && <button className="button" type="button" disabled={pending || selected.length > 30} title={selected.length > 30 ? "Select up to 30 images" : "Write a caption, alt text, and tags with Claude"} onClick={() => { run(() => describeSelectedImages(selected), result => { const r = result as { described: number; failed: number; stopped: string }; return r.stopped || `Described ${r.described} ${r.described === 1 ? "image" : "images"}.${r.failed ? ` ${r.failed} couldn’t be read.` : ""}`; }); }}>Describe with AI</button>}
         <button className="button button-danger-quiet" type="button" disabled={pending} onClick={() => { setConfirmation(""); setStatus(""); dialog.current?.showModal(); }}>Delete</button>
         <button className="text-button" type="button" disabled={pending} onClick={() => setSelected(entries.map(entry => entry.id))}>Select page</button>
         <button className="text-button" type="button" disabled={pending} onClick={() => { setSelected([]); setStatus(""); }}>Clear</button>
