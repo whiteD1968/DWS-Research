@@ -21,9 +21,9 @@ export function digestSettingsFrom(meta: unknown, fallbackEmail = ""): DigestSet
 }
 
 // Vercel cron runs in UTC, so the job is scheduled for both 7am EDT and 7am EST and only sends on the one that is 7am in New York.
+export const isMorningRun = (now = new Date()) => Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(now)) === digestHour;
 export function digestDue(settings: DigestSettings, now = new Date()) {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(now));
-  return settings.enabled && !!settings.email && hour === digestHour && settings.lastSent !== studioToday(now);
+  return settings.enabled && !!settings.email && isMorningRun(now) && settings.lastSent !== studioToday(now);
 }
 
 export type ReminderRow = { id: string; title: string | null; plain_text: string | null; parent_type: string | null; metadata: unknown };

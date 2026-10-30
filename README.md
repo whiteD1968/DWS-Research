@@ -562,3 +562,16 @@ nothing. `vercel.json` schedules `/api/cron/digest` at 11:00 and 12:00 UTC, and 
 sends only on the run that falls at 7am in New York. The same job runs the opportunity
 scout, so leads arrive even on days the site isn't opened. Set `SUPABASE_SECRET_KEY`,
 `CRON_SECRET`, and `RESEND_API_KEY` in Vercel. *Send a test now* checks the setup.
+
+## Zotero sync
+
+Library → References → *Connect and sync*. Paste a Zotero private key with read access
+to your library. The site asks Zotero for the user ID, so the key is the whole setup. You
+can also add a collection key to sync just one collection. Each top-level item becomes a
+source (with DOI, URL and publication) plus a reference (with authors, year, abstract,
+tags and a mapped type). Re-syncs fetch only items changed since the last library version
+and update them in place, keeping notes added on the site. A run imports at most 1,000
+items, and the next run continues from there. The morning cron job (see above) syncs
+every connected library. Items deleted in Zotero stay in the Library. The key is kept in
+the owner's `zotero_settings` note under row-level security and is never sent to the
+browser. No migration is needed.

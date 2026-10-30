@@ -2244,3 +2244,17 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .calendar-dialog .field { margin-bottom: 14px; }
 .digest-message { margin: 0 0 12px; font-size: 14px; color: var(--accent-strong); }
 .digest-buttons { display: flex; gap: 8px; }
+
+/* Zotero: connect with a pasted key, then sync on demand and every morning. */
+.zotero { margin: 0 0 24px; padding: 20px 22px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.zotero-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.zotero-head .eyebrow { margin: 0 0 4px; }
+.zotero h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.zotero-copy { margin: 4px 0 0; font-size: 14px; color: var(--text-muted); }
+.zotero-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.zotero-form { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+.zotero-steps { margin: 0 0 14px; padding-left: 20px; font-size: 14px; color: var(--text-muted); display: grid; gap: 6px; }
+.zotero-steps a { color: var(--accent); }
+.zotero-fields { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
+.zotero .digest-message, .zotero .cv-error { margin: 12px 0 0; }
+@media (max-width: 600px) { .zotero-head { flex-direction: column; } .zotero-fields { grid-template-columns: 1fr; } }

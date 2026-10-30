@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
-import { digestDue, digestParent, digestSettingsFrom } from "@/lib/digest";
+import { digestDue, digestParent, digestSettingsFrom, isMorningRun } from "@/lib/digest";
+import { zoteroParent } from "@/lib/zotero";
+import { syncZoteroFor } from "@/lib/zotero-sync";
 import { gatherDigest, sendDigest, siteUrl } from "@/lib/digest-run";
 import { scoutFor } from "@/lib/scout-run";
 import { studioToday } from "@/lib/journal";
@@ -15,12 +17,20 @@ function authorized(request: Request) {
   return !!secret && given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }
 
-// Vercel Cron calls this at 11:00 and 12:00 UTC; whichever is 7am in New York runs the scout and sends the email.
+// Vercel Cron calls this at 11:00 and 12:00 UTC; whichever is 7am in New York syncs Zotero, runs the scout, and sends the email.
 export async function GET(request: Request) {
   if (!authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const db = createServiceClient();
   if (!db) return Response.json({ error: "SUPABASE_SECRET_KEY is not set" }, { status: 503 });
   const now = new Date();
+  const synced: { owner: string; status: string }[] = [];
+  if (isMorningRun(now)) {
+    const { data: zoteroRows } = await db.from("notes").select("owner_id").eq("parent_type", zoteroParent).limit(100);
+    for (const owner of new Set((zoteroRows || []).map(row => row.owner_id as string))) {
+      try { const result = await syncZoteroFor(db, owner); synced.push({ owner, status: `added ${result.added}, updated ${result.updated}` }); }
+      catch { synced.push({ owner, status: "failed" }); }
+    }
+  }
   const { data, error } = await db.from("notes").select("id,owner_id,metadata").eq("parent_type", digestParent).eq("metadata->>enabled", "true").limit(100);
   if (error) return Response.json({ error: "Could not load digest settings" }, { status: 500 });
   const baseUrl = siteUrl(new URL(request.url).origin);
@@ -42,5 +52,5 @@ export async function GET(request: Request) {
       results.push({ owner, status: "failed" });
     }
   }
-  return Response.json({ ran: now.toISOString(), results });
+  return Response.json({ ran: now.toISOString(), zotero: synced, results });
 }
