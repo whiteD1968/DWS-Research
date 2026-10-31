@@ -7,11 +7,11 @@ import { followBoard, syncBoard, unfollowBoard } from "@/app/(workspace)/library
 type Feed = { url: string; label: string; collectionId: string; lastSync: string; lastError: string; imported: number };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 // Pinterest's feed can lag behind the board, notably just after a board is made public.
-const emptyFeed = (items: number) => items
-  ? `Pinterest’s feed for this board lists ${items} ${items === 1 ? "entry" : "entries"}, but none could be read as pins.`
+const emptyFeed = (items: number, sample = "") => items
+  ? `Pinterest’s feed for this board lists ${items} ${items === 1 ? "entry" : "entries"}, but none could be read as pins.${sample ? ` The first one reads: ${sample}` : ""}`
   : "Pinterest’s feed for this board is empty for now. Its feed can lag behind the board by several hours, for instance after a board is made public, so check again later.";
-const summary = (result: { imported: number; skipped: number; failed: number; found: number; items: number; reason: string }) =>
-  !result.found ? emptyFeed(result.items) :
+const summary = (result: { imported: number; skipped: number; failed: number; found: number; items: number; sample: string; reason: string }) =>
+  !result.found ? emptyFeed(result.items, result.sample) :
   `${result.imported ? `Added ${result.imported} ${result.imported === 1 ? "image" : "images"}` : "No new pins"}${result.failed ? `, ${result.failed} couldn’t be saved because ${result.reason}` : ""}.`;
 
 export function PinterestImport({ feeds }: { feeds: Feed[] }) {
@@ -34,7 +34,7 @@ export function PinterestImport({ feeds }: { feeds: Feed[] }) {
   }
 
   return <section className="pinterest" aria-label="Pinterest boards">
-    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await value(followBoard(input)); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins${result.failed ? `; ${result.failed} couldn’t be saved because ${result.reason}` : ""}.` : `Following “${result.title}”. ${emptyFeed(result.items)}`; }); }}>
+    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await value(followBoard(input)); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins${result.failed ? `; ${result.failed} couldn’t be saved because ${result.reason}` : ""}.` : `Following “${result.title}”. ${emptyFeed(result.items, result.sample)}`; }); }}>
       <label className="field"><span>Board link</span><input value={input} onChange={event => setInput(event.target.value)} placeholder="pinterest.com/yourname/board-name/" disabled={!!busy} required /></label>
       <button className="button button-primary" disabled={!!busy}>{busy === "add" ? "Importing…" : "Follow board"}</button>
     </form>
