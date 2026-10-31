@@ -2,23 +2,25 @@
 
 export const imageTagModel = "claude-opus-5-5";
 export const maxImageTags = 6;
-export type ImageDescription = { caption: string; altText: string; tags: string[] };
-export type AiTagRecord = { tags?: string[]; caption?: string; alt_text?: string; model?: string; at?: string; failed?: boolean; v?: number };
+export type ImageDescription = { title: string; caption: string; altText: string; tags: string[] };
+export type AiTagRecord = { tags?: string[]; title?: string; caption?: string; alt_text?: string; model?: string; at?: string; failed?: boolean; v?: number };
 
 // Structured output: the reply is always this JSON object.
 export const imageTagSchema = {
   type: "object",
   properties: {
+    title: { type: "string", description: "A short catalogue-style title, two to six words." },
     caption: { type: "string", description: "One plain sentence saying what the image shows." },
     alt_text: { type: "string", description: "Short alt text for screen readers, under 125 characters." },
     tags: { type: "array", items: { type: "string" }, description: "Three to six short lowercase tags." },
   },
-  required: ["caption", "alt_text", "tags"],
+  required: ["title", "caption", "alt_text", "tags"],
   additionalProperties: false,
 } as const;
 
 export const imageTagSystem = `You describe images in an artist and researcher's private library so they can find them again by search and tag.
 
+Write a title: two to six words naming what this is, like a catalogue entry ("Tensile membrane pavilion render", "Glaze test tiles"). No quotes, no final period, and never the file name.
 Write a caption: one plain sentence about what the image shows (subject, material, form, setting). Say what is visible; don't guess names, places, or dates you can't see.
 Write alt text: a shorter version for screen readers, under 125 characters, without "image of".
 Give three to five tags of one to three lowercase words each. A tag is useful only if it separates this image from most others in the library, so:
@@ -46,7 +48,7 @@ export function imageTagPrompt(uses: TagUse[], title: string, total = 0) {
 }
 
 // Bumped when the tagging rules change, so images described under older rules are offered again.
-export const imageTagVersion = 2;
+export const imageTagVersion = 3;
 
 // Words that fit nearly any image and never help find one.
 const filler = new Set(["design", "art", "artwork", "image", "photo", "picture", "object", "abstract", "modern", "aesthetic", "form", "shape", "curvilinear form", "minimalist", "minimal", "organic form"]);
@@ -68,10 +70,11 @@ export function parseImageDescription(raw: unknown, existing: string[] = []): Im
   if (typeof raw === "string") { try { data = JSON.parse(raw); } catch { return null; } }
   const value = (data || {}) as Record<string, unknown>;
   const caption = clean(value.caption, 300);
+  const title = clean(value.title, 80).replace(/^["“']+|["”']+$/g, "").replace(/\.$/, "");
   const altText = clean(value.alt_text, 160).replace(/^(an? )?(image|photo|picture) of /i, "");
   const tags = [...new Set((Array.isArray(value.tags) ? value.tags : []).map(tag => normalizeTag(tag, existing)).filter(tag => tag && !filler.has(tag.toLowerCase())))].slice(0, maxImageTags);
   if (!caption && !tags.length) return null;
-  return { caption, altText: altText ? altText[0].toUpperCase() + altText.slice(1) : "", tags };
+  return { title: title ? title[0].toUpperCase() + title.slice(1) : "", caption, altText: altText ? altText[0].toUpperCase() + altText.slice(1) : "", tags };
 }
 
 export const aiTagRecord = (meta: unknown): AiTagRecord | null => {
@@ -98,3 +101,18 @@ export const redactSecrets = (text: string) => text.replace(/sk-ant-[A-Za-z0-9_-
 
 // Images never described, ones that failed, and ones described under older rules.
 export const undescribedFilter = `metadata->ai_tags.is.null,metadata->ai_tags->>failed.eq.true,metadata->ai_tags->>v.is.null,metadata->ai_tags->>v.neq.${imageTagVersion}`;
+
+// Titles that are really file names: empty, the uploaded name, anything ending in an image extension, or camera-style numbers.
+export function looksLikeFilename(title: unknown, originalFilename?: unknown) {
+  const text = typeof title === "string" ? title.trim() : "";
+  if (!text || text === "Untitled") return true;
+  if (typeof originalFilename === "string" && text === originalFilename.trim()) return true;
+  return /\.(png|jpe?g|webp|gif|heic|heif|tiff?|bmp|avif)$/i.test(text) || /^(img|dsc|dscn|pxl|image|photo|screenshot|scan)?[\s_-]*[\d][\d\s_-]{3,}$/i.test(text);
+}
+
+// A title is replaced only when it is a file name or was written by an earlier description, never when it was typed by hand.
+export function nextTitle(current: unknown, originalFilename: unknown, previousAi: unknown, fresh: string) {
+  if (!fresh) return null;
+  const now = typeof current === "string" ? current.trim() : "";
+  return looksLikeFilename(now, originalFilename) || (typeof previousAi === "string" && now === previousAi.trim()) ? fresh : null;
+}

@@ -53,5 +53,16 @@ test('filler tags are dropped and a re-description unlinks the tags it no longer
   assert.deepEqual(tags.staleAiTags(undefined, ['a']), []);
   assert.deepEqual(tags.broadTags([{ name: 'a', count: 40 }, { name: 'b', count: 10 }], 100), ['a']);
   assert.deepEqual(tags.broadTags([{ name: 'a', count: 4 }], 5), []);
-  assert.match(tags.undescribedFilter, /ai_tags->>v\.neq\.2/);
+  assert.match(tags.undescribedFilter, /ai_tags->>v\.neq\.3/);
+});
+test('titles come back tidy and replace only file names or earlier AI titles', () => {
+  const result = tags.parseImageDescription({ title: '"tensile membrane pavilion render."', caption: 'x', alt_text: '', tags: [] });
+  assert.equal(result.title, 'Tensile membrane pavilion render');
+  assert.equal(tags.nextTitle('3458764517744549575.png', '3458764517744549575.png', undefined, 'Glaze tiles'), 'Glaze tiles');
+  assert.equal(tags.nextTitle('IMG_2041', null, undefined, 'Glaze tiles'), 'Glaze tiles');
+  assert.equal(tags.nextTitle('', null, undefined, 'Glaze tiles'), 'Glaze tiles');
+  assert.equal(tags.nextTitle('Old AI title', null, 'Old AI title', 'Glaze tiles'), 'Glaze tiles');
+  assert.equal(tags.nextTitle('Studio wall, spring', null, 'Old AI title', 'Glaze tiles'), null);
+  assert.equal(tags.nextTitle('Pavilion 2024', null, undefined, 'Glaze tiles'), null);
+  assert.equal(tags.nextTitle('x.png', 'x.png', undefined, ''), null);
 });
