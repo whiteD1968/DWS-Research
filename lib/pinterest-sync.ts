@@ -8,9 +8,9 @@ export async function fetchFeed(url: string) {
   const response = await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(15000) }).catch(() => null);
   if (!response) throw new Error("Couldn’t reach Pinterest. Please retry.");
   if (response.status === 404) throw new Error("Pinterest has no public feed at that address. Check the board link, and that the board isn’t secret.");
-  if (!response.ok) throw new Error("Pinterest didn’t answer. Please retry later.");
+  if (!response.ok) throw new Error(`Pinterest answered with an error (${response.status}). Please retry later.`);
   const xml = await response.text();
-  if (!/<rss[\s>]/i.test(xml)) throw new Error("That address didn’t return a Pinterest feed. Check the board link.");
+  if (!/<rss[\s>]/i.test(xml)) throw new Error(`Pinterest sent a web page instead of the board’s feed (${response.status}, ${(response.headers.get("content-type") || "unknown").split(";")[0]}). It may be blocking automated requests.`);
   return parseFeed(xml);
 }
 

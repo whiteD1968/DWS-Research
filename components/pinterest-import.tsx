@@ -17,6 +17,8 @@ export function PinterestImport({ feeds }: { feeds: Feed[] }) {
   const [error, setError] = useState("");
   const [, start] = useTransition();
 
+  // Actions report failures as { ok: false, error } rather than throwing.
+  async function value<T>(call: Promise<{ ok: true; value: T } | { ok: false; error: string }>) { const result = await call; if (!result.ok) throw new Error(result.error); return result.value; }
   function run(key: string, task: () => Promise<string>) {
     setBusy(key); setError(""); setMessage("");
     start(async () => {
@@ -27,7 +29,7 @@ export function PinterestImport({ feeds }: { feeds: Feed[] }) {
   }
 
   return <section className="pinterest" aria-label="Pinterest boards">
-    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await followBoard(input); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins.` : `Following “${result.title}”. It has no pins yet.`; }); }}>
+    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await value(followBoard(input)); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins.` : `Following “${result.title}”. It has no pins yet.`; }); }}>
       <label className="field"><span>Board link</span><input value={input} onChange={event => setInput(event.target.value)} placeholder="pinterest.com/yourname/board-name/" disabled={!!busy} required /></label>
       <button className="button button-primary" disabled={!!busy}>{busy === "add" ? "Importing…" : "Follow board"}</button>
     </form>
@@ -41,8 +43,8 @@ export function PinterestImport({ feeds }: { feeds: Feed[] }) {
       </div>
       <div className="pinterest-actions">
         {feed.collectionId && <Link href={`/library?view=images&in=collection:${feed.collectionId}`}>View images</Link>}
-        <button type="button" className="button" disabled={!!busy} onClick={() => run(feed.url, async () => summary(await syncBoard(feed.url)))}>{busy === feed.url ? "Checking…" : "Check now"}</button>
-        <button type="button" className="text-button" disabled={!!busy} onClick={() => run(`x${feed.url}`, async () => { await unfollowBoard(feed.url); return `Stopped following “${feed.label}”. Its images stay in the Library.`; })}>Unfollow</button>
+        <button type="button" className="button" disabled={!!busy} onClick={() => run(feed.url, async () => summary(await value(syncBoard(feed.url))))}>{busy === feed.url ? "Checking…" : "Check now"}</button>
+        <button type="button" className="text-button" disabled={!!busy} onClick={() => run(`x${feed.url}`, async () => { await value(unfollowBoard(feed.url)); return `Stopped following “${feed.label}”. Its images stay in the Library.`; })}>Unfollow</button>
       </div>
     </li>)}</ul>}
   </section>;
