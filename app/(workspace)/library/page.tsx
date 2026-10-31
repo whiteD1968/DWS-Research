@@ -45,6 +45,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   }
   const tagged = (tagId: string) => every(from => db.from("record_tags").select("record_id").eq("owner_id", user.id).eq("record_type", "media").eq("tag_id", tagId).range(from, from + 999)).then(rows => rows.map(row => String(row.record_id)));
   async function usedIn(place: NonNullable<typeof within>) {
+    if (place.kind === "collection") return (await every(from => db.from("collection_items").select("record_id").eq("owner_id", user.id).eq("collection_id", place.id).eq("record_type", "media").range(from, from + 999))).map(row => String(row.record_id));
     if (place.kind !== "board") return (await every(from => db.from("relationships").select("target_id").eq("owner_id", user.id).eq("source_type", place.kind).eq("source_id", place.id).eq("target_type", "media").range(from, from + 999))).map(row => String(row.target_id));
     const [items, board] = await Promise.all([
       every(from => db.from("board_items").select("record_id").eq("owner_id", user.id).eq("board_id", place.id).eq("record_type", "media").range(from, from + 999)),
@@ -86,7 +87,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     if (pattern) request = request.or(mediaSearch);
     return ordered(request, "original_filename").range(...rangeFor(kind));
   }
-  let notesRequest = db.from("notes").select("id,title,plain_text,parent_type,updated_at", { count: "exact", head: !shown("notes") }).eq("owner_id", user.id).or("parent_type.is.null,parent_type.not.in.(dossier_settings,opportunity_settings,opportunity_lead,contact,calendar_settings,digest_settings,zotero_settings,kit)");
+  let notesRequest = db.from("notes").select("id,title,plain_text,parent_type,updated_at", { count: "exact", head: !shown("notes") }).eq("owner_id", user.id).or("parent_type.is.null,parent_type.not.in.(dossier_settings,opportunity_settings,opportunity_lead,contact,calendar_settings,digest_settings,zotero_settings,pinterest_settings,kit)");
   if (pattern) notesRequest = notesRequest.or(`title.ilike.${pattern},plain_text.ilike.${pattern}`);
   let referencesRequest = db.from("references").select("id,title,reference_type,creator,why_saved,description,primary_media_id,metadata,updated_at", { count: "exact", head: !shown("references") }).eq("owner_id", user.id);
   if (pattern) referencesRequest = referencesRequest.or(`title.ilike.${pattern},why_saved.ilike.${pattern},creator.ilike.${pattern},description.ilike.${pattern}`);
@@ -113,7 +114,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const [entryTags, allTags, places] = await Promise.all([
     mediaIds.length ? db.from("record_tags").select("record_id,tag_id").eq("owner_id", user.id).eq("record_type", "media").in("record_id", mediaIds).then(result => result.data || []) : Promise.resolve([] as Row[]),
     mediaView ? every(from => db.from("record_tags").select("tag_id").eq("owner_id", user.id).eq("record_type", "media").range(from, from + 999)) : Promise.resolve([] as Row[]),
-    mediaView ? Promise.all((["projects", "research_threads", "boards"] as const).map(table => db.from(table).select("id,title").eq("owner_id", user.id).order("title").limit(300).then(result => result.data || []))) : Promise.resolve([[], [], []]),
+    mediaView ? Promise.all((["projects", "research_threads", "boards", "collections"] as const).map(table => db.from(table).select("id,title").eq("owner_id", user.id).order("title").limit(300).then(result => result.data || []))) : Promise.resolve([[], [], [], []]),
   ]);
 
   // Tag names for both the chips (counted across the archive) and the tags shown on each card.
@@ -127,15 +128,15 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
 
   const imageFor = (entry: LibraryEntry) => entry.thumbnail || (entry.kind === "documents" || !entry.mediaId ? null : thumbnailUrl(entry.mediaId));
   const gridEntries = entries.map(entry => ({ ...entry, image: imageFor(entry), tags: tagsByRecord.get(entry.id) || [] }));
-  const [projects, topics, boards] = places;
+  const [projects, topics, boards, collections] = places;
   const option = (kind: string) => (row: Row) => ({ value: `${kind}:${row.id}`, label: String(row.title || "Untitled") });
   const filtered = !!filterIds;
 
   return <>
-    <header className="page-header"><div><p className="eyebrow">Your source archive</p><h1 className="page-title">Library</h1><p className="page-description">Every image, document, note, and reference in one place. Filter by type or search across all of them.</p></div><Link className="button" href="/library/references">New reference</Link></header>
+    <header className="page-header"><div><p className="eyebrow">Your source archive</p><h1 className="page-title">Library</h1><p className="page-description">Every image, document, note, and reference in one place. Filter by type or search across all of them.</p></div><div className="inline-actions"><Link className="button" href="/library/pinterest">Import from Pinterest</Link><Link className="button" href="/library/references">New reference</Link></div></header>
     <form className="repository-search library-search" role="search">{view !== "all" && <input type="hidden" name="view" value={view} />}{layout !== "grid" && <input type="hidden" name="layout" value={layout} />}{sort !== "newest" && <input type="hidden" name="sort" value={sort} />}{tagIds.length > 0 && <input type="hidden" name="tags" value={tagIds.join(",")} />}{state.within && <input type="hidden" name="in" value={state.within} />}<label className="field"><span>Search {view === "all" ? "the library" : libraryLabels[view].toLowerCase()}</span><input name="q" type="search" defaultValue={search} placeholder="Titles, captions, notes, creators…" /></label><button className="button">Search</button>{search && <Link className="button" href={libraryHref({ ...state, q: "", page: 1 })}>Clear</Link>}</form>
     <LibraryFilters active={view} search={search} layout={layout} sort={sort} counts={{ all: counts.images + counts.documents + counts.notes + counts.references, ...counts, ...(filtered ? { all: undefined, [view]: undefined } : {}) }} />
-    <LibraryToolbar state={state} tags={mediaView ? chips : undefined} places={mediaView ? [{ label: "Projects", options: projects.map(option("project")) }, { label: "Research topics", options: topics.map(option("research_thread")) }, { label: "Boards", options: boards.map(option("board")) }] : undefined} />
+    <LibraryToolbar state={state} tags={mediaView ? chips : undefined} places={mediaView ? [{ label: "Projects", options: projects.map(option("project")) }, { label: "Research topics", options: topics.map(option("research_thread")) }, { label: "Boards", options: boards.map(option("board")) }, { label: "Collections", options: collections.map(option("collection")) }] : undefined} />
     {view === "images" && <ImageDescribe undescribed={undescribed} ready={imageTaggingReady()} />}
     {query.uploaded && <p className="notice notice-success">Images saved to your library.</p>}
     {(error || query.error) && <p role="alert" className="notice notice-error">{query.error || "Unable to load the library. Please retry."}</p>}
