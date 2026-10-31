@@ -39,6 +39,12 @@ test('the feed gives each pin its ID, title, description, and Pinterest image, a
   assert.equal(result.pins[0].image, 'https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg');
   assert.equal(result.pins[0].savedAt, '2026-10-26T14:00:00.000Z');
   assert.equal(result.pins[1].image, 'https://i.pinimg.com/236x/11/22/33/x.png');
+  assert.ok(result.items > result.pins.length);
+});
+test('an empty feed has no entries, and a media tag can carry the image', () => {
+  assert.deepEqual(p.parseFeed('<rss><channel><title>Empty</title></channel></rss>'), { title: 'Empty', pins: [], items: 0 });
+  const media = p.parseFeed('<rss><channel><item><title>T</title><guid>https://www.pinterest.com/pin/5555555555/</guid><media:content url="http://i.pinimg.com/236x/aa/bb/cc/m.jpg" /></item></channel></rss>');
+  assert.deepEqual(media.pins.map(pin => [pin.id, pin.image]), [['5555555555', 'https://i.pinimg.com/236x/aa/bb/cc/m.jpg']]);
 });
 test('the original image is tried before larger and feed sizes', () => {
   assert.deepEqual(p.imageCandidates('https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg'), ['https://i.pinimg.com/originals/ab/cd/ef/abcdef.jpg', 'https://i.pinimg.com/736x/ab/cd/ef/abcdef.jpg', 'https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg']);
