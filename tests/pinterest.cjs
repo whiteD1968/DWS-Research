@@ -42,9 +42,15 @@ test('the feed gives each pin its ID, title, description, and Pinterest image, a
   assert.ok(result.items > result.pins.length);
 });
 test('an empty feed has no entries, and a media tag can carry the image', () => {
-  assert.deepEqual(p.parseFeed('<rss><channel><title>Empty</title></channel></rss>'), { title: 'Empty', pins: [], items: 0 });
+  assert.deepEqual(p.parseFeed('<rss><channel><title>Empty</title></channel></rss>'), { title: 'Empty', pins: [], items: 0, sample: '' });
   const media = p.parseFeed('<rss><channel><item><title>T</title><guid>https://www.pinterest.com/pin/5555555555/</guid><media:content url="http://i.pinimg.com/236x/aa/bb/cc/m.jpg" /></item></channel></rss>');
   assert.deepEqual(media.pins.map(pin => [pin.id, pin.image]), [['5555555555', 'https://i.pinimg.com/236x/aa/bb/cc/m.jpg']]);
+});
+test('lettered pin IDs and twice-escaped descriptions still read, and an unreadable entry is kept as a sample', () => {
+  const twice = p.parseFeed('<rss><channel><item><title>Form</title><link>https://www.pinterest.com/pin/AbC-12_xyZ/</link><description>&amp;lt;a href=&amp;quot;/pin/AbC-12_xyZ/&amp;quot;&amp;gt;&amp;lt;img src=&amp;quot;https://i.pinimg.com/236x/1a/2b/3c/f.jpg&amp;quot;&amp;gt;&amp;lt;/a&amp;gt;Curved shell</description></item><item><title>No image</title><link>https://www.pinterest.com/pin/9999999/</link></item></channel></rss>');
+  assert.deepEqual(twice.pins.map(pin => [pin.id, pin.image, pin.description]), [['AbC-12_xyZ', 'https://i.pinimg.com/236x/1a/2b/3c/f.jpg', 'Curved shell']]);
+  assert.equal(twice.items, 2);
+  assert.match(twice.sample, /No image/);
 });
 test('the original image is tried before larger and feed sizes', () => {
   assert.deepEqual(p.imageCandidates('https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg'), ['https://i.pinimg.com/originals/ab/cd/ef/abcdef.jpg', 'https://i.pinimg.com/736x/ab/cd/ef/abcdef.jpg', 'https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg']);

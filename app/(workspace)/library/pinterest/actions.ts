@@ -16,12 +16,12 @@ export async function followBoard(input: string) { return safely(async () => {
   const feed = feedFromInput(input);
   if (!feed) throw new Error("Paste a Pinterest board link, like pinterest.com/yourname/board-name/, or your username.");
   const user = await requireUser(); const db = await createClient();
-  const { title, pins, items } = await fetchFeed(feed.url);
+  const { title, pins, items, sample } = await fetchFeed(feed.url);
   const feeds = (await pinterestSettings(db, user.id))?.feeds || [];
   if (!feeds.some(item => item.url === feed.url)) await saveFeeds(db, user.id, [...feeds, { ...feed, label: title || feed.label }]);
   const result = pins.length ? await syncFeed(db, user.id, feed.url) : null;
   revalidatePath("/library/pinterest"); revalidatePath("/library");
-  return { title: title || feed.label, found: pins.length, items, imported: result?.imported ?? 0, failed: result?.failed ?? 0, reason: result?.reason ?? "" };
+  return { title: title || feed.label, found: pins.length, items, sample, imported: result?.imported ?? 0, failed: result?.failed ?? 0, reason: result?.reason ?? "" };
 }); }
 
 export async function syncBoard(url: string) { return safely(async () => {

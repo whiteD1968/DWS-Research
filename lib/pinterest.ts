@@ -33,22 +33,25 @@ const inner = (xml: string, tag: string) => {
 };
 const plain = (html: string, max: number) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, max);
 
-// Pinterest's RSS: each item links to the pin and carries a small image inside its description HTML (or, in some feeds, a media tag).
-// items counts every entry, so an empty feed can be told apart from entries that couldn't be read.
-export function parseFeed(xml: string): { title: string; pins: FeedPin[]; items: number } {
+// Pinterest's RSS: each item links to the pin and carries a small image, usually inside its description HTML.
+// Parsing is lenient: pin IDs can be numeric or lettered, and the image can sit in the description (escaped once or twice) or in a media tag.
+// items counts every entry, so an empty feed can be told apart from entries that couldn't be read; sample shows the first unreadable one.
+export function parseFeed(xml: string): { title: string; pins: FeedPin[]; items: number; sample: string } {
   const blocks = xml.split(/<item[\s>]/i);
   const title = plain(inner(blocks[0], "title"), 200);
   const pins: FeedPin[] = [];
+  let sample = "";
   for (const block of blocks.slice(1)) {
     const item = block.split(/<\/item>/i)[0];
-    const id = (inner(item, "link") + " " + inner(item, "guid") + " " + item).match(/\/pin\/(\d{5,30})/)?.[1];
+    const decoded = decodeEntities(decodeEntities(item.replace(/<!\[CDATA\[|\]\]>/g, "")));
+    const id = decoded.match(/\/pin\/([A-Za-z0-9_-]{5,80})/)?.[1];
+    const image = decoded.match(/https?:\/\/i\.pinimg\.com\/[^"'\s<>)]+/i)?.[0].replace(/^http:/, "https:") || "";
+    if (!id || !image) { sample ||= decoded.replace(/\s+/g, " ").trim().slice(0, 400); continue; }
     const description = inner(item, "description");
-    const image = (description.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || item.match(/<(?:media:content|media:thumbnail|enclosure)[^>]+url=["']([^"']+)["']/i)?.[1] || "").replace(/^http:/, "https:");
-    if (!id || !/^https:\/\/i\.pinimg\.com\//.test(image)) continue;
     const savedAt = Date.parse(inner(item, "pubDate"));
-    pins.push({ id, title: plain(inner(item, "title"), 200), description: plain(description, 2000), image, savedAt: Number.isFinite(savedAt) ? new Date(savedAt).toISOString() : "" });
+    pins.push({ id, title: plain(inner(item, "title"), 200), description: plain(decodeEntities(description), 2000), image, savedAt: Number.isFinite(savedAt) ? new Date(savedAt).toISOString() : "" });
   }
-  return { title, pins, items: blocks.length - 1 };
+  return { title, pins, items: blocks.length - 1, sample };
 }
 
 // The feed gives a 236px image; the original is tried first, then the 736px size, then what the feed gave.

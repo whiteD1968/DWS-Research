@@ -61,11 +61,11 @@ async function feedCollection(db: SupabaseClient, ownerId: string, feed: Pintere
   return String(data.id);
 }
 
-export type FeedResult = { imported: number; skipped: number; failed: number; found: number; items: number; reason: string; collectionId: string; title: string };
+export type FeedResult = { imported: number; skipped: number; failed: number; found: number; items: number; sample: string; reason: string; collectionId: string; title: string };
 
 // Brings in the pins in one board's feed that aren't in the Library yet.
 export async function importFeed(db: SupabaseClient, ownerId: string, feed: PinterestFeed, deadline = Date.now() + 45000): Promise<FeedResult> {
-  const { title, pins, items } = await fetchFeed(feed.url);
+  const { title, pins, items, sample } = await fetchFeed(feed.url);
   const collectionId = await feedCollection(db, ownerId, feed, title);
   const { data: known } = pins.length ? await db.from("media").select("id,metadata->pinterest->>pin_id").eq("owner_id", ownerId).in("metadata->pinterest->>pin_id", pins.map(pin => pin.id)) : { data: [] };
   const existing = new Map((known || []).map(row => [String((row as Record<string, unknown>).pin_id), String(row.id)]));
@@ -84,7 +84,7 @@ export async function importFeed(db: SupabaseClient, ownerId: string, feed: Pint
   if (ids.length) await db.from("collection_items").upsert(ids.map(id => ({ owner_id: ownerId, collection_id: collectionId, record_type: "media", record_id: id })), { onConflict: "collection_id,record_type,record_id", ignoreDuplicates: true });
   // The most common reason pins failed, so the page can say why.
   const reason = [...reasons].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-  return { imported, skipped, failed, found: pins.length, items, reason, collectionId, title: title || feed.label };
+  return { imported, skipped, failed, found: pins.length, items, sample, reason, collectionId, title: title || feed.label };
 }
 
 export async function pinterestSettings(db: SupabaseClient, ownerId: string) {
