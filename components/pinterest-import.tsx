@@ -1,58 +1,49 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- Pinterest's own board covers. */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { disconnectPinterest, importBoard } from "@/app/(workspace)/library/pinterest/actions";
+import { useState, useTransition } from "react";
+import { followBoard, syncBoard, unfollowBoard } from "@/app/(workspace)/library/pinterest/actions";
 
-type Board = { id: string; name: string; description: string; pins: number | null; secret: boolean; cover: string };
+type Feed = { url: string; label: string; collectionId: string; lastSync: string; lastError: string; imported: number };
+const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+const summary = (result: { imported: number; skipped: number; failed: number }) =>
+  `${result.imported ? `Added ${result.imported} ${result.imported === 1 ? "image" : "images"}` : "No new pins"}${result.failed ? `, ${result.failed} couldn’t be saved` : ""}.`;
 
-export function PinterestImport({ username, boards, imported, loadError }: { username: string; boards: Board[]; imported: Record<string, string>; loadError: string }) {
+export function PinterestImport({ feeds }: { feeds: Feed[] }) {
   const router = useRouter();
-  const [running, setRunning] = useState("");
-  const [progress, setProgress] = useState<Record<string, string>>({});
-  const stop = useRef(false);
-  const say = (id: string, text: string) => setProgress(current => ({ ...current, [id]: text }));
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [, start] = useTransition();
 
-  // Each round imports what fits in one server request; the loop carries on from Pinterest's bookmark until the board is done.
-  async function run(list: Board[]) {
-    stop.current = false;
-    for (const board of list) {
-      if (stop.current) break;
-      setRunning(board.id);
-      let bookmark = ""; let added = 0; let skipped = 0; let failed = 0;
-      try {
-        for (;;) {
-          const result = await importBoard({ id: board.id, name: board.name, description: board.description }, bookmark);
-          added += result.imported; skipped += result.skipped; failed += result.failed; bookmark = result.bookmark;
-          say(board.id, `${added} added${skipped ? `, ${skipped} already here` : ""}${failed ? `, ${failed} couldn’t be saved` : ""}${result.done ? "." : "…"}`);
-          if (result.done || stop.current) break;
-        }
-      } catch (problem) { say(board.id, problem instanceof Error ? problem.message : "Import failed. Please retry."); break; }
-    }
-    setRunning(""); router.refresh();
+  function run(key: string, task: () => Promise<string>) {
+    setBusy(key); setError(""); setMessage("");
+    start(async () => {
+      try { setMessage(await task()); router.refresh(); }
+      catch (problem) { setError(problem instanceof Error ? problem.message : "Something went wrong. Please retry."); }
+      finally { setBusy(""); }
+    });
   }
 
   return <section className="pinterest" aria-label="Pinterest boards">
-    <div className="pinterest-head"><p>Connected{username ? ` as ${username}` : ""}. {boards.length} {boards.length === 1 ? "board" : "boards"}.</p>
-      <div className="pinterest-actions">
-        {running ? <button type="button" className="button" onClick={() => { stop.current = true; }}>Stop after this round</button>
-          : boards.length > 1 && <button type="button" className="button button-primary" onClick={() => void run(boards)}>Import all boards</button>}
-        <button type="button" className="text-button" disabled={!!running} onClick={async () => { await disconnectPinterest(); router.refresh(); }}>Disconnect</button>
-      </div></div>
-    {loadError && <p className="notice notice-error" role="alert">{loadError}</p>}
-    <p className="pinterest-note">Importing again later only adds new pins. After importing, use Describe in the Library to give the images titles and tags.</p>
-    <ul className="pinterest-boards">{boards.map(board => <li key={board.id}>
-      {board.cover ? <img src={board.cover} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="pinterest-cover" aria-hidden="true" />}
-      <div><strong>{board.name}</strong>
-        <small>{[board.pins != null ? `${board.pins} ${board.pins === 1 ? "pin" : "pins"}` : "", board.secret ? "secret" : "", imported[board.id] ? "imported before" : ""].filter(Boolean).join(" · ")}</small>
-        {progress[board.id] && <small role="status">{running === board.id ? "Importing: " : ""}{progress[board.id]}</small>}
+    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await followBoard(input); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins.` : `Following “${result.title}”. It has no pins yet.`; }); }}>
+      <label className="field"><span>Board link</span><input value={input} onChange={event => setInput(event.target.value)} placeholder="pinterest.com/yourname/board-name/" disabled={!!busy} required /></label>
+      <button className="button button-primary" disabled={!!busy}>{busy === "add" ? "Importing…" : "Follow board"}</button>
+    </form>
+    <p className="pinterest-note">Open a board on Pinterest and copy its address. Your username on its own follows your most recent pins across all boards. Only public boards work, and each check brings in the newest pins (about 25 at a time), so following early and checking often catches everything new.</p>
+    {message && <p className="notice" role="status">{message}</p>}
+    {error && <p className="notice notice-error" role="alert">{error}</p>}
+    {feeds.length > 0 && <ul className="pinterest-boards">{feeds.map(feed => <li key={feed.url}>
+      <div><strong>{feed.label}</strong>
+        <small>{[`${feed.imported} imported`, feed.lastSync ? `checked ${when(feed.lastSync)}` : ""].filter(Boolean).join(" · ")}</small>
+        {feed.lastError && <small className="pinterest-error">{feed.lastError}</small>}
       </div>
       <div className="pinterest-actions">
-        {imported[board.id] && <Link href={`/library?view=images&in=collection:${imported[board.id]}`}>View images</Link>}
-        <button type="button" className="button" disabled={!!running} onClick={() => void run([board])}>{running === board.id ? "Importing…" : imported[board.id] ? "Import new pins" : "Import"}</button>
+        {feed.collectionId && <Link href={`/library?view=images&in=collection:${feed.collectionId}`}>View images</Link>}
+        <button type="button" className="button" disabled={!!busy} onClick={() => run(feed.url, async () => summary(await syncBoard(feed.url)))}>{busy === feed.url ? "Checking…" : "Check now"}</button>
+        <button type="button" className="text-button" disabled={!!busy} onClick={() => run(`x${feed.url}`, async () => { await unfollowBoard(feed.url); return `Stopped following “${feed.label}”. Its images stay in the Library.`; })}>Unfollow</button>
       </div>
-    </li>)}</ul>
-    {!boards.length && !loadError && <p className="pinterest-note">No boards found on this Pinterest account.</p>}
+    </li>)}</ul>}
   </section>;
 }

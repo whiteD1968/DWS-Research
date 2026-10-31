@@ -11,35 +11,45 @@ function load(file) {
 }
 const p = load('lib/pinterest.ts');
 
-test('the sign-in link asks only to read boards, pins, and the account', () => {
-  const url = new URL(p.authorizeUrl('123', 'https://site.example/api/pinterest/callback', 'abc'));
-  assert.equal(url.origin + url.pathname, 'https://www.pinterest.com/oauth/');
-  assert.equal(url.searchParams.get('client_id'), '123');
-  assert.equal(url.searchParams.get('state'), 'abc');
-  assert.equal(url.searchParams.get('response_type'), 'code');
-  assert.ok(url.searchParams.get('scope').split(',').every(scope => scope.endsWith(':read') || scope.endsWith(':read_secret')));
+const feed = `<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel><title>Tensile structures</title><link>https://www.pinterest.com/duwhite/tensile-structures/</link>
+<item><title>Membrane canopy</title><link>https://www.pinterest.com/pin/1234567890/</link><description>&lt;a href="/pin/1234567890/"&gt;&lt;img src="https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg"&gt;&lt;/a&gt;Steel masts &amp;amp; fabric</description><pubDate>Mon, 26 Oct 2026 14:00:00 GMT</pubDate><guid>https://www.pinterest.com/pin/1234567890/</guid></item>
+<item><title><![CDATA[Cable net]]></title><link>https://www.pinterest.com/pin/2222222222/</link><description><![CDATA[<a href="/pin/2222222222/"><img src="https://i.pinimg.com/236x/11/22/33/x.png"></a>Cable net]]></description></item>
+<item><title>No image</title><link>https://www.pinterest.com/pin/3333333333/</link><description>just text</description></item>
+<item><title>Other host</title><link>https://www.pinterest.com/pin/4444444444/</link><description>&lt;img src="https://evil.example/a.jpg"&gt;</description></item>
+</channel></rss>`;
+
+test('board links, profile links, and usernames become feed addresses; other links are refused', () => {
+  assert.deepEqual(p.feedFromInput('https://www.pinterest.com/duwhite/tensile-structures/'), { url: 'https://www.pinterest.com/duwhite/tensile-structures.rss', label: 'tensile structures' });
+  assert.equal(p.feedFromInput('pinterest.com/duwhite/tensile-structures').url, 'https://www.pinterest.com/duwhite/tensile-structures.rss');
+  assert.equal(p.feedFromInput('https://www.pinterest.co.uk/duwhite/glazes/').url, 'https://www.pinterest.com/duwhite/glazes.rss');
+  assert.deepEqual(p.feedFromInput('duwhite'), { url: 'https://www.pinterest.com/duwhite/feed.rss', label: 'duwhite · recent pins' });
+  assert.equal(p.feedFromInput('https://www.pinterest.com/duwhite/').url, 'https://www.pinterest.com/duwhite/feed.rss');
+  assert.equal(p.feedFromInput('https://www.pinterest.com/pin/123/'), null);
+  assert.equal(p.feedFromInput('https://evil.example/duwhite/board/'), null);
+  assert.equal(p.feedFromInput('https://pinterest.com.evil.example/a/b/'), null);
+  assert.equal(p.feedFromInput('https://www.pinterest.com/a/b/c/'), null);
+  assert.equal(p.feedFromInput(''), null);
 });
-test('tokens are stored with an early expiry and keep the old refresh token when none comes back', () => {
-  const saved = p.tokenSettings({ access_token: 'a', expires_in: 3600 }, 1000, 'old');
-  assert.equal(saved.refresh_token, 'old');
-  assert.equal(saved.expires_at, 1000 + 3540 * 1000);
-  assert.equal(p.tokenSettings({}), null);
-  assert.deepEqual(p.pinterestSettingsFrom({ access_token: 'a', expires_at: 5, username: 'dw' }), { accessToken: 'a', refreshToken: '', expiresAt: 5, refreshExpiresAt: 0, username: 'dw' });
+test('the feed gives each pin its ID, title, description, and Pinterest image, and skips the rest', () => {
+  const result = p.parseFeed(feed);
+  assert.equal(result.title, 'Tensile structures');
+  assert.deepEqual(result.pins.map(pin => pin.id), ['1234567890', '2222222222']);
+  assert.equal(result.pins[0].title, 'Membrane canopy');
+  assert.equal(result.pins[0].description, 'Steel masts & fabric');
+  assert.equal(result.pins[0].image, 'https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg');
+  assert.equal(result.pins[0].savedAt, '2026-10-26T14:00:00.000Z');
+  assert.equal(result.pins[1].image, 'https://i.pinimg.com/236x/11/22/33/x.png');
 });
-test('the largest image wins, carousels use their first slide, and non-https links are ignored', () => {
-  assert.equal(p.bestImage({ id: '1', media: { images: { '150x150': { url: 'https://i/150', width: 150 }, '1200x': { url: 'https://i/1200', width: 1200 }, '600x': { url: 'https://i/600', width: 600 } } } }).url, 'https://i/1200');
-  assert.equal(p.bestImage({ id: '1', media: { images: { '600x': { url: 'https://i/600', width: 600 }, originals: { url: 'https://i/o', width: 500 } } } }).url, 'https://i/o');
-  assert.equal(p.bestImage({ id: '1', media: { items: [{ images: { '600x': { url: 'https://i/c', width: 600 } } }] } }).url, 'https://i/c');
-  assert.equal(p.bestImage({ id: '1', media: { images: { '600x': { url: 'http://i/x', width: 600 } } } }), null);
+test('the original image is tried before larger and feed sizes', () => {
+  assert.deepEqual(p.imageCandidates('https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg'), ['https://i.pinimg.com/originals/ab/cd/ef/abcdef.jpg', 'https://i.pinimg.com/736x/ab/cd/ef/abcdef.jpg', 'https://i.pinimg.com/236x/ab/cd/ef/abcdef.jpg']);
 });
-test('a pin keeps its link, board, and section, and a pin without a title gets a file name for Describe to replace', () => {
-  const record = p.pinRecord({ id: '99', title: '', description: ' Steel  canopy ', link: 'https://maker.example/work' }, { id: 'b1', name: 'Canopies' }, 'Tensile');
-  assert.equal(record.title, 'pinterest-99');
-  assert.equal(record.metadata.pinterest.board, 'Canopies');
-  assert.equal(record.metadata.pinterest.section, 'Tensile');
-  assert.equal(record.metadata.pinterest.description, 'Steel canopy');
-  assert.equal(record.metadata.pinterest.url, 'https://www.pinterest.com/pin/99/');
-  assert.equal(p.pinRecord({ id: '5', title: 'Glass house' }, { id: 'b', name: 'B' }).title, 'Glass house');
-  assert.equal(p.extensionFor('image/jpeg'), 'jpg');
+test('a pin keeps its link and board, and a title that only repeats the description becomes a file name for Describe', () => {
+  const [first, second] = p.parseFeed(feed).pins;
+  const record = p.pinRecord(first, { url: 'u', label: 'Tensile structures' });
+  assert.equal(record.title, 'Membrane canopy');
+  assert.equal(record.metadata.pinterest.url, 'https://www.pinterest.com/pin/1234567890/');
+  assert.equal(record.metadata.pinterest.board, 'Tensile structures');
+  assert.equal(p.pinRecord(second, { url: 'u', label: 'x' }).title, 'pinterest-2222222222');
+  assert.deepEqual(p.feedsFrom({ feeds: [{ url: 'a', label: 'b' }, { nope: 1 }] }), [{ url: 'a', label: 'b' }]);
   assert.equal(p.extensionFor('image/tiff'), '');
 });

@@ -1,65 +1,75 @@
-// Importing Pinterest boards into the Library: the sign-in link, settings, and how a pin becomes an image. Pure, so it stays testable.
+// Importing Pinterest boards into the Library from their public feeds: board links, the feed format, and how a pin becomes an image. Pure, so it stays testable.
 
 export const pinterestParent = "pinterest_settings";
-export const pinterestApi = "https://api.pinterest.com/v5";
-export const pinterestScopes = ["user_accounts:read", "boards:read", "boards:read_secret", "pins:read", "pins:read_secret"];
-export const pinterestCallbackPath = "/api/pinterest/callback";
-export const pinterestStateCookie = "pinterest_oauth_state";
+export type PinterestFeed = { url: string; label: string; collectionId?: string; lastSync?: string; lastError?: string; imported?: number };
+export type FeedPin = { id: string; title: string; description: string; image: string; savedAt: string };
 
-export type PinterestSettings = { accessToken: string; refreshToken: string; expiresAt: number; refreshExpiresAt: number; username: string };
-export type PinterestBoard = { id: string; name: string; description?: string; pin_count?: number; privacy?: string; media?: { image_cover_url?: string | null } };
-type PinImage = { url?: string; width?: number; height?: number };
-export type Pin = { id: string; title?: string | null; description?: string | null; link?: string | null; alt_text?: string | null; board_section_id?: string | null; created_at?: string;
-  media?: { media_type?: string; images?: Record<string, PinImage>; items?: { images?: Record<string, PinImage> }[]; cover_image_url?: string } };
+const segment = /^[\p{L}\p{N}_.%-]{1,100}$/u;
 
-export const pinterestReady = () => !!process.env.PINTEREST_APP_ID && !!process.env.PINTEREST_APP_SECRET;
-
-export function authorizeUrl(appId: string, redirectUri: string, state: string) {
-  const query = new URLSearchParams({ client_id: appId, redirect_uri: redirectUri, response_type: "code", scope: pinterestScopes.join(","), state });
-  return `https://www.pinterest.com/oauth/?${query}`;
+// A board link (pinterest.com/name/board/) follows that board; a profile link or bare username follows the account's recent pins.
+export function feedFromInput(input: unknown): PinterestFeed | null {
+  let text = typeof input === "string" ? input.trim() : "";
+  if (!text) return null;
+  if (!/^https?:\/\//i.test(text) && !text.includes("/")) text = `https://www.pinterest.com/${text.replace(/^@/, "")}/`;
+  if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
+  let url: URL;
+  try { url = new URL(text); } catch { return null; }
+  if (!/(^|\.)pinterest\.[a-z.]{2,8}$/i.test(url.hostname)) return null;
+  const parts = url.pathname.replace(/\.rss$/i, "").split("/").filter(Boolean);
+  if (!parts.length || parts.length > 2 || !parts.every(part => segment.test(part)) || ["pin", "search", "ideas", "today", "settings"].includes(parts[0].toLowerCase())) return null;
+  const [user, board] = parts;
+  if (!board || board === "feed") return { url: `https://www.pinterest.com/${user}/feed.rss`, label: `${user} · recent pins` };
+  return { url: `https://www.pinterest.com/${user}/${board}.rss`, label: decodeURIComponent(board).replace(/-/g, " ") };
 }
 
-const text = (value: unknown) => (typeof value === "string" ? value : "");
-const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " " };
+export const decodeEntities = (text: string) => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, code: string) =>
+  code[0] === "#" ? String.fromCodePoint(code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10)) : entities[code.toLowerCase()] ?? whole);
+const inner = (xml: string, tag: string) => {
+  const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
+  if (!match) return "";
+  const cdata = match[1].match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
+  return cdata ? cdata[1] : decodeEntities(match[1]);
+};
+const plain = (html: string, max: number) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, max);
 
-export function pinterestSettingsFrom(meta: unknown): PinterestSettings {
-  const value = (meta || {}) as Record<string, unknown>;
-  return { accessToken: text(value.access_token), refreshToken: text(value.refresh_token), expiresAt: number(value.expires_at), refreshExpiresAt: number(value.refresh_expires_at), username: text(value.username) };
-}
-
-// What Pinterest's token endpoint returns, as stored settings; expiry is kept a minute early so a token never runs out mid-request.
-export function tokenSettings(token: { access_token?: string; refresh_token?: string; expires_in?: number; refresh_token_expires_in?: number }, now = Date.now(), previousRefresh = "") {
-  if (!token.access_token) return null;
-  return {
-    access_token: token.access_token,
-    refresh_token: token.refresh_token || previousRefresh,
-    expires_at: now + Math.max(0, number(token.expires_in) - 60) * 1000,
-    ...(token.refresh_token_expires_in ? { refresh_expires_at: now + number(token.refresh_token_expires_in) * 1000 } : {}),
-  };
-}
-
-// The largest image Pinterest offers for a pin: the pin's own images, or the first of a carousel.
-export function bestImage(pin: Pin): PinImage | null {
-  const sets = [pin.media?.images, ...(pin.media?.items || []).map(item => item.images)].filter(Boolean) as Record<string, PinImage>[];
-  for (const images of sets) {
-    const best = Object.entries(images).filter(([, image]) => typeof image?.url === "string" && /^https:\/\//.test(image.url))
-      .sort(([keyA, a], [keyB, b]) => (keyB === "originals" ? 1 : 0) - (keyA === "originals" ? 1 : 0) || number(b.width) - number(a.width))[0];
-    if (best) return best[1];
+// Pinterest's RSS: each item links to the pin and carries a small image inside its description HTML.
+export function parseFeed(xml: string): { title: string; pins: FeedPin[] } {
+  const channel = xml.split(/<item[\s>]/i)[0];
+  const title = plain(inner(channel, "title"), 200);
+  const pins: FeedPin[] = [];
+  for (const block of xml.split(/<item[\s>]/i).slice(1)) {
+    const item = block.split(/<\/item>/i)[0];
+    const link = inner(item, "link") || inner(item, "guid");
+    const id = link.match(/\/pin\/(\d{5,30})/)?.[1];
+    const description = inner(item, "description");
+    const image = description.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+    if (!id || !/^https:\/\/i\.pinimg\.com\//.test(image)) continue;
+    const savedAt = Date.parse(inner(item, "pubDate"));
+    pins.push({ id, title: plain(inner(item, "title"), 200), description: plain(description, 2000), image, savedAt: Number.isFinite(savedAt) ? new Date(savedAt).toISOString() : "" });
   }
-  return pin.media?.cover_image_url && /^https:\/\//.test(pin.media.cover_image_url) ? { url: pin.media.cover_image_url } : null;
+  return { title, pins };
 }
 
-const clean = (value: unknown, max: number) => text(value).replace(/\s+/g, " ").trim().slice(0, max);
+// The feed gives a 236px image; the original is tried first, then the 736px size, then what the feed gave.
+export function imageCandidates(url: string) {
+  const match = url.match(/^(https:\/\/i\.pinimg\.com\/)[^/]+(\/.+)$/);
+  return match ? [...new Set([`${match[1]}originals${match[2]}`, `${match[1]}736x${match[2]}`, url])] : [url];
+}
 
-// The Library fields for a pin. The title stays a file name when the pin has none, so describing the image gives it a readable one.
-export function pinRecord(pin: Pin, board: { id: string; name: string }, section = "") {
-  const title = clean(pin.title, 200);
+// A title from the feed is kept unless it is empty or just repeats the description; otherwise it stays a file name for Describe to replace.
+export function pinRecord(pin: FeedPin, feed: { url: string; label: string }) {
+  const title = pin.title && pin.title !== pin.description ? pin.title : "";
   return {
     title: title || `pinterest-${pin.id}`,
     original_filename: `pinterest-${pin.id}`,
-    alt_text: clean(pin.alt_text, 500) || null,
-    metadata: { origin: "pinterest", pinterest: { pin_id: pin.id, board_id: board.id, board: board.name, ...(section ? { section } : {}), link: clean(pin.link, 1000) || null, description: clean(pin.description, 2000) || null, url: `https://www.pinterest.com/pin/${pin.id}/`, saved_at: pin.created_at || null } },
+    metadata: { origin: "pinterest", pinterest: { pin_id: pin.id, board: feed.label, feed: feed.url, description: pin.description || null, url: `https://www.pinterest.com/pin/${pin.id}/`, saved_at: pin.savedAt || null } },
   };
 }
+
+export const feedsFrom = (meta: unknown): PinterestFeed[] => {
+  const list = (meta as { feeds?: unknown } | null)?.feeds;
+  return Array.isArray(list) ? list.filter((feed): feed is PinterestFeed => !!feed && typeof feed.url === "string" && typeof feed.label === "string") : [];
+};
 
 export const extensionFor = (mime: string) => ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[mime] || "";
