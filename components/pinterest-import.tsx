@@ -6,8 +6,9 @@ import { followBoard, syncBoard, unfollowBoard } from "@/app/(workspace)/library
 
 type Feed = { url: string; label: string; collectionId: string; lastSync: string; lastError: string; imported: number };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-const summary = (result: { imported: number; skipped: number; failed: number }) =>
-  `${result.imported ? `Added ${result.imported} ${result.imported === 1 ? "image" : "images"}` : "No new pins"}${result.failed ? `, ${result.failed} couldn’t be saved` : ""}.`;
+const summary = (result: { imported: number; skipped: number; failed: number; found: number; reason: string }) =>
+  !result.found ? "Pinterest’s feed for this board has no pins in it." :
+  `${result.imported ? `Added ${result.imported} ${result.imported === 1 ? "image" : "images"}` : "No new pins"}${result.failed ? `, ${result.failed} couldn’t be saved because ${result.reason}` : ""}.`;
 
 export function PinterestImport({ feeds }: { feeds: Feed[] }) {
   const router = useRouter();
@@ -29,7 +30,7 @@ export function PinterestImport({ feeds }: { feeds: Feed[] }) {
   }
 
   return <section className="pinterest" aria-label="Pinterest boards">
-    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await value(followBoard(input)); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins.` : `Following “${result.title}”. It has no pins yet.`; }); }}>
+    <form className="pinterest-add" onSubmit={event => { event.preventDefault(); run("add", async () => { const result = await value(followBoard(input)); setInput(""); return result.found ? `Following “${result.title}”. Added ${result.imported} of its ${result.found} newest pins${result.failed ? `; ${result.failed} couldn’t be saved because ${result.reason}` : ""}.` : `Following “${result.title}”. Pinterest’s feed for it has no pins in it.`; }); }}>
       <label className="field"><span>Board link</span><input value={input} onChange={event => setInput(event.target.value)} placeholder="pinterest.com/yourname/board-name/" disabled={!!busy} required /></label>
       <button className="button button-primary" disabled={!!busy}>{busy === "add" ? "Importing…" : "Follow board"}</button>
     </form>
@@ -42,7 +43,7 @@ export function PinterestImport({ feeds }: { feeds: Feed[] }) {
         {feed.lastError && <small className="pinterest-error">{feed.lastError}</small>}
       </div>
       <div className="pinterest-actions">
-        {feed.collectionId && <Link href={`/library?view=images&in=collection:${feed.collectionId}`}>View images</Link>}
+        {feed.collectionId && feed.imported > 0 && <Link href={`/library?view=images&in=collection:${feed.collectionId}`}>View images</Link>}
         <button type="button" className="button" disabled={!!busy} onClick={() => run(feed.url, async () => summary(await value(syncBoard(feed.url))))}>{busy === feed.url ? "Checking…" : "Check now"}</button>
         <button type="button" className="text-button" disabled={!!busy} onClick={() => run(`x${feed.url}`, async () => { await value(unfollowBoard(feed.url)); return `Stopped following “${feed.label}”. Its images stay in the Library.`; })}>Unfollow</button>
       </div>

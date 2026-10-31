@@ -21,7 +21,7 @@ export async function followBoard(input: string) { return safely(async () => {
   if (!feeds.some(item => item.url === feed.url)) await saveFeeds(db, user.id, [...feeds, { ...feed, label: title || feed.label }]);
   const result = pins.length ? await syncFeed(db, user.id, feed.url) : null;
   revalidatePath("/library/pinterest"); revalidatePath("/library");
-  return { title: title || feed.label, found: pins.length, imported: result?.imported ?? 0 };
+  return { title: title || feed.label, found: pins.length, imported: result?.imported ?? 0, failed: result?.failed ?? 0, reason: result?.reason ?? "" };
 }); }
 
 export async function syncBoard(url: string) { return safely(async () => {

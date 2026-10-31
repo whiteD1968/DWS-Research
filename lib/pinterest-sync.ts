@@ -14,31 +14,40 @@ export async function fetchFeed(url: string) {
   return parseFeed(xml);
 }
 
-async function download(url: string) {
+const imageHeaders = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", Accept: "image/avif,image/webp,image/png,image/jpeg,*/*", Referer: "https://www.pinterest.com/" };
+
+// Tries each image size in turn; when none works, says what the last attempt got back.
+async function download(url: string): Promise<{ bytes: Buffer } | { reason: string }> {
+  let reason = "the image link was empty";
   for (const candidate of imageCandidates(url)) {
-    const response = await fetch(candidate, { cache: "no-store", signal: AbortSignal.timeout(20000) }).catch(() => null);
-    if (!response?.ok) continue;
+    const response = await fetch(candidate, { headers: imageHeaders, cache: "no-store", signal: AbortSignal.timeout(20000) }).catch((problem: unknown) => { reason = `couldn’t reach Pinterest’s image server (${problem instanceof Error ? problem.message : "network error"})`; return null; });
+    if (!response) continue;
+    if (!response.ok) { reason = `Pinterest’s image server answered ${response.status}`; continue; }
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length && bytes.length <= 20 * 1024 * 1024) return bytes;
+    if (bytes.length && bytes.length <= 20 * 1024 * 1024) return { bytes };
+    reason = bytes.length ? "the image is over 20 MB" : "the image came back empty";
   }
-  return null;
+  return { reason };
 }
 
-async function saveImage(db: SupabaseClient, ownerId: string, pin: FeedPin, feed: PinterestFeed) {
-  const bytes = await download(pin.image);
-  if (!bytes) return null;
+type Saved = { id: string } | { reason: string };
+
+async function saveImage(db: SupabaseClient, ownerId: string, pin: FeedPin, feed: PinterestFeed): Promise<Saved> {
+  const downloaded = await download(pin.image);
+  if (!("bytes" in downloaded)) return downloaded;
+  const { bytes } = downloaded;
   const info = await sharp(bytes, { limitInputPixels: 100000000 }).metadata().catch(() => null);
   const mime = info?.format === "jpeg" ? "image/jpeg" : info?.format ? `image/${info.format}` : "";
   const extension = extensionFor(mime);
-  if (!extension) return null;
+  if (!extension) return { reason: info?.format ? `the image is a ${info.format} file, which the Library doesn’t store` : "the download wasn’t a readable image" };
   const path = `${ownerId}/pinterest/${pin.id}.${extension}`;
   const upload = await db.storage.from("research-media").upload(path, bytes, { contentType: mime, upsert: true });
-  if (upload.error) return null;
+  if (upload.error) return { reason: `storage refused the upload (${upload.error.message})` };
   const record = pinRecord(pin, feed);
   const id = crypto.randomUUID();
   const { error } = await db.from("media").insert({ id, owner_id: ownerId, media_type: "image", bucket: "research-media", storage_path: path, mime_type: mime, byte_size: bytes.length, width: info?.width || null, height: info?.height || null, ...record, original_filename: `${record.original_filename}.${extension}`, title: record.title === record.original_filename ? `${record.title}.${extension}` : record.title });
-  if (error) { await db.storage.from("research-media").remove([path]); return null; }
-  return id;
+  if (error) { await db.storage.from("research-media").remove([path]); return { reason: `the Library couldn’t save the record (${error.message})` }; }
+  return { id };
 }
 
 // Each followed board has its own Collection, made the first time it imports.
@@ -52,7 +61,7 @@ async function feedCollection(db: SupabaseClient, ownerId: string, feed: Pintere
   return String(data.id);
 }
 
-export type FeedResult = { imported: number; skipped: number; failed: number; collectionId: string; title: string };
+export type FeedResult = { imported: number; skipped: number; failed: number; found: number; reason: string; collectionId: string; title: string };
 
 // Brings in the pins in one board's feed that aren't in the Library yet.
 export async function importFeed(db: SupabaseClient, ownerId: string, feed: PinterestFeed, deadline = Date.now() + 45000): Promise<FeedResult> {
@@ -61,17 +70,21 @@ export async function importFeed(db: SupabaseClient, ownerId: string, feed: Pint
   const { data: known } = pins.length ? await db.from("media").select("id,metadata->pinterest->>pin_id").eq("owner_id", ownerId).in("metadata->pinterest->>pin_id", pins.map(pin => pin.id)) : { data: [] };
   const existing = new Map((known || []).map(row => [String((row as Record<string, unknown>).pin_id), String(row.id)]));
   const ids: string[] = []; let imported = 0; let skipped = 0; let failed = 0;
+  const reasons = new Map<string, number>();
   for (let index = 0; index < pins.length; index += 4) {
     if (Date.now() > deadline) break;
     await Promise.all(pins.slice(index, index + 4).map(async pin => {
       const already = existing.get(pin.id);
       if (already) { skipped += 1; ids.push(already); return; }
-      const id = await saveImage(db, ownerId, pin, feed).catch(() => null);
-      if (id) { imported += 1; ids.push(id); } else failed += 1;
+      const saved = await saveImage(db, ownerId, pin, feed).catch((problem: unknown): Saved => ({ reason: problem instanceof Error ? problem.message : "an unexpected error" }));
+      if ("id" in saved) { imported += 1; ids.push(saved.id); return; }
+      failed += 1; reasons.set(saved.reason, (reasons.get(saved.reason) || 0) + 1);
     }));
   }
   if (ids.length) await db.from("collection_items").upsert(ids.map(id => ({ owner_id: ownerId, collection_id: collectionId, record_type: "media", record_id: id })), { onConflict: "collection_id,record_type,record_id", ignoreDuplicates: true });
-  return { imported, skipped, failed, collectionId, title: title || feed.label };
+  // The most common reason pins failed, so the page can say why.
+  const reason = [...reasons].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  return { imported, skipped, failed, found: pins.length, reason, collectionId, title: title || feed.label };
 }
 
 export async function pinterestSettings(db: SupabaseClient, ownerId: string) {
@@ -94,8 +107,10 @@ export async function syncFeed(db: SupabaseClient, ownerId: string, url: string,
   if (!row || !feed) throw new Error("That board isn’t followed any more. Refresh the page.");
   let result: FeedResult | null = null; let failure = "";
   try { result = await importFeed(db, ownerId, feed, deadline); } catch (problem) { failure = problem instanceof Error ? problem.message : "Import failed."; }
+  // Pins that all fail to save count as a problem worth showing beside the board.
+  const warning = result && result.failed && !result.imported ? `${result.failed} ${result.failed === 1 ? "pin" : "pins"} couldn’t be saved: ${result.reason}.` : "";
   const fresh = (await pinterestSettings(db, ownerId))?.feeds || row.feeds;
-  await saveFeeds(db, ownerId, fresh.map(item => item.url !== url ? item : { ...item, label: result?.title || item.label, collectionId: result?.collectionId || item.collectionId, lastSync: new Date().toISOString(), lastError: failure || undefined, imported: (item.imported || 0) + (result?.imported || 0) }));
+  await saveFeeds(db, ownerId, fresh.map(item => item.url !== url ? item : { ...item, label: result?.title || item.label, collectionId: result?.collectionId || item.collectionId, lastSync: new Date().toISOString(), lastError: failure || warning || undefined, imported: (item.imported || 0) + (result?.imported || 0) }));
   if (!result) throw new Error(failure);
   return result;
 }
