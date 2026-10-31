@@ -44,7 +44,7 @@ export function parseTagIds(value: string | undefined) {
   return [...new Set((value || "").split(",").filter(isUuid))].slice(0, 8);
 }
 
-export const withinKinds = ["project", "research_thread", "board"] as const;
+export const withinKinds = ["project", "research_thread", "board", "collection"] as const;
 export type WithinKind = (typeof withinKinds)[number];
 export function parseWithin(value: string | undefined): { kind: WithinKind; id: string } | null {
   const [kind, id] = (value || "").split(":");

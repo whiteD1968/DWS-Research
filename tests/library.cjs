@@ -38,7 +38,7 @@ test('library links keep layout, tags, place, and search, and drop defaults', ()
   assert.equal(library.libraryHref({ view: 'images', q: 'clay', layout: 'compact', tags: [a, b], within: `project:${a}`, page: 2 }), `/library?view=images&q=clay&layout=compact&tags=${a}%2C${b}&in=project%3A${a}&page=2`);
   assert.deepEqual(library.parseTagIds(`${a},nope,${a},${b}`), [a, b]);
   assert.deepEqual(library.parseWithin(`board:${b}`), { kind: 'board', id: b });
-  assert.equal(library.parseWithin(`collection:${b}`), null);
+  assert.deepEqual(library.parseWithin(`collection:${b}`), { kind: "collection", id: b });
   assert.equal(library.parseLibraryLayout('masonry'), 'grid');
   assert.equal(library.pageSizeFor('compact') > library.pageSizeFor('grid'), true);
 });

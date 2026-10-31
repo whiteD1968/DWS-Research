@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { digestDue, digestParent, digestSettingsFrom, isMorningRun } from "@/lib/digest";
 import { zoteroParent } from "@/lib/zotero";
 import { syncZoteroFor } from "@/lib/zotero-sync";
+import { pinterestParent } from "@/lib/pinterest";
+import { syncPinterestFor } from "@/lib/pinterest-sync";
 import { gatherDigest, sendDigest, siteUrl } from "@/lib/digest-run";
 import { scoutFor } from "@/lib/scout-run";
 import { studioToday } from "@/lib/journal";
@@ -19,7 +21,7 @@ function authorized(request: Request) {
   return !!secret && given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }
 
-// Vercel Cron calls this at 11:00 and 12:00 UTC; whichever is 7am in New York syncs Zotero, runs the scout, and sends the email.
+// Vercel Cron calls this at 11:00 and 12:00 UTC; whichever is 7am in New York syncs Zotero and Pinterest, runs the scout, and sends the email.
 export async function GET(request: Request) {
   if (!authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const db = createServiceClient();
@@ -31,6 +33,12 @@ export async function GET(request: Request) {
     for (const owner of new Set((zoteroRows || []).map(row => row.owner_id as string))) {
       try { const result = await syncZoteroFor(db, owner); synced.push({ owner, status: `added ${result.added}, updated ${result.updated}` }); }
       catch { synced.push({ owner, status: "failed" }); }
+    }
+    // Followed Pinterest boards bring in their newest pins before the email goes out.
+    const { data: pinterestRows } = await db.from("notes").select("owner_id").eq("parent_type", pinterestParent).limit(100);
+    for (const owner of new Set((pinterestRows || []).map(row => row.owner_id as string))) {
+      try { const result = await syncPinterestFor(db, owner, Date.now() + 30000); synced.push({ owner, status: `pinterest added ${result.imported}` }); }
+      catch { synced.push({ owner, status: "pinterest failed" }); }
     }
   }
   const { data, error } = await db.from("notes").select("id,owner_id,metadata").eq("parent_type", digestParent).eq("metadata->>enabled", "true").limit(100);
