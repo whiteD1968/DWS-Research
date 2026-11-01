@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { studioToday } from "@/lib/journal";
 import { defaultMaterials, opportunityParent, reminderFor } from "@/lib/opportunities";
-import { leadFrom, leadParent, parseSearches } from "@/lib/opportunity-scout";
+import { leadFrom, leadParent, parseSearches, parseSkip } from "@/lib/opportunity-scout";
 import { scoutFor, scoutSettings } from "@/lib/scout-run";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,12 +16,12 @@ export async function runScout(force = false) {
   return { ran: result.ran, added: result.added };
 }
 
-export async function saveScoutSearches(text: string) {
-  const searches = parseSearches(text);
+export async function saveScoutSearches(text: string, skipText = "") {
+  const searches = parseSearches(text); const skip = parseSkip(skipText);
   if (!searches.length) throw new Error("Add at least one search.");
   const user = await requireUser(); const db = await createClient();
   const { id, meta } = await scoutSettings(db, user.id);
-  const { error } = await db.from("notes").update({ metadata: { ...meta, searches, last_run: null } }).eq("owner_id", user.id).eq("id", id);
+  const { error } = await db.from("notes").update({ metadata: { ...meta, searches, skip, last_run: null } }).eq("owner_id", user.id).eq("id", id);
   if (error) throw new Error("Could not save the searches.");
   revalidatePath("/opportunities");
 }

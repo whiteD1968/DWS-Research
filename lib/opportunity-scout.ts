@@ -4,14 +4,50 @@ import { opportunityKinds, type OpportunityKind } from "@/lib/opportunities";
 export const leadParent = "opportunity_lead";
 export const scoutSettingsParent = "opportunity_settings";
 export const scoutIntervalHours = 20;
-export const maxSearches = 6;
-export const defaultSearches = ["artist open call deadline", "artist residency application deadline", "artist grant application deadline", "juried exhibition call for artists"];
+export const maxSearches = 8;
+// Built around the studio's practice: installations, design-build, additive manufacturing, furniture and products, craft and public art,
+// across the US with extra weight on Florida and the surrounding states.
+export const defaultSearches = [
+  "public art call for artists Florida 2026",
+  "public art RFQ sculpture installation Georgia Alabama South Carolina",
+  "design build installation open call architects designers 2026",
+  "3D printing additive manufacturing architecture research grant",
+  "furniture design competition open call craft makers",
+  "artist residency digital fabrication craft application deadline",
+  "Florida individual artist fellowship grant deadline",
+  "public art commission call for artists fabrication materials",
+];
+// The first generic searches; settings still holding exactly these move to the studio searches above.
+const firstSearches = ["artist open call deadline", "artist residency application deadline", "artist grant application deadline", "juried exhibition call for artists"];
+// Results mentioning these are left out: calls meant for students.
+export const defaultSkip = ["student competition", "student design competition", "students only", "student artists", "undergraduate students", "graduate students", "high school", "K-12", "youth"];
+export const maxSkip = 30;
 
 export type Lead = { id: string; title: string; url: string; source: string; summary: string; query: string; foundAt: string; deadline: string; kind: OpportunityKind };
 
 export function parseSearches(value: unknown) {
   const lines = (typeof value === "string" ? value.split("\n") : Array.isArray(value) ? value : []).map(line => String(line).replace(/\s+/g, " ").trim().slice(0, 120)).filter(Boolean);
   return [...new Set(lines)].slice(0, maxSearches);
+}
+
+// The searches to run: the saved ones, unless they are still the first generic set.
+export function currentSearches(saved: unknown) {
+  const searches = parseSearches(saved);
+  const untouched = searches.length === firstSearches.length && firstSearches.every(search => searches.includes(search));
+  return searches.length && !untouched ? searches : defaultSearches;
+}
+
+export function parseSkip(value: unknown) {
+  const lines = (typeof value === "string" ? value.split("\n") : Array.isArray(value) ? value : []).map(line => String(line).replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean);
+  return [...new Set(lines.map(line => line.toLowerCase()))].slice(0, maxSkip);
+}
+// Saved skip words, or the defaults when none were ever saved.
+export const currentSkip = (saved: unknown) => (Array.isArray(saved) ? parseSkip(saved) : defaultSkip.map(word => word.toLowerCase()));
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// True when a result mentions any skip phrase as whole words.
+export function shouldSkip(text: string, skip: string[]) {
+  const lower = text.toLowerCase();
+  return skip.some(phrase => new RegExp(`(^|[^a-z0-9])${escape(phrase.toLowerCase())}([^a-z0-9]|$)`).test(lower));
 }
 
 export function scoutDue(lastRun: unknown, now = new Date()) {
