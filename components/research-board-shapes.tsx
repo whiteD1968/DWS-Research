@@ -25,7 +25,7 @@ export function cardInput(record: BoardRecord | undefined, shape: RecordShape, i
 }
 let measureContext: CanvasRenderingContext2D | null = null;
 const cssFont = (s: TextStyle) => `${s.weight} ${s.size}px ${s.family}`;
-function measure(text: string, style: TextStyle) {
+export function measure(text: string, style: TextStyle) {
   measureContext ||= document.createElement("canvas").getContext("2d");
   if (!measureContext) return text.length * style.size * 0.55;
   measureContext.font = cssFont(style);

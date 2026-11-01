@@ -26,6 +26,7 @@ export function BoardLayoutTools({ editor, title, onChange }: { editor: Editor |
     editor.select(id);
     editor.setCurrentTool("select");
     editor.zoomToSelection({ animation: { duration: 220 } });
+    editor.focus();
     onChange();
   }
   function toggleGrid() {
