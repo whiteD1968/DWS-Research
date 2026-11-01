@@ -6,9 +6,10 @@ import { getSignedMediaUrlMap } from "@/lib/media";
 import { researchArea, researchType } from "@/lib/research-organization";
 import { TopicPdfUpload } from "@/components/topic-pdf-upload";
 import { documentBytes } from "@/lib/topic-pdf";
+import { BoardList } from "@/components/board-list";
 
-export async function ResearchTopicWorkspace({ topic, context, mode, error, saved }: {
-  topic: Topic; context: Awaited<ReturnType<typeof topicContext>>; mode: string; error?: string; saved?: boolean;
+export async function ResearchTopicWorkspace({ topic, context, mode, error, saved, ownerId }: {
+  ownerId: string; topic: Topic; context: Awaited<ReturnType<typeof topicContext>>; mode: string; error?: string; saved?: boolean;
 }) {
   const links = context.links.filter(link => link.source_type === "research_thread" && link.source_id === topic.id);
   const notes = context.records.note.filter(note => note.parent_type === "research_thread" && note.parent_id === topic.id);
@@ -59,11 +60,12 @@ export async function ResearchTopicWorkspace({ topic, context, mode, error, save
   const referenceLinks = members("reference");
   const literature = referenceLinks.filter(link => { const record = recordFor(link); return record && isLiterature(record); });
   const precedents = referenceLinks.filter(link => !literature.includes(link));
-  const simpleType = ({ collections: "collection", boards: "board", projects: "project" } as Record<string, TopicRecordType>)[mode];
-  return <div className="research-workspace"><Link href="/research">Research</Link><header className="page-header"><div><p className="eyebrow">{researchArea(topic.metadata)} &middot; {researchType(topic.metadata)} &middot; {topic.status}</p><h1 className="page-title">{topic.title}</h1>{topic.question && <p className="topic-primary-question">{topic.question}</p>}</div><div className="detail-actions"><Link className="button" href={`/research/${topic.id}/edit`}>Edit topic</Link><DeleteContent kind="research_thread" id={topic.id} title={topic.title} /></div></header>
+  const simpleType = ({ projects: "project" } as Record<string, TopicRecordType>)[mode];
+  return <div className="research-workspace"><Link href="/research">← Topics</Link><header className="page-header"><div><p className="eyebrow">{researchArea(topic.metadata)} &middot; {researchType(topic.metadata)} &middot; {topic.status}</p><h1 className="page-title">{topic.title}</h1>{topic.question && <p className="topic-primary-question">{topic.question}</p>}</div><div className="detail-actions"><Link className="button" href={`/research/${topic.id}/edit`}>Edit topic</Link><DeleteContent kind="research_thread" id={topic.id} title={topic.title} /></div></header>
     {error && <p className="notice notice-error" role="alert">{error}</p>}{saved && <p className="notice notice-success" role="status">Saved.</p>}
-    <nav className="research-tabs" aria-label="Topic views">{topicModes.map(tab => <Link key={tab} href={tab === "boards" ? `/research/${topic.id}/boards` : `/research/${topic.id}?mode=${tab}`} aria-current={mode === tab ? "page" : undefined}>{tab === "projects" ? "Linked Projects" : tab[0].toUpperCase() + tab.slice(1)}</Link>)}</nav>
+    <nav className="research-tabs" aria-label="Topic views">{topicModes.map(tab => <Link key={tab} href={tab === "boards" ? `/research/${topic.id}/boards` : `/research/${topic.id}?mode=${tab}`} aria-current={mode === tab ? "page" : undefined}>{tab === "projects" ? "Projects" : tab[0].toUpperCase() + tab.slice(1)}</Link>)}</nav>
     {mode === "overview" && <><section className="research-scope"><h2>{topic.question || "Research question"}</h2><p>{topic.summary || "No scope recorded yet."}</p><div className="research-counts"><span>{referenceLinks.length} references</span><span>{members("media").length} documents</span><span>{members("research_session").length} Discover sessions</span><span>{notes.length} notes</span></div></section>
+      <section><div className="section-heading"><h2>Boards with this topic</h2><Link href={`/research/${topic.id}/boards`}>All boards ↗</Link></div><BoardList ownerId={ownerId} topicId={topic.id} preview /></section>
       <section><h2>Key references and precedents</h2>{recordList(referenceLinks.filter(link => link.metadata.review_status === "key_source"), true)}</section><section><h2>Linked Projects</h2>{recordList(members("project"))}</section>
       <section><h2>Recent activity</h2><div className="research-list">{links.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8).map(link => <p key={link.id}>{recordFor(link)?.title || recordFor(link)?.name || "Record"} &middot; {link.relationship_type.replaceAll("_", " ")} &middot; {link.created_at.slice(0, 10)}</p>)}</div><small>Topic updated {new Date(topic.updated_at).toLocaleString("en-US")}</small></section></>}
     {mode === "discover" && <><Link className="button" href="/discover">New Discover search</Link>{addExisting("research_session")}{recordList(members("research_session"))}</>}

@@ -94,6 +94,12 @@ test('text conversion is retry-safe, keeps note topic context and links referenc
   assert.equal(tables.relationships[0].relationship_type, 'has_reference');
   await assert.rejects(api.convertBoardText('foreign-board', 'n', 'note', 'x', 'x'), /not found/);
   await assert.rejects(api.convertBoardText('board', 'n', 'note', 'x', ''), /text/);
+  // A loose board with no topic still converts text: the note lands in the Library and the reference stays unlinked.
+  tables.boards.push({ id: 'loose', owner_id: 'owner', research_thread_id: null });
+  await api.convertBoardText('loose', 'loose-note', 'note', 'Idea', 'Loose idea');
+  const looseNote = tables.notes.find(n => n.id === 'loose-note'); assert.equal(looseNote.parent_id, undefined); assert.equal(looseNote.parent_type, undefined);
+  await api.convertBoardText('loose', 'loose-ref', 'reference', 'Ref', 'Loose reference');
+  assert.equal(tables.relationships.length, 1);
 });
 const insertion = load('lib/boards/insertion.ts', { './layout': layout, tldraw: {
   createShapeId: (() => { let id = 0; return () => `shape:${++id}`; })(),

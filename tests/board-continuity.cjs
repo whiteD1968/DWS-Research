@@ -65,7 +65,7 @@ function harness({ foreign = false, missing = false, failImport = false } = {}) 
   const api = load('app/(workspace)/boards/handoff-actions.ts', {
     '@/lib/auth': { requireUser:async()=>({id:'owner'}) }, '@/lib/supabase/server':{createClient:async()=>db},
     '@/lib/boards/catalog':{boardCatalog:async()=>[ref, image]}, '@/lib/boards/layout':layout,
-    '../discover/actions':{importDiscover:async()=>{calls.push(['import']);return failImport?{error:'Import failed'}:{savedItems:{result:uuid(1)}};}},
+    '@/lib/boards/organization':load('lib/boards/organization.ts'), '../discover/actions':{importDiscover:async()=>{calls.push(['import']);return failImport?{error:'Import failed'}:{savedItems:{result:uuid(1)}};}},
   });
   return {api,calls,boards};
 }

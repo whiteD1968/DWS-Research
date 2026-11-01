@@ -1,7 +1,15 @@
-import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { BoardList } from "@/components/board-list";
-export default async function BoardsPage({ searchParams }: { searchParams: Promise<{ boardPage?: string }> }) {
+import { NewBoardForm } from "@/components/board-organizer";
+import { organizationOptions } from "@/lib/boards/organization";
+
+export default async function BoardsPage() {
   const user = await requireUser();
-  return <section><h1>Boards</h1><Link className="button" href="/research">Research Topics</Link><BoardList ownerId={user.id} page={Number((await searchParams).boardPage || 1)} /></section>;
+  const options = await organizationOptions(await createClient(), user.id);
+  return <section className="boards-page">
+    <header className="page-header"><div><p className="eyebrow">Boards</p><h1 className="page-title">Boards</h1><p className="page-description">Loose ideas live here until they become projects. Boards inside a project are listed under it.</p></div></header>
+    <NewBoardForm projects={options.projects} topics={options.topics} />
+    <BoardList ownerId={user.id} grouped />
+  </section>;
 }
