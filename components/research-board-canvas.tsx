@@ -13,6 +13,7 @@ import type { BoardRecord, Composition } from "@/lib/boards/layout";
 import { fitResearchBoard, initializeResearchBoard, insertResearchRecord, type RecordShape } from "@/lib/boards/insertion";
 import { BoardRecords, BoardSourceActions, boardShapeUtils } from "./research-board-shapes";
 import { BoardArrangeBar, BoardLayoutTools } from "./board-layout-tools";
+import { Presenter, SlidesPanel, useSlides } from "./board-slides";
 import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts";
 import { copyRecoveredBoard } from "@/app/(workspace)/boards/recovery-actions";
 import type { BoardTransfer } from "@/lib/boards/handoff";
@@ -62,6 +63,20 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
   const [ready, setReady] = useState(false);
   const [licenseError, setLicenseError] = useState(false);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  // Drawers sit just under the header, which wraps onto more rows on narrow screens.
+  useEffect(() => {
+    const header = headerRef.current, workspace = workspaceRef.current;
+    if (!header || !workspace) return;
+    const observer = new ResizeObserver(() => workspace.style.setProperty("--board-header-h", `${header.offsetHeight}px`));
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+  const [slidesOpen, setSlidesOpen] = useState(false);
+  const [presentFrom, setPresentFrom] = useState<number | null>(null);
+  const slides = useSlides(activeEditor);
+  const deck = useMemo(() => slides.filter(s => !s.hidden), [slides]);
   const queueSave = useRef<(() => void) | null>(null);
   const revision = useRef(board.updated_at);
   const pending = useRef<unknown>(null);
@@ -225,12 +240,13 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
     ed.registerExternalAssetHandler("url", async () => { throw new Error("Add a saved reference instead."); });
     return () => { fitObserver.disconnect(); cancelAnimationFrame(fitFrame); queueSave.current = null; setActiveEditor(null); setReady(false); unsubscribe(); stopNoteStyle(); clearTimeout(timeout); void flush(); window.removeEventListener("beforeunload", beforeUnload); editor.current = null; };
   }
-  return <div className="board-workspace">
-    <header className="board-header"><Link href={source.href} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>{source.label}</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button disabled={busy} onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError || busy} onClick={() => setPicker(!picker)}>+ Add</button>
+  return <div className={`board-workspace${presentFrom !== null ? " presenting" : ""}`} ref={workspaceRef}>
+    <header className="board-header" ref={headerRef}><Link href={source.href} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>{source.label}</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button disabled={busy} onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError || busy} onClick={() => { setPicker(!picker); setSlidesOpen(false); }}>+ Add</button>
       <BoardSourceActions editor={activeEditor} records={recordMap} />
       <select aria-label="Convert selected text" value="" disabled={!board.research_thread_id} onChange={e => convert(e.target.value as "note" | "reference")}><option value="">Convert to...</option><option value="note">Structured Note</option><option value="reference">Reference</option></select>
       <button className="button" title="Fit board to viewport" onClick={() => { if (editor.current) fitResearchBoard(editor.current, true); }}>Fit</button>
       <BoardLayoutTools editor={activeEditor} title={title} onChange={() => queueSave.current?.()} />
+      <button type="button" className="button" aria-expanded={slidesOpen} disabled={!ready} onClick={() => { setSlidesOpen(!slidesOpen); setPicker(false); }}>Slides{slides.length ? ` (${deck.length})` : ""}</button>
     </header>
     {draftWarning && <div className="board-error" role="alert">{draftWarning}</div>}
     {status === "Error saving" && <div className="board-error"><span>Your work is retained in this tab and, when available, in this browser’s draft storage. If another session changed the board, preserve both versions with a separate copy.</span><button disabled={busy} onClick={() => void saveSeparateCopy()}>Save as separate board</button><button disabled={busy} onClick={() => void reloadForRecovery()}>Reload and recover</button></div>}
@@ -239,6 +255,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
     {failedImages.length > 0 && <div className="board-error"><span>{failedImages.length} image uploads need attention</span><button disabled={busy} onClick={async () => { setBusy(true); for (const job of failedImages) await uploadImage(job); setBusy(false); }}>Retry uploads</button></div>}
     {details && <div className="board-delete-control"><DeleteContent kind="board" id={board.id} title={title} /></div>}
     {details && <form className="board-details" onSubmit={async e => { e.preventDefault(); if (pending.current || running.current) { setError("Wait for canvas changes to save before renaming."); return; } setBusy(true); running.current = true; try { revision.current = await renameBoard(board.id, title, description, revision.current); setDetails(false); } catch (e) { setError((e as Error).message); } finally { running.current = false; setBusy(false); void flush(); } }}><label>Title<input value={title} required onChange={e => setTitle(e.target.value)} /></label><label>Description<textarea value={description} onChange={e => setDescription(e.target.value)} /></label><button className="button" disabled={busy}>Save details</button>{board.research_thread_id && <Link href={`/research/${board.research_thread_id}/boards`}>Generate another board</Link>}</form>}
+    {slidesOpen && activeEditor && presentFrom === null && <SlidesPanel editor={activeEditor} title={title} onPresent={setPresentFrom} onClose={() => setSlidesOpen(false)} onChange={() => queueSave.current?.()} />}
     {picker && <aside className="board-picker" aria-label="Add research">
       <div className="board-picker-heading"><strong>Add research</strong><button type="button" aria-label="Close Add drawer" onClick={() => setPicker(false)}>×</button></div>
       <input aria-label="Search research" placeholder="Search title, creator or text" value={query} onChange={e => setQuery(e.target.value)} />
@@ -256,6 +273,6 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
       <div className="board-picker-tools"><small>Sketch & annotate</small><div className="board-form-row">{["text", "note", "draw", "arrow", "frame", "geo"].map(tool => <button key={tool} className="button" onClick={() => { editor.current?.setCurrentTool(tool); setPicker(false); }}>{tool === "draw" ? "Sketch" : tool === "geo" ? "Rectangle" : tool === "note" ? "Sticky" : tool}</button>)}</div></div>
     </aside>}
     {conversion && <div role="dialog" aria-modal="true" aria-label="Convert loose text" className="board-conversion"><form onSubmit={async e => { e.preventDefault(); setBusy(true); try { const record = await convertBoardText(board.id, conversion.id, conversion.type, conversion.title, conversion.text); setRecords(prev => [...prev.filter(r => r.key !== record.key), record]); const ed = editor.current; const shape = ed?.getShape(conversion.shapeId as RecordShape["id"]); if (ed && shape) { const point = ed.getShapePageBounds(shape)?.point; ed.run(() => { if (!place(record, point)) throw new Error("Record saved, but placement failed. Try again when the editor is available."); ed.deleteShapes([shape.id]); }); } setConversion(null); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><h2>Convert to {conversion.type}</h2><label>Title<input required value={conversion.title} onChange={e => setConversion({ ...conversion, title: e.target.value })} /></label><label>Text<textarea required value={conversion.text} onChange={e => setConversion({ ...conversion, text: e.target.value })} /></label><button disabled={busy} className="button">Create {conversion.type}</button><button type="button" className="button" onClick={() => setConversion(null)}>Cancel</button></form></div>}
-    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={boardShapeUtils} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider><BoardArrangeBar editor={activeEditor} onChange={() => queueSave.current?.()} /></div>
+    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={boardShapeUtils} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider>{presentFrom === null ? <BoardArrangeBar editor={activeEditor} onChange={() => queueSave.current?.()} /> : activeEditor && deck.length > 0 && <Presenter editor={activeEditor} slides={deck} start={presentFrom} root={workspaceRef} onExit={() => setPresentFrom(null)} />}</div>
   </div>;
 }
