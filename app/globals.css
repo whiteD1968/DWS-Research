@@ -2373,3 +2373,6 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .duplicates-confirm p { margin: 0; font-size: 14px; }
 .duplicates .button { width: auto; }
 @media (max-width: 600px) { .duplicates-images { grid-template-columns: repeat(2, minmax(0, 1fr)); } .duplicates-group { padding: 12px; } }
+
+/* Desktop app install */
+.sidebar-footer .install-app { justify-self: start; padding: 0; color: #f1efe9; font-weight: 600; }

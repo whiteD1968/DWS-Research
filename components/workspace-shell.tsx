@@ -1,5 +1,6 @@
 "use client";
 
+import { InstallApp } from "@/components/install-app";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
@@ -80,6 +81,7 @@ export function WorkspaceShell({
         </nav>
 
         <div className="sidebar-footer">
+          <InstallApp />
           <span>{userEmail ?? "Authenticated workspace"}</span>
           <form action={signOut}>
             <button className="text-button" type="submit">
