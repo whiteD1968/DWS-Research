@@ -46,17 +46,20 @@ export function OpportunityLeads({ leads, today, limit, showAllHref }: { leads: 
   </section>;
 }
 
-export function ScoutSettings({ searches, lastRun, lastError }: { searches: string[]; lastRun: string; lastError: string }) {
+export function ScoutSettings({ searches, skip, lastRun, lastError }: { searches: string[]; skip: string[]; lastRun: string; lastError: string }) {
   const router = useRouter();
   const [text, setText] = useState(searches.join("\n"));
+  const [skipText, setSkipText] = useState(skip.join("\n"));
   const [status, setStatus] = useState(""); const [pending, start] = useTransition();
   const run = (task: () => Promise<string>) => { setStatus(""); start(async () => { try { setStatus(await task()); router.refresh(); } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Something went wrong."); } }); };
   return <details className="scout-settings">
     <summary>Scout settings<span>{lastRun ? `Last checked ${new Date(lastRun).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}` : "Not run yet"}{lastError ? ` · ${lastError}` : ""}</span></summary>
-    <p>The scout searches the web about once a day, the first time you open Home, and shows new results there. One search per line, up to six. Words like your medium, region, or “2027” narrow the results.</p>
-    <textarea value={text} onChange={event => setText(event.target.value)} rows={6} aria-label="Saved searches" />
+    <p>The scout searches the web about once a day, the first time you open Home, and shows new results there. One search per line, up to eight. Words like your medium, region, or “2027” narrow the results.</p>
+    <textarea value={text} onChange={event => setText(event.target.value)} rows={8} aria-label="Saved searches" />
+    <label className="field scout-skip"><span>Leave out results that mention (one per line)</span>
+      <textarea value={skipText} onChange={event => setSkipText(event.target.value)} rows={4} /></label>
     <div className="inline-actions">
-      <button type="button" className="button" disabled={pending} onClick={() => run(async () => { await saveScoutSearches(text); return "Searches saved. They'll run on your next visit to Home."; })}>Save searches</button>
+      <button type="button" className="button" disabled={pending} onClick={() => run(async () => { await saveScoutSearches(text, skipText); return "Searches saved. They'll run on your next visit to Home."; })}>Save searches</button>
       <button type="button" className="button button-primary" disabled={pending} onClick={() => run(async () => { const result = await runScout(true); return result.added ? `Found ${result.added} new ${result.added === 1 ? "lead" : "leads"}.` : "Nothing new this time."; })}>{pending ? "Checking…" : "Check now"}</button>
       {status && <span className="scout-status" role="status">{status}</span>}
     </div>

@@ -5,7 +5,7 @@ import { opportunityFrom, opportunityParent, seasonStats, sortByDeadline, type O
 import { OpportunityBoard } from "@/components/opportunity-board";
 import { kitFrom, kitParent, type KitItem } from "@/lib/kit";
 import { OpportunityLeads, ScoutSettings } from "@/components/opportunity-leads";
-import { defaultSearches, leadFrom, leadParent, parseSearches, scoutSettingsParent, type Lead } from "@/lib/opportunity-scout";
+import { currentSearches, currentSkip, leadFrom, leadParent, scoutSettingsParent, type Lead } from "@/lib/opportunity-scout";
 
 export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ new?: string; o?: string }> }) {
   const user = await requireUser(); const db = await createClient(); const params = await searchParams;
@@ -18,7 +18,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const kit = (kitRows.data || []).map(kitFrom).filter((item): item is KitItem => !!item);
   const leads = (leadRows.data || []).map(leadFrom).filter((lead): lead is Lead => !!lead);
   const scoutMeta = (scout.data?.metadata || {}) as Record<string, unknown>;
-  const searches = scout.data ? parseSearches(scoutMeta.searches) : defaultSearches;
+  const searches = currentSearches(scoutMeta.searches); const skip = currentSkip(scoutMeta.skip);
   const today = studioToday(); const year = today.slice(0, 4);
   const all = (data || []).map(opportunityFrom).filter((item): item is Opportunity => !!item).sort(sortByDeadline);
   // Decided items stay visible for the current year; older results drop off the board but still count in the Library.
@@ -36,6 +36,6 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
     </section>
     <OpportunityLeads leads={leads} today={today} />
     <OpportunityBoard key={params.new === "1" ? "new" : params.o ? `o-${params.o}` : "board"} items={items} today={today} startOpen={params.new === "1"} openId={params.o} kit={kit} />
-    <ScoutSettings searches={searches} lastRun={typeof scoutMeta.last_run === "string" ? scoutMeta.last_run : ""} lastError={typeof scoutMeta.last_error === "string" ? scoutMeta.last_error : ""} />
+    <ScoutSettings searches={searches} skip={skip} lastRun={typeof scoutMeta.last_run === "string" ? scoutMeta.last_run : ""} lastError={typeof scoutMeta.last_error === "string" ? scoutMeta.last_error : ""} />
   </div>;
 }

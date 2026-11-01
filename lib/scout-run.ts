@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { studioToday } from "@/lib/journal";
 import { opportunityParent } from "@/lib/opportunities";
-import { cleanTitle, defaultSearches, guessDeadline, looksLikeListing, guessKind, leadKey, leadParent, parseSearches, scoutDue, scoutSettingsParent } from "@/lib/opportunity-scout";
+import { cleanTitle, currentSearches, currentSkip, defaultSearches, defaultSkip, guessDeadline, looksLikeListing, guessKind, leadKey, leadParent, scoutDue, scoutSettingsParent, shouldSkip } from "@/lib/opportunity-scout";
 
 type Db = SupabaseClient;
 type Hit = { title: string; url: string; description: string; source: string };
@@ -9,7 +9,7 @@ type Hit = { title: string; url: string; description: string; source: string };
 export async function scoutSettings(db: Db, ownerId: string) {
   const { data } = await db.from("notes").select("id,metadata").eq("owner_id", ownerId).eq("parent_type", scoutSettingsParent).order("created_at").limit(1).maybeSingle();
   if (data) return { id: data.id as string, meta: (data.metadata || {}) as Record<string, unknown> };
-  const meta = { searches: defaultSearches, seen: [] as string[], last_run: null };
+  const meta = { searches: defaultSearches, skip: defaultSkip, seen: [] as string[], last_run: null };
   const { data: made, error } = await db.from("notes").insert({ owner_id: ownerId, title: "Opportunity scout settings", parent_type: scoutSettingsParent, plain_text: "", content: [], metadata: meta }).select("id").single();
   if (error || !made) throw new Error("Could not open the scout settings.");
   return { id: made.id as string, meta };
@@ -33,7 +33,7 @@ export async function scoutFor(db: Db, ownerId: string, force = false) {
   const { id, meta } = await scoutSettings(db, ownerId);
   if (!force && !scoutDue(meta.last_run)) return { ran: false, added: 0, failure: "" };
   await db.from("notes").update({ metadata: { ...meta, last_run: new Date().toISOString() } }).eq("owner_id", ownerId).eq("id", id);
-  const searches = parseSearches(meta.searches);
+  const searches = currentSearches(meta.searches); const skip = currentSkip(meta.skip);
   const { data: known } = await db.from("notes").select("metadata").eq("owner_id", ownerId).in("parent_type", [opportunityParent, leadParent]).limit(3000);
   const seen = new Set<string>([...(Array.isArray(meta.seen) ? meta.seen.map(String) : []), ...(known || []).map(row => leadKey(String((row.metadata as { url?: unknown })?.url || ""))).filter(Boolean)]);
   const today = studioToday(); const fresh: Record<string, unknown>[] = []; const newKeys: string[] = [];
@@ -48,7 +48,7 @@ export async function scoutFor(db: Db, ownerId: string, force = false) {
       seen.add(key); newKeys.push(key);
       const text = `${hit.title} ${hit.description}`;
       const { deadline, past } = guessDeadline(text, today);
-      if (past || looksLikeListing(hit.title)) continue;
+      if (past || looksLikeListing(hit.title) || shouldSkip(text, skip)) continue;
       fresh.push({ owner_id: ownerId, title: cleanTitle(hit.title, hit.source), plain_text: hit.description, parent_type: leadParent, content: [], metadata: { url: hit.url, source: hit.source, query, found_at: new Date().toISOString(), deadline, kind: guessKind(text) } });
     }
   }
