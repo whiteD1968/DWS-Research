@@ -50,6 +50,7 @@ test('transfer URL parsing rejects malformed, oversized and repeated inputs safe
 });
 function harness({ foreign = false, missing = false, failImport = false } = {}) {
   const calls = []; const boards = []; const ref = { key: `reference:${uuid(1)}`, id: uuid(1), type: 'reference', title: 'Study', subtitle: '', role: 'visual', themeIds: [], topicIds: [], href: '/' };
+  const image = { ...ref, key: `media:${uuid(3)}`, id: uuid(3), type: 'media', title: 'Vault', image: '/thumb' };
   const db = { from(table) {
     const filters = {}; let row; let single = false;
     const q = { select() { return q; }, eq(k,v) { filters[k]=v; calls.push([table,k,v]); return q; }, in(k,v) { filters[k]=v; return q; }, order() { return q; }, limit() { return q; }, single() { single=true; return q; }, upsert(r) { row=r; return q; }, then(resolve) {
@@ -63,7 +64,7 @@ function harness({ foreign = false, missing = false, failImport = false } = {}) 
   } };
   const api = load('app/(workspace)/boards/handoff-actions.ts', {
     '@/lib/auth': { requireUser:async()=>({id:'owner'}) }, '@/lib/supabase/server':{createClient:async()=>db},
-    '@/lib/boards/catalog':{boardCatalog:async()=>[ref]}, '@/lib/boards/layout':layout,
+    '@/lib/boards/catalog':{boardCatalog:async()=>[ref, image]}, '@/lib/boards/layout':layout,
     '../discover/actions':{importDiscover:async()=>{calls.push(['import']);return failImport?{error:'Import failed'}:{savedItems:{result:uuid(1)}};}},
   });
   return {api,calls,boards};
@@ -86,6 +87,16 @@ test('Discover validates destination before import and reuses imported reference
   const h=harness(); assert.match(await h.api.handoffToBoard(request),/add=reference/); assert.equal(h.calls.filter(c=>c[0]==='import').length,1);
   const foreign=harness({foreign:true}); await assert.rejects(foreign.api.handoffToBoard(request),/unavailable/); assert.equal(foreign.calls.filter(c=>c[0]==='import').length,0);
   await assert.rejects(harness({failImport:true}).api.handoffToBoard(request),/Import failed/);
+});
+test('Library images link to a new or existing board without touching the Library',async()=>{
+  const request={...input,source:{type:'library',id:'library'},selected:[uuid(3)]};
+  const h=harness(); assert.equal(await h.api.handoffToBoard(request),`/boards/${uuid(9)}`);
+  assert.equal(h.boards[0].metadata.composition.placements[0].key,`media:${uuid(3)}`);
+  assert.ok(!h.calls.some(c=>c[0]==='media'||c[0]==='import'), 'no Library rows are read for writing or imported');
+  const existing=await harness().api.handoffToBoard({...request,boardId:uuid(8)});
+  assert.equal(new URL(existing,'https://local').searchParams.get('add'),`media:${uuid(3)}`);
+  await assert.rejects(harness().api.handoffToBoard({...request,selected:[uuid(4)]}),/no longer in your Library/);
+  await assert.rejects(harness().api.handoffToBoard({...request,selected:['not-an-id']}),/Select Library images again/);
 });
 test('handoff rejects empty selection and selection above 100',async()=>{
   await assert.rejects(harness().api.handoffToBoard({...input,selected:[]}),/100/);

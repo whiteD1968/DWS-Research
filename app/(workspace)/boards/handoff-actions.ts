@@ -16,14 +16,18 @@ export async function boardDestinations() {
 export async function handoffToBoard(input: { source: BoardHandoffSource; selected: string[]; boardId?: string; title: string; layout: LayoutMode; requestId: string }) {
   const user = await requireUser(); const db = await createClient();
   const ids = [...new Set(input.selected)];
-  if (!ids.length || ids.length > 100 || !layouts.includes(input.layout) || !/^[\da-f-]{36}$/i.test(input.requestId) || !["collection", "discover"].includes(input.source.type)) throw new Error("Select between 1 and 100 records.");
+  if (!ids.length || ids.length > 100 || !layouts.includes(input.layout) || !/^[\da-f-]{36}$/i.test(input.requestId) || !["collection", "discover", "library"].includes(input.source.type)) throw new Error("Select between 1 and 100 records.");
   // Validate destination before importing anything from Discover.
   if (input.boardId) {
     const { data } = await db.from("boards").select("id").eq("id", input.boardId).eq("owner_id", user.id).single();
     if (!data) throw new Error("Destination board unavailable.");
   } else if (!input.title.trim()) throw new Error("Board title required.");
   let keys: string[];
-  if (input.source.type === "collection") {
+  if (input.source.type === "library") {
+    // Library items are linked, never moved: the board holds cards pointing at the same media rows.
+    if (ids.some(id => !/^[\da-f-]{36}$/i.test(id))) throw new Error("Select Library images again.");
+    keys = ids.map(id => `media:${id}`);
+  } else if (input.source.type === "collection") {
     const { data: source } = await db.from("collections").select("id").eq("id", input.source.id).eq("owner_id", user.id).single();
     if (!source) throw new Error("Collection unavailable.");
     const { data: members, error } = await db.from("collection_items").select("record_id").eq("collection_id", source.id).eq("record_type", "reference").in("record_id", ids);
@@ -38,7 +42,7 @@ export async function handoffToBoard(input: { source: BoardHandoffSource; select
   }
   const catalog = await boardCatalog(user.id);
   const selected = catalog.filter(record => keys.includes(record.key));
-  if (selected.length !== keys.length) throw new Error("Some references are unavailable. Saved Discover references are retained; retry the handoff.");
+  if (selected.length !== keys.length) throw new Error(input.source.type === "library" ? "Some selected items are no longer in your Library. Reload and select again." : "Some references are unavailable. Saved Discover references are retained; retry the handoff.");
   if (input.boardId) return `/boards/${input.boardId}?${new URLSearchParams({ add: keys.join(","), transfer: input.requestId })}`;
   const composition = generateComposition(selected, input.layout);
   const { error } = await db.from("boards").upsert({ id: input.requestId, owner_id: user.id, title: input.title.trim().slice(0, 200), board_type: "research_generated", metadata: { generated_from: input.source.type, source_id: input.source.id, handoff_id: input.requestId, generation_version: 2, layout_mode: input.layout, selected_record_ids: keys, composition } }, { onConflict: "id", ignoreDuplicates: true });
