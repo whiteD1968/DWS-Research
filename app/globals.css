@@ -1483,7 +1483,7 @@ select:focus {
 .board-list a { display: grid; gap: 8px; border-top: 1px solid #ddd; padding: 24px 0; }
 .board-list small, .board-list span { color: #666; font-size: 13px; }
 .board-workspace { height: 100dvh; display: flex; flex-direction: column; position: relative; background: #f7f7f6; color: #222; }
-.board-header { min-height: 64px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 10px 20px; background: white; border-bottom: 1px solid #ddd; z-index: 2; }
+.board-header { min-height: 64px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 10px 20px; background: white; border-bottom: 1px solid #ddd; z-index: 600; }
 .board-header > a, .board-header > span { font-size: 12px; }
 .board-header > span { color: #666; }
 .board-title { flex: 1 1 180px; min-width: 0; text-align: left; border: 0; background: transparent; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
@@ -1514,6 +1514,20 @@ select:focus {
 .card-compact small { display: none; }
 .card-compact strong { font-size: 14px; -webkit-line-clamp: 2; }
 .board-source-actions { display: flex; gap: 6px; }
+.board-layout-tools { display: flex; gap: 6px; align-items: center; }
+.board-layout-tools .button[aria-pressed="true"], .board-layout-tools .button[aria-expanded="true"] { background: #32372e; border-color: #32372e; color: #fff; }
+.board-export { position: absolute; top: 75px; right: 16px; width: 300px; max-width: calc(100% - 32px); z-index: 1000; background: white; border: 1px solid #ccc; padding: 16px; display: grid; gap: 12px; box-shadow: 0 4px 20px #0001; font-size: 13px; }
+.board-export fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.board-export legend { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #666; margin-bottom: 4px; }
+.board-export label { display: flex; gap: 8px; align-items: center; margin: 0; }
+.board-export input[type="radio"], .board-export input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+.board-export select { width: auto; padding: 4px 6px; }
+.board-export label:has(input:disabled) { color: #aaa; }
+.board-export-note { color: #666; line-height: 1.4; }
+.board-export-error { color: #9b1c1c; margin: 0; }
+.board-arrange { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; gap: 2px; padding: 4px; background: white; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+.board-arrange button { border: 0; background: transparent; padding: 6px 8px; border-radius: 5px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.board-arrange button:hover { background: #efefeb; }
 .board-picker, .board-details { position: absolute; top: 75px; right: 16px; width: 340px; max-width: calc(100% - 32px); max-height: calc(100% - 150px); overflow: auto; z-index: 500; background: white; border: 1px solid #ccc; padding: 20px; display: grid; gap: 12px; box-shadow: 0 4px 20px #0001; }
 .board-picker { width: 360px; padding: 16px; gap: 12px; }
 .board-picker-heading { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
@@ -1536,7 +1550,7 @@ select:focus {
 .board-conversion textarea { min-height: 150px; }
 .board-error { padding: 12px 20px; font-size: 13px; background: #fff3ed; display: flex; gap: 16px; align-items: center; z-index: 510; }
 .board-error button { margin-left: auto; }
-@media (max-width: 600px) { .board-header { gap: 8px; padding: 8px; } .board-title { flex-basis: 55%; } .board-header .button, .board-header select { font-size: 11px; padding: 7px; width: auto; } .board-picker, .board-details { top: 116px; } }
+@media (max-width: 600px) { .board-header { gap: 8px; padding: 8px; } .board-title { flex-basis: 55%; } .board-header .button, .board-header select { font-size: 11px; padding: 7px; width: auto; } .board-picker, .board-details, .board-export { top: 116px; } .board-layout-tools { flex-wrap: wrap; } .board-arrange { top: auto; bottom: 64px; max-width: calc(100% - 16px); overflow-x: auto; } }
 
 /* Board continuity: recovery, handoff and lightweight linked-record previews. */
 .board-recovery { max-width: 820px; margin: 48px auto; padding: 28px; }
