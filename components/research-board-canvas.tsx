@@ -14,6 +14,8 @@ import { fitResearchBoard, initializeResearchBoard, insertResearchRecord, type R
 import { BoardRecords, BoardSourceActions, boardShapeUtils, setExportRecords } from "./research-board-shapes";
 import { BoardArrangeBar, BoardLayoutTools } from "./board-layout-tools";
 import { Presenter, SlidesPanel, useSlides } from "./board-slides";
+import { DiagramBoxUtil, DiagramTools, QuickAdd } from "./board-diagram";
+const shapeUtils = [...boardShapeUtils, DiagramBoxUtil];
 import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts";
 import { copyRecoveredBoard } from "@/app/(workspace)/boards/recovery-actions";
 import type { BoardTransfer } from "@/lib/boards/handoff";
@@ -247,6 +249,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
       <select aria-label="Convert selected text" value="" disabled={!board.research_thread_id} onChange={e => convert(e.target.value as "note" | "reference")}><option value="">Convert to...</option><option value="note">Structured Note</option><option value="reference">Reference</option></select>
       <button className="button" title="Fit board to viewport" onClick={() => { if (editor.current) fitResearchBoard(editor.current, true); }}>Fit</button>
       <BoardLayoutTools editor={activeEditor} title={title} onChange={() => queueSave.current?.()} />
+      <DiagramTools editor={activeEditor} onChange={() => queueSave.current?.()} />
       <button type="button" className="button" aria-expanded={slidesOpen} disabled={!ready} onClick={() => { setSlidesOpen(!slidesOpen); setPicker(false); }}>Slides{slides.length ? ` (${deck.length})` : ""}</button>
     </header>
     {draftWarning && <div className="board-error" role="alert">{draftWarning}</div>}
@@ -274,6 +277,6 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
       <div className="board-picker-tools"><small>Sketch & annotate</small><div className="board-form-row">{["text", "note", "draw", "arrow", "frame", "geo"].map(tool => <button key={tool} className="button" onClick={() => { editor.current?.setCurrentTool(tool); setPicker(false); }}>{tool === "draw" ? "Sketch" : tool === "geo" ? "Rectangle" : tool === "note" ? "Sticky" : tool}</button>)}</div></div>
     </aside>}
     {conversion && <div role="dialog" aria-modal="true" aria-label="Convert loose text" className="board-conversion"><form onSubmit={async e => { e.preventDefault(); setBusy(true); try { const record = await convertBoardText(board.id, conversion.id, conversion.type, conversion.title, conversion.text); setRecords(prev => [...prev.filter(r => r.key !== record.key), record]); const ed = editor.current; const shape = ed?.getShape(conversion.shapeId as RecordShape["id"]); if (ed && shape) { const point = ed.getShapePageBounds(shape)?.point; ed.run(() => { if (!place(record, point)) throw new Error("Record saved, but placement failed. Try again when the editor is available."); ed.deleteShapes([shape.id]); }); } setConversion(null); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><h2>Convert to {conversion.type}</h2><label>Title<input required value={conversion.title} onChange={e => setConversion({ ...conversion, title: e.target.value })} /></label><label>Text<textarea required value={conversion.text} onChange={e => setConversion({ ...conversion, text: e.target.value })} /></label><button disabled={busy} className="button">Create {conversion.type}</button><button type="button" className="button" onClick={() => setConversion(null)}>Cancel</button></form></div>}
-    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={boardShapeUtils} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider>{presentFrom === null ? <BoardArrangeBar editor={activeEditor} onChange={() => queueSave.current?.()} /> : activeEditor && deck.length > 0 && <Presenter editor={activeEditor} slides={deck} start={presentFrom} root={workspaceRef} onExit={() => setPresentFrom(null)} />}</div>
+    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={shapeUtils} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider>{presentFrom === null ? <><BoardArrangeBar editor={activeEditor} onChange={() => queueSave.current?.()} /><QuickAdd editor={activeEditor} onChange={() => queueSave.current?.()} /></> : activeEditor && deck.length > 0 && <Presenter editor={activeEditor} slides={deck} start={presentFrom} root={workspaceRef} onExit={() => setPresentFrom(null)} />}</div>
   </div>;
 }
