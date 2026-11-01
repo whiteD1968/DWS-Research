@@ -2,7 +2,13 @@
 // rounded elbows and sized line ends. Kept as plain geometry so it can be tested off-canvas.
 export type LinePattern = "solid" | "dashed" | "longdash" | "dotted" | "center" | "hidden" | "phantom";
 export type LineEnd = "none" | "arrow" | "open" | "dot" | "circle" | "tick" | "bar" | "diamond" | "socket" | "xnode";
-export type LineSpec = { weight: number; pattern: LinePattern; color: string; radius: number; start: LineEnd; end: LineEnd; startSize: number; endSize: number };
+export type LineSpec = {
+  weight: number; pattern: LinePattern; color: string; radius: number; start: LineEnd; end: LineEnd; startSize: number; endSize: number;
+  /** Elbow lines find their own way around boxes in the way. */
+  avoid?: boolean;
+  /** Hop over lines beneath this one where they cross. */
+  jumps?: boolean;
+};
 type Pt = { x: number; y: number };
 
 export const PT = 4 / 3; // canvas units (CSS px) per point
@@ -20,7 +26,7 @@ export const ENDS: { id: LineEnd; label: string }[] = [
 ];
 export const LINE_COLORS = ["#111111", "#3a3a37", "#6b6d66", "#9a9c95", "#c4c5bf", "#ffffff", "#d4f53c", "#c2413a", "#3c64c8"];
 
-export const DEFAULT_LINE: LineSpec = { weight: 0.5, pattern: "solid", color: "#111111", radius: 4, start: "none", end: "arrow", startSize: 6, endSize: 6 };
+export const DEFAULT_LINE: LineSpec = { weight: 0.5, pattern: "solid", color: "#111111", radius: 4, start: "none", end: "arrow", startSize: 6, endSize: 6, avoid: false, jumps: false };
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) => typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
@@ -36,6 +42,7 @@ export function readLine(value: unknown): LineSpec | null {
     radius: clamp(v.radius, 0, 60, DEFAULT_LINE.radius),
     start: end(v.start, DEFAULT_LINE.start), end: end(v.end, DEFAULT_LINE.end),
     startSize: clamp(v.startSize, 2, 40, DEFAULT_LINE.startSize), endSize: clamp(v.endSize, 2, 40, DEFAULT_LINE.endSize),
+    avoid: v.avoid === true, jumps: v.jumps === true,
   };
 }
 

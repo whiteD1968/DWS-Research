@@ -51,3 +51,20 @@ export function bracketPath(w: number, h: number, arm: number) {
     `M${r(w)},${r(h - a)} V${r(h)} H${r(w - a)}`, `M${r(a)},${r(h)} H0 V${r(h - a)}`,
   ].join(" ");
 }
+
+/**
+ * Split a label into plain and accented runs: letters wrapped in asterisks take the accent colour,
+ * so "S *D*" shows D in signal green. At most `max` visible characters are kept.
+ */
+export function accentRuns(label: string, max = Infinity) {
+  const runs: { text: string; accent: boolean }[] = [];
+  let left = max;
+  label.split(/(\*[^*]+\*)/).forEach(part => {
+    if (!part || left <= 0) return;
+    const accent = part.length > 2 && part.startsWith("*") && part.endsWith("*");
+    const text = (accent ? part.slice(1, -1) : part).slice(0, left);
+    left -= text.length;
+    if (text) runs.push({ text, accent });
+  });
+  return runs;
+}

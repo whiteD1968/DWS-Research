@@ -2527,3 +2527,5 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .studio-rating-hit:hover, .studio-rating-hit:focus-visible { outline: 2px solid #3c64c8; outline-offset: 1px; }
 .line-panel-quad { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 6px; }
 .line-panel-quad > span { grid-column: 1 / -1; color: #55574f; font-size: 11px; }
+.line-panel .line-panel-check { display: flex; gap: 6px; align-items: center; color: #32372e; font-size: 12px; }
+.line-panel .line-panel-check small { color: #777; }

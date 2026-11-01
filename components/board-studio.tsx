@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, T, resizeBox, stopEventPropagation, useIsEditing, type Editor, type TLBaseShape, type TLResizeInfo } from "tldraw";
-import { NUMERAL_STYLES, STUDIO_INKS, bracketPath, gridMarks, ink, nextRating, ratingCells, type NumeralStyle } from "@/lib/boards/studio";
+import { NUMERAL_STYLES, STUDIO_INKS, accentRuns, bracketPath, gridMarks, ink, nextRating, ratingCells, type NumeralStyle } from "@/lib/boards/studio";
 
 type RatingProps = { w: number; h: number; label: string; value: number; max: number; ink: string };
 type GridProps = { w: number; h: number; rows: number; cols: number; ink: string };
@@ -25,17 +25,21 @@ function Inks({ value, onPick }: { value: string; onPick: (ink: string) => void 
 }
 
 // ---------- Rating meter ----------
-function ratingSvg(p: RatingProps) {
+function ratingSvg(p: RatingProps, accent = "#d4f53c") {
   const color = ink(p.ink);
   const { size, labelWidth, cells } = ratingCells(p.w, p.h, p.value, p.max);
   const font = Math.max(6, Math.min(p.h * 0.5, 16));
   const chars = Math.max(0, Math.floor(labelWidth / (font * 0.68)));
-  const label = p.label.toUpperCase().slice(0, chars);
+  const runs = accentRuns(p.label.toUpperCase(), chars);
   return <g>
-    {label && <text x={0} y={p.h / 2 + font * 0.36} fontFamily={MONO} fontSize={font} letterSpacing={font * 0.12} fill={color}>{label}</text>}
+    {runs.length > 0 && <text x={0} y={p.h / 2 + font * 0.36} fontFamily={MONO} fontSize={font} letterSpacing={font * 0.12} fill={color} xmlSpace="preserve">
+      {runs.map((r, i) => <tspan key={i} fill={r.accent ? ink(accent, "#d4f53c") : color}>{r.text}</tspan>)}
+    </text>}
     {cells.map((c, i) => <rect key={i} x={c.x} y={c.y} width={size} height={size} rx={size * 0.18} fill={color} fillOpacity={c.on ? 1 : 0.25} />)}
   </g>;
 }
+// The accent colour lives in meta, so boards saved before it existed still load unchanged.
+const accentOf = (shape: RatingShape) => ink(shape.meta.accent, "#d4f53c");
 function Rating({ shape, editor }: { shape: RatingShape; editor: Editor }) {
   const editing = useIsEditing(shape.id);
   const input = useRef<HTMLInputElement>(null);
@@ -44,15 +48,17 @@ function Rating({ shape, editor }: { shape: RatingShape; editor: Editor }) {
   const update = (props: Partial<RatingProps>) => editor.updateShape({ id: shape.id, type: "rating-meter", props });
   const { size, cells } = ratingCells(p.w, p.h, p.value, p.max);
   return <HTMLContainer style={{ width: p.w, height: p.h, pointerEvents: editing ? "all" : undefined }}>
-    <svg width={p.w} height={p.h} style={{ overflow: "visible", display: "block" }} aria-label={`${p.label}: ${p.value} of ${p.max}`}>{ratingSvg(editing ? { ...p, label: "" } : p)}</svg>
+    <svg width={p.w} height={p.h} style={{ overflow: "visible", display: "block" }} aria-label={`${p.label}: ${p.value} of ${p.max}`}>{ratingSvg(editing ? { ...p, label: "" } : p, accentOf(shape))}</svg>
     {editing && <>
-      <input ref={input} className="studio-edit-label" value={p.label} placeholder="Quality" aria-label="Rating label" onPointerDown={stopEventPropagation}
+      <input ref={input} className="studio-edit-label" value={p.label} placeholder="Quality — *D* for an accent letter" title="Wrap letters in asterisks to colour them, e.g. S *D*" aria-label="Rating label" onPointerDown={stopEventPropagation}
         style={{ width: Math.max(40, cells[0].x - 8), height: p.h }} onChange={e => update({ label: e.target.value.slice(0, 80) })} />
       {cells.map((c, i) => <button key={i} type="button" className="studio-rating-hit" aria-label={`Set to ${i + 1}`} onPointerDown={stopEventPropagation}
         style={{ left: c.x, top: c.y, width: size, height: size }} onClick={() => update({ value: nextRating(p.value, i + 1) })} />)}
       <div className="studio-edit-bar" onPointerDown={stopEventPropagation}>
         <label>Out of <select value={p.max} onChange={e => update({ max: Number(e.target.value), value: Math.min(p.value, Number(e.target.value)) })}>{[3, 4, 5, 6, 8, 10].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
         <Inks value={ink(p.ink)} onPick={v => update({ ink: v })} />
+        <span>Accent</span>
+        <Inks value={accentOf(shape)} onPick={v => editor.updateShape({ id: shape.id, type: "rating-meter", meta: { ...shape.meta, accent: v } })} />
       </div>
     </>}
   </HTMLContainer>;
@@ -67,7 +73,7 @@ export class RatingMeterUtil extends BaseBoxShapeUtil<RatingShape> {
   override getAriaDescriptor(shape: RatingShape) { return `${shape.props.label}: ${shape.props.value} of ${shape.props.max}`; }
   component(shape: RatingShape) { return <Rating shape={shape} editor={this.editor} />; }
   getIndicatorPath(shape: RatingShape) { const path = new Path2D(); path.rect(0, 0, shape.props.w, shape.props.h); return path; }
-  override toSvg(shape: RatingShape) { return ratingSvg(shape.props); }
+  override toSvg(shape: RatingShape) { return ratingSvg(shape.props, accentOf(shape)); }
 }
 
 // ---------- Study grid ----------
