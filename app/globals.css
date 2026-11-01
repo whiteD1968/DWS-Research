@@ -1528,11 +1528,11 @@ select:focus {
 .board-arrange { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; gap: 2px; padding: 4px; background: white; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
 .board-arrange button { border: 0; background: transparent; padding: 6px 8px; border-radius: 5px; font-size: 13px; white-space: nowrap; cursor: pointer; }
 .board-arrange button:hover { background: #efefeb; }
-.diagram-box { position: relative; background: transparent; display: flex; flex-direction: column; overflow: hidden; color: #292a27; font-family: Arial, Helvetica, sans-serif; }
+.diagram-box { position: relative; background: transparent; display: flex; flex-direction: column; overflow: visible; color: #292a27; font-family: Arial, Helvetica, sans-serif; }
 .diagram-box-band { position: relative; flex: none; display: flex; align-items: center; padding: 0 10px; font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; }
 .diagram-box-band span { overflow: hidden; text-overflow: ellipsis; }
 .diagram-box-band input { width: 100%; background: transparent; border: 0; outline: 0; padding: 0; font: inherit; }
-.diagram-box p { position: relative; margin: 0; padding: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.diagram-box p { position: relative; flex: 1; min-height: 0; margin: 0; padding: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
 .diagram-box textarea { position: relative; flex: 1; border: 0; outline: 0; resize: none; padding: 10px; font: 12px/1.45 Arial, Helvetica, sans-serif; background: #fafaf7; min-height: 0; }
 .diagram-quick-add { position: absolute; z-index: 300; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; border: 1px solid #3c64c8; background: #fff; color: #3c64c8; font-size: 15px; line-height: 1; padding: 0; cursor: pointer; box-shadow: 0 1px 4px #0002; }
 .diagram-quick-add:hover { background: #3c64c8; color: #fff; }

@@ -43,3 +43,10 @@ test('study grids put crosses inside and T ticks on the edges', () => {
   assert.ok(g.ticks.some(t => t.side === 'right' && t.x === 900));
   assert.equal(s.gridMarks(100, 100, 0, 99).cols, 20);
 });
+
+test('corner brackets draw four L marks with arms capped at half a side', () => {
+  const d = s.bracketPath(200, 100, 14);
+  assert.equal((d.match(/M/g) || []).length, 4);
+  assert.match(d, /^M14,0 H0 V14/);
+  assert.match(s.bracketPath(20, 10, 40), /^M5,0 H0 V5/);
+});

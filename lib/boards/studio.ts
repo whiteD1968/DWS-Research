@@ -41,3 +41,13 @@ export function gridMarks(w: number, h: number, rows: number, cols: number) {
 
 export type NumeralStyle = "hatch" | "outline" | "solid";
 export const NUMERAL_STYLES: { id: NumeralStyle; label: string }[] = [{ id: "hatch", label: "Hatched" }, { id: "outline", label: "Outline" }, { id: "solid", label: "Solid" }];
+
+/** Four L-shaped corner marks framing a w × h area, each arm `arm` long (capped at half a side). */
+export function bracketPath(w: number, h: number, arm: number) {
+  const a = Math.max(2, Math.min(arm, w / 2, h / 2));
+  const r = (n: number) => +n.toFixed(2);
+  return [
+    `M${r(a)},0 H0 V${r(a)}`, `M${r(w - a)},0 H${r(w)} V${r(a)}`,
+    `M${r(w)},${r(h - a)} V${r(h)} H${r(w - a)}`, `M${r(a)},${r(h)} H0 V${r(h - a)}`,
+  ].join(" ");
+}

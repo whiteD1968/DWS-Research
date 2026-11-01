@@ -73,6 +73,8 @@ test('box specs fall back to the original headed box', () => {
   const bad = l.readBox({ corner: 'star', cut: 9999, hatch: -5, fill: 'url(#x)' });
   assert.equal(bad.corner, 'square'); assert.equal(bad.hatch, 0); assert.equal(bad.fill, '#ffffff'); assert.ok(bad.cut <= 200);
   assert.equal(l.readBox({ fill: 'none', corner: 'chamfer', hatch: 10 }).fill, 'none');
+  assert.equal(l.readBox({ shadow: 12 }).shadow, 12);
+  assert.equal(l.readBox({ shadow: 'x' }).shadow, 0);
 });
 
 test('box outlines cut, round or square their corners, and inset evenly', () => {

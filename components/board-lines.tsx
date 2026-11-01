@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ArrowShapeUtil, SVGContainer, getArrowInfo, useValue, type Editor, type SvgExportContext, type TLArrowInfo, type TLArrowShape, type TLShape } from "tldraw";
 import {
-  BOX_FILLS, BUILT_IN_STYLES, CORNERS, DEFAULT_BOX, DEFAULT_LINE, END_SIZES, ENDS, HATCHES, HEADERS, LINE_COLORS, PATTERNS, PT, RADII, STYLES_KEY, WEIGHTS,
+  BOX_FILLS, BUILT_IN_STYLES, CORNERS, DEFAULT_BOX, DEFAULT_LINE, END_SIZES, ENDS, HATCHES, HEADERS, SHADOWS, LINE_COLORS, PATTERNS, PT, RADII, STYLES_KEY, WEIGHTS,
   dashArray, endInset, endMark, parseStyles, readBox, readLine, roundedPath, simplify, trimEnds,
   type BoxSpec, type LineSpec, type LineStyle,
 } from "@/lib/boards/lines";
@@ -253,9 +253,12 @@ export function LinePanel({ editor, onChange }: { editor: Editor | null; onChang
             {[...new Set([...HATCHES, box.hatch])].sort((a, b) => a - b).map(hh => <option key={hh} value={hh}>{hh ? `${hh} wide` : "None"}</option>)}
           </select></label>
           <label>Fill<select value={box.fill} onChange={e => { applyBox(editor, boxes, { fill: e.target.value }); onChange(); }}>
-            {[...new Set([...BOX_FILLS, box.fill])].map(f => <option key={f} value={f}>{f === "none" ? "None" : f === "#ffffff" ? "White" : f === "#111111" ? "Black" : f === "#f4f3ef" ? "Paper" : f}</option>)}
+            {[...new Set([...BOX_FILLS, box.fill])].map(f => <option key={f} value={f}>{f === "none" ? "None" : f === "#ffffff" ? "White" : f === "#111111" ? "Black" : f === "#f4f3ef" ? "Paper" : f === "#e9e9e7" ? "Light grey" : f === "#d4f53c" ? "Signal green" : f === "#1f3a4d" ? "Navy" : f}</option>)}
           </select></label>
         </div>
+        <label className="line-panel-wide">Drop shadow<select value={box.shadow} onChange={e => { applyBox(editor, boxes, { shadow: Number(e.target.value) }); onChange(); }}>
+          {[...new Set([...SHADOWS, box.shadow])].sort((a, b) => a - b).map(sh => <option key={sh} value={sh}>{sh ? `${sh} offset` : "None"}</option>)}
+        </select></label>
         <label className="line-panel-wide">Header band<select value={box.header} onChange={e => { applyBox(editor, boxes, { header: Number(e.target.value) }); onChange(); }}>
           {HEADERS.map(h => <option key={h.h} value={h.h}>{h.label}</option>)}
         </select></label>

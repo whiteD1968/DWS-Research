@@ -157,14 +157,15 @@ export function parseStyles(raw: string | null): LineStyle[] {
 
 // ---------- Box outline and header ----------
 export type BoxCorner = "square" | "round" | "chamfer" | "chamfer4";
-export type BoxSpec = { weight: number; pattern: LinePattern; color: string; header: number; corner: BoxCorner; cut: number; hatch: number; fill: string };
+export type BoxSpec = { weight: number; pattern: LinePattern; color: string; header: number; corner: BoxCorner; cut: number; hatch: number; fill: string; shadow: number };
 export const HEADERS = [{ h: 0, label: "None" }, { h: 8, label: "Thin" }, { h: 16, label: "Medium" }, { h: 28, label: "Titled" }];
 export const CORNERS: { id: BoxCorner; label: string }[] = [
   { id: "square", label: "Square" }, { id: "round", label: "Rounded" }, { id: "chamfer", label: "Cut corners (2)" }, { id: "chamfer4", label: "Cut corners (4)" },
 ];
 export const HATCHES = [0, 6, 10, 16];
-export const BOX_FILLS = ["#ffffff", "none", "#111111", "#f4f3ef"];
-export const DEFAULT_BOX: BoxSpec = { weight: 0.75, pattern: "solid", color: "#3a3a37", header: 28, corner: "square", cut: 24, hatch: 0, fill: "#ffffff" };
+export const BOX_FILLS = ["#ffffff", "none", "#111111", "#f4f3ef", "#e9e9e7", "#d4f53c", "#1f3a4d"];
+export const SHADOWS = [0, 6, 12, 20];
+export const DEFAULT_BOX: BoxSpec = { weight: 0.75, pattern: "solid", color: "#3a3a37", header: 28, corner: "square", cut: 24, hatch: 0, fill: "#ffffff", shadow: 0 };
 export function readBox(value: unknown): BoxSpec {
   if (!value || typeof value !== "object") return DEFAULT_BOX;
   const v = value as Record<string, unknown>;
@@ -177,6 +178,7 @@ export function readBox(value: unknown): BoxSpec {
     cut: clamp(v.cut, 0, 200, DEFAULT_BOX.cut),
     hatch: clamp(v.hatch, 0, 60, DEFAULT_BOX.hatch),
     fill: v.fill === "none" ? "none" : typeof v.fill === "string" && HEX.test(v.fill) ? v.fill.toLowerCase() : DEFAULT_BOX.fill,
+    shadow: clamp(v.shadow, 0, 60, DEFAULT_BOX.shadow),
   };
 }
 /** True for dark fills, so text on them turns light. */

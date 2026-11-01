@@ -9,7 +9,8 @@ import { boxColor } from "@/lib/boards/diagram";
 import { useSlides } from "./board-slides";
 import { DEFAULT_BOX, DEFAULT_LINE, boxPath, readBox, readLine } from "@/lib/boards/lines";
 import type { DiagramBoxShape } from "./board-diagram";
-import type { GridShape, NumeralShape, RatingShape } from "./board-studio";
+import type { BracketShape, GridShape, NumeralShape, RatingShape } from "./board-studio";
+import { bracketPath } from "@/lib/boards/studio";
 
 const SLIDE_GAP = 160;
 
@@ -86,6 +87,9 @@ export function insertTemplate(editor: Editor, template: BoardTemplate, deckSize
         case "numeral":
           editor.createShape<NumeralShape>({ id, type: "numeral", ...at, props: { w: p.w, h: p.h, text: p.text, style: p.style ?? "hatch", ink: p.ink ?? "#111111" } });
           break;
+        case "brackets":
+          editor.createShape<BracketShape>({ id, type: "corner-brackets", ...at, props: { w: p.w, h: p.h, arm: p.arm ?? 14, dashed: p.dashed ?? true, ink: p.ink ?? "#c2413a" } });
+          break;
       }
     }
     for (const p of pieces) {
@@ -146,11 +150,12 @@ function TemplatePreview({ template }: { template: BoardTemplate }) {
         case "grid": return <rect key={i} x={x} y={y} width={p.w} height={p.h} fill="none" stroke={p.ink ?? "#9a9c95"} strokeWidth={b.w / 400} strokeDasharray={`${b.w / 150} ${b.w / 150}`} />;
         case "numeral": return <text key={i} x={x} y={y + p.h * 0.85} fontSize={p.h} fontWeight={800} fontFamily="Arial, sans-serif" textLength={p.w} lengthAdjust="spacingAndGlyphs"
           fill={p.style === "solid" ? p.ink : "none"} stroke={p.ink ?? "#111111"} strokeWidth={b.w / 300}>{p.text}</text>;
+        case "brackets": return <path key={i} transform={`translate(${x} ${y})`} d={bracketPath(p.w, p.h, p.arm ?? 14)} fill="none" stroke={p.ink ?? "#c2413a"} strokeWidth={b.w / 400} />;
         case "text": {
           const h = p.size === "xl" ? 44 : p.size === "l" ? 32 : p.size === "m" ? 22 : 14;
           const w = Math.min(p.w, p.text.length * h * 0.5);
           const left = p.align === "middle" ? x + (p.w - w) / 2 : p.align === "end" ? x + p.w - w : x;
-          return <rect key={i} x={left} y={y + 6} width={w} height={h} rx={h / 4} fill={p.color === "grey" ? "#b3b5ad" : p.color === "white" ? "#f4f3ef" : p.color === "light-green" ? "#d4f53c" : "#3a3a37"} />;
+          return <rect key={i} x={left} y={y + 6} width={w} height={h} rx={h / 4} fill={p.color === "grey" ? "#b3b5ad" : p.color === "white" ? "#f4f3ef" : p.color === "light-green" ? "#d4f53c" : p.color === "red" ? "#c2413a" : "#3a3a37"} />;
         }
         case "line": {
           const line = p.line ? readLine({ ...DEFAULT_LINE, ...p.line }) : null;

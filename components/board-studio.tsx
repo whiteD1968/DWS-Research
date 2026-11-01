@@ -1,16 +1,18 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, T, resizeBox, stopEventPropagation, useIsEditing, type Editor, type TLBaseShape, type TLResizeInfo } from "tldraw";
-import { NUMERAL_STYLES, STUDIO_INKS, gridMarks, ink, nextRating, ratingCells, type NumeralStyle } from "@/lib/boards/studio";
+import { NUMERAL_STYLES, STUDIO_INKS, bracketPath, gridMarks, ink, nextRating, ratingCells, type NumeralStyle } from "@/lib/boards/studio";
 
 type RatingProps = { w: number; h: number; label: string; value: number; max: number; ink: string };
 type GridProps = { w: number; h: number; rows: number; cols: number; ink: string };
 type NumeralProps = { w: number; h: number; text: string; style: string; ink: string };
+type BracketProps = { w: number; h: number; arm: number; dashed: boolean; ink: string };
 export type RatingShape = TLBaseShape<"rating-meter", RatingProps>;
 export type GridShape = TLBaseShape<"study-grid", GridProps>;
 export type NumeralShape = TLBaseShape<"numeral", NumeralProps>;
+export type BracketShape = TLBaseShape<"corner-brackets", BracketProps>;
 declare module "@tldraw/tlschema" {
-  interface TLGlobalShapePropsMap { "rating-meter": RatingProps; "study-grid": GridProps; "numeral": NumeralProps }
+  interface TLGlobalShapePropsMap { "rating-meter": RatingProps; "study-grid": GridProps; "numeral": NumeralProps; "corner-brackets": BracketProps }
 }
 
 const MONO = "'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, monospace";
@@ -152,4 +154,33 @@ export class NumeralUtil extends BaseBoxShapeUtil<NumeralShape> {
   override toSvg(shape: NumeralShape) { return numeralSvg(`x${shape.id}`, shape.props); }
 }
 
-export const studioShapeUtils = [RatingMeterUtil, StudyGridUtil, NumeralUtil];
+// ---------- Corner brackets ----------
+function bracketSvg(p: BracketProps) {
+  return <path d={bracketPath(p.w, p.h, p.arm)} fill="none" stroke={ink(p.ink, "#c2413a")} strokeWidth={1.5} strokeDasharray={p.dashed ? "4 3" : undefined} strokeLinecap="butt" />;
+}
+function Brackets({ shape, editor }: { shape: BracketShape; editor: Editor }) {
+  const editing = useIsEditing(shape.id);
+  const p = shape.props;
+  const update = (props: Partial<BracketProps>) => editor.updateShape({ id: shape.id, type: "corner-brackets", props });
+  return <HTMLContainer style={{ width: p.w, height: p.h, pointerEvents: editing ? "all" : undefined }}>
+    <svg width={p.w} height={p.h} style={{ overflow: "visible", display: "block" }} aria-hidden="true">{bracketSvg(p)}</svg>
+    {editing && <div className="studio-edit-bar" onPointerDown={stopEventPropagation}>
+      <label>Arm <select value={p.arm} onChange={e => update({ arm: Number(e.target.value) })}>{[...new Set([8, 14, 24, 40, p.arm])].sort((a, b) => a - b).map(n => <option key={n} value={n}>{n}</option>)}</select></label>
+      <label><input type="checkbox" checked={p.dashed} onChange={e => update({ dashed: e.target.checked })} /> Dashed</label>
+      <Inks value={ink(p.ink, "#c2413a")} onPick={v => update({ ink: v })} />
+    </div>}
+  </HTMLContainer>;
+}
+/** Corner marks that frame a title, caption or image, as on the studio's boards. Double-click to edit. */
+export class CornerBracketsUtil extends BaseBoxShapeUtil<BracketShape> {
+  static override type = "corner-brackets" as const;
+  static override props = { w: T.number, h: T.number, arm: T.number, dashed: T.boolean, ink: T.string };
+  getDefaultProps(): BracketProps { return { w: 240, h: 120, arm: 14, dashed: true, ink: "#c2413a" }; }
+  override canEdit() { return true; }
+  override getAriaDescriptor() { return "Corner brackets"; }
+  component(shape: BracketShape) { return <Brackets shape={shape} editor={this.editor} />; }
+  getIndicatorPath(shape: BracketShape) { const path = new Path2D(); path.rect(0, 0, shape.props.w, shape.props.h); return path; }
+  override toSvg(shape: BracketShape) { return bracketSvg(shape.props); }
+}
+
+export const studioShapeUtils = [RatingMeterUtil, StudyGridUtil, NumeralUtil, CornerBracketsUtil];

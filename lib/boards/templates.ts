@@ -13,7 +13,8 @@ export type TemplatePiece =
   | { kind: "connect"; from: string; to: string; label?: string; line?: Partial<LineSpec> }
   | { kind: "rating"; parent?: string; x: number; y: number; w: number; h: number; label: string; value: number; max?: number; ink?: string }
   | { kind: "grid"; parent?: string; x: number; y: number; w: number; h: number; rows: number; cols: number; ink?: string }
-  | { kind: "numeral"; parent?: string; x: number; y: number; w: number; h: number; text: string; style?: "hatch" | "outline" | "solid"; ink?: string };
+  | { kind: "numeral"; parent?: string; x: number; y: number; w: number; h: number; text: string; style?: "hatch" | "outline" | "solid"; ink?: string }
+  | { kind: "brackets"; parent?: string; x: number; y: number; w: number; h: number; arm?: number; dashed?: boolean; ink?: string };
 export type TemplateGroup = "Slide layouts" | "Decks" | "Starter boards" | "Diagrams" | "Studio";
 export type BoardTemplate = { id: string; group: TemplateGroup; label: string; description: string; pieces: TemplatePiece[] };
 
@@ -182,36 +183,43 @@ const diagrams: BoardTemplate[] = [
 ];
 
 // ---------- Studio: the studio's drawing conventions for communicating a project ----------
-// Black boards, white and signal-green ink, mono uppercase captions, hatched cut-corner frames,
-// crop and registration marks, n-of-5 ratings and big section numerals. Every page is a slide.
-const WHITE = "#f4f3ef", SIGNAL = "#d4f53c", GREY = "#9a9c95", BLACK = "#111111";
+// Black (or light grey) boards, white, signal-green and red ink, mono uppercase captions, hatched
+// cut-corner frames, corner brackets, crop and registration marks, n-of-5 ratings and big numerals.
+// Every page is a slide.
+const WHITE = "#f4f3ef", SIGNAL = "#d4f53c", GREY = "#9a9c95", BLACK = "#111111", RED = "#c2413a", PAPER = "#e9e9e7", NAVY = "#1f3a4d";
 const fine = (color = WHITE, extra: Partial<LineSpec> = {}): Partial<LineSpec> => ({ weight: 0.35, pattern: "solid", color, radius: 0, start: "none", end: "none", ...extra });
 const flow = (extra: Partial<LineSpec> = {}): Partial<LineSpec> => ({ weight: 0.75, pattern: "solid", color: WHITE, radius: 4, start: "none", end: "arrow", endSize: 6, ...extra });
 const pill = (extra: Partial<BoxSpec> = {}): Partial<BoxSpec> => ({ weight: 0.75, pattern: "solid", color: WHITE, header: 0, corner: "chamfer", cut: 14, hatch: 6, fill: BLACK, ...extra });
 const outline = (extra: Partial<BoxSpec> = {}): Partial<BoxSpec> => ({ weight: 0.5, pattern: "solid", color: WHITE, header: 0, corner: "square", cut: 24, hatch: 0, fill: BLACK, ...extra });
 const cap = (f: string, x: number, y: number, w: number, text: string, size: "s" | "m" = "s", color: TemplateColor = "white", align?: "start" | "middle" | "end"): TemplatePiece =>
   ({ kind: "text", parent: f, x, y, w, text, size, font: "mono", color, align });
-const title = (f: string, text: string, y = 40): TemplatePiece => ({ kind: "text", parent: f, x: M, y, w: SW - M * 2, text, size: "l", font: "sans", color: "white" });
+const words = (f: string, x: number, y: number, w: number, text: string, size: "s" | "m" | "l" | "xl" = "m", color: TemplateColor = "white", align?: "start" | "middle" | "end"): TemplatePiece =>
+  ({ kind: "text", parent: f, x, y, w, text, size, font: "sans", color, align });
+const title = (f: string, text: string, y = 40, color: TemplateColor = "white"): TemplatePiece => words(f, M, y, SW - M * 2, text, "l", color);
 const fline = (f: string, x: number, y: number, dx: number, dy: number, line: Partial<LineSpec>): TemplatePiece => ({ kind: "line", parent: f, x, y, dx, dy, line });
+const brackets = (f: string, x: number, y: number, w: number, h: number, ink = RED, dashed = true, arm = 14): TemplatePiece => ({ kind: "brackets", parent: f, x, y, w, h, ink, dashed, arm });
+const cross = (f: string, x: number, y: number, k = 14, color = WHITE): TemplatePiece[] => [fline(f, x - k, y, k * 2, 0, fine(color, { weight: 0.75 })), fline(f, x, y - k, 0, k * 2, fine(color, { weight: 0.75 }))];
 /** Crop marks in the four corners of the page, as on a printed board. */
 function crops(f: string, inset = 28, k = 18): TemplatePiece[] {
   return [[inset, inset, 1, 1], [SW - inset, inset, -1, 1], [inset, SH - inset, 1, -1], [SW - inset, SH - inset, -1, -1]].flatMap(([x, y, sx, sy]) => [
     fline(f, x, y, sx * k, 0, fine(GREY)), fline(f, x, y, 0, sy * k, fine(GREY)),
   ]);
 }
-/** A black page: a slide frame with a locked black board behind everything on it. */
-function board(f: string, name: string, notes: string, body: TemplatePiece[]): TemplatePiece[] {
+/** A page: a slide frame with a locked black (or light grey) board behind everything on it. */
+function board(f: string, name: string, notes: string, body: TemplatePiece[], light = false): TemplatePiece[] {
+  const fill = light ? PAPER : BLACK;
   return [
     { kind: "frame", ref: f, x: 0, y: 0, w: SW, h: SH, name, slide: true, notes },
-    { kind: "box", ref: `${f}-board`, parent: f, x: 0, y: 0, w: SW, h: SH, title: "", box: outline({ weight: 0.25, color: BLACK }), locked: true },
+    { kind: "box", ref: `${f}-board`, parent: f, x: 0, y: 0, w: SW, h: SH, title: "", box: outline({ weight: 0.25, color: fill, fill }), locked: true },
     ...crops(f),
     ...body,
   ];
 }
-const studio = (id: string, label: string, description: string, notes: string, body: (f: string) => TemplatePiece[]): BoardTemplate =>
-  ({ id: `studio-${id}`, group: "Studio", label, description, pieces: board("s", label, notes, body("s")) });
+const studio = (id: string, label: string, description: string, notes: string, body: (f: string) => TemplatePiece[], light = false): BoardTemplate =>
+  ({ id: `studio-${id}`, group: "Studio", label, description, pieces: board("s", label, notes, body("s"), light) });
 
-const RATINGS = ["Light", "Porosity", "Structure", "Program", "Context"];
+const TYPOLOGY_RATINGS = ["System legibility", "Graduated participation", "Multi-scale adaptation", "Interaction geometry", "Movement + gathering"];
+const WORKSPACE_RATINGS = ["S D", "F+E", "W C", "R S", "S G"];
 const studioTemplates: BoardTemplate[] = [
   studio("divider", "Section divider", "Hatched numeral, title band, course line and crosshair rule.", "Open each section with its number and one line on what it covers.", f => [
     { kind: "numeral", parent: f, x: M, y: 210, w: 260, h: 200, text: "01", style: "hatch", ink: WHITE },
@@ -221,6 +229,19 @@ const studioTemplates: BoardTemplate[] = [
     fline(f, M, 560, SW - M * 2, 0, fine(WHITE, { start: "xnode", end: "xnode", startSize: 10, endSize: 10 })),
     fline(f, SW / 2, 548, 0, 24, fine(WHITE)),
   ]),
+  studio("analysis", "Analysis cards", "Two precedent cards: hatched cut-corner frame, [ANALYSIS] tag, name, data and crosshairs.", "One card per precedent: what it is, who made it, where, when and how big.", f => [0, 1].flatMap(i => {
+    const x = M + i * 596, w = 540;
+    return [
+      { kind: "box", ref: `card${i}`, parent: f, x, y: 50, w, h: 420, title: "", box: outline({ corner: "chamfer", cut: 44, hatch: 12, weight: 0.75, fill: "none" }) } as TemplatePiece,
+      { kind: "placeholder", parent: f, x: x + 22, y: 72, w: w - 44, h: 376, label: `Precedent ${"AB"[i]} drawing` } as TemplatePiece,
+      cap(f, x, 494, 200, "[ANALYSIS]", "s", "grey"),
+      words(f, x, 520, 440, "PRECEDENT NAME", "l"),
+      // A stack of bars as a mark beside the data, like a barcode.
+      ...[44, 30, 52, 22, 40, 34].map((len, k) => fline(f, x, 586 + k * 13, len, 0, fine(WHITE, { weight: 4 }))),
+      cap(f, x + 72, 580, 300, "ARCHITECT\nCITY\nYEAR\nAREA sqft"),
+      ...cross(f, x + 330, 504), ...cross(f, x + 330, 680),
+    ];
+  })),
   studio("precedent", "Precedent spread", "Framed panels whose lines of analysis fan into a hero image, with a data block.", "Name the precedent, then say which move you are taking from it.", f => {
     const hero = { x: 640, y: 110, w: SW - 640 - M, h: 450 };
     return [
@@ -238,6 +259,39 @@ const studioTemplates: BoardTemplate[] = [
       cap(f, hero.x, 590, hero.w, "WHAT I AM TAKING FROM IT —"),
     ];
   }),
+  studio("cycle", "Process cycle", "Four numbered moves around a signal-green concept callout, on a light board.", "Name each move in one word; the callout says what the sequence adds up to.", f => {
+    const iw = 380, ih = 230;
+    const spots = [{ x: M, y: 90, label: "01 MASS", lx: M + 180, ly: 36 }, { x: SW - M - iw, y: 90, label: "02 CARVE", lx: SW - M - 200, ly: 36 },
+      { x: SW - M - iw, y: 400, label: "03 LEFT OVER", lx: SW - M - 260, ly: 648 }, { x: M, y: 400, label: "04 FRAME", lx: M + 180, ly: 648 }];
+    return [
+      ...spots.flatMap((s, i) => [
+        { kind: "placeholder", parent: f, x: s.x, y: s.y, w: iw, h: ih, label: `Move ${i + 1}` } as TemplatePiece,
+        brackets(f, s.x - 10, s.y - 10, iw + 20, ih + 20),
+        words(f, s.lx, s.ly, 260, s.label, "l", "red"),
+      ]),
+      fline(f, M + iw + 30, 205, SW - 2 * (M + iw + 30), 0, flow({ color: RED, start: "dot", startSize: 8, endSize: 8 })),
+      fline(f, SW - M - iw / 2, 340, 0, 46, flow({ color: RED, start: "dot", startSize: 8, endSize: 8 })),
+      fline(f, SW - M - iw - 30, 515, -(SW - 2 * (M + iw + 30)), 0, flow({ color: RED, start: "dot", startSize: 8, endSize: 8 })),
+      { kind: "box", ref: "void", parent: f, x: 470, y: 250, w: 340, h: 230, title: "", box: { weight: 1, pattern: "dashed", color: BLACK, header: 0, corner: "chamfer4", cut: 44, hatch: 0, fill: SIGNAL, shadow: 12 } },
+      words(f, 490, 280, 300, "[ CONCEPT ]", "l", "black", "middle"),
+      fline(f, 520, 336, 240, 0, fine(BLACK, { weight: 1, pattern: "dashed" })),
+      words(f, 500, 352, 280, "What the four moves add up to, in two or three sentences.", "s", "black"),
+    ];
+  }, true),
+  studio("layers", "Exploded layers", "Layers pulled apart with dotted alignment lines and red leader callouts, on a light board.", "One layer per callout: what it is made of and what it does.", f => [
+    { kind: "box", ref: "context", parent: f, x: 0, y: 0, w: 300, h: SH, title: "", box: { weight: 0.25, pattern: "solid", color: NAVY, header: 0, corner: "chamfer", cut: 60, hatch: 0, fill: NAVY, shadow: 0 } },
+    { kind: "placeholder", parent: f, x: 28, y: 56, w: 244, h: 608, label: "Context image" },
+    ...[0, 1, 2].flatMap(i => [
+      { kind: "placeholder", parent: f, x: 380 + i * 40, y: 120 + i * 190, w: 320, h: 140, label: `Layer ${3 - i}` } as TemplatePiece,
+      words(f, 860, 140 + i * 190, 350, `LAYER ${3 - i}`, "l", "red"),
+      fline(f, 860, 190 + i * 190, 350, 0, fine(RED, { weight: 1 })),
+      fline(f, 860, 190 + i * 190, -(860 - (710 + i * 40)), 0, flow({ color: RED, weight: 1, radius: 0 })),
+      words(f, 860, 200 + i * 190, 350, "What it is made of and what it does.", "s", "black"),
+    ]),
+    ...[0, 1].flatMap(i => [400, 680].map(x => fline(f, x + i * 40 + 20, 266 + i * 190, 20, 40, fine(BLACK, { weight: 0.75, pattern: "dotted", end: "arrow", endSize: 6 })))),
+    words(f, 700, 40, SW - M - 700, "A SYSTEM OF LAYERS", "l", "red", "end"),
+    brackets(f, 686, 30, SW - M - 686 + 14, 70),
+  ], true),
   studio("process", "Process 01 → 02 → 03", "Three numbered steps with images, captions and dotted-to-solid arrows.", "Walk through how the idea moved from first move to resolved form.", f => {
     const w = 320, xs = [M, (SW - w) / 2, SW - M - w];
     return [
@@ -250,6 +304,19 @@ const studioTemplates: BoardTemplate[] = [
       // Early steps are tentative (dotted); the last step commits (solid).
       fline(f, xs[0] + w + 12, 360, xs[1] - xs[0] - w - 24, 0, flow({ pattern: "dotted" })),
       fline(f, xs[1] + w + 12, 360, xs[2] - xs[1] - w - 24, 0, flow()),
+    ];
+  }),
+  studio("sequence", "Generative sequence", "Descriptors feed a field, then points and radii, then form, joined by signal-green arrows.", "Show how the descriptors generate the drawing, one operation per panel.", f => {
+    const w = 300, xs = [M, (SW - w) / 2, SW - M - w];
+    return [
+      { kind: "box", ref: "src", parent: f, x: M + 20, y: 50, w: 260, h: 96, title: "", box: pill({ corner: "round", cut: 24, hatch: 10 }) },
+      words(f, M + 40, 72, 220, "PRECEDENT\nDESCRIPTORS", "m", "white", "middle"),
+      fline(f, M + 150, 166, 0, 70, flow({ color: SIGNAL, weight: 2, endSize: 14 })),
+      ...xs.flatMap((x, i) => [
+        { kind: "placeholder", parent: f, x, y: 260, w, h: w, label: ["Field", "Points + radii", "Form"][i] } as TemplatePiece,
+        words(f, x, 580, w, ["WEAVE FIELD", "POINTS +\nRADII", "FORM"][i], "m", "white", "middle"),
+      ]),
+      ...[0, 1].map(i => fline(f, xs[i] + w + 24, 410, xs[i + 1] - xs[i] - w - 48, 0, flow({ color: SIGNAL, weight: 2, endSize: 14 }))),
     ];
   }),
   studio("workflow", "Workflow strip", "Seven steps in a row under a labelled pill.", "Show the whole method at a glance; point to where you are now.", f => {
@@ -265,17 +332,30 @@ const studioTemplates: BoardTemplate[] = [
       ...steps.slice(1).map((_, i) => ({ kind: "connect", from: `w${i}`, to: `w${i + 1}`, line: flow({ endSize: 4 }) } as TemplatePiece)),
     ];
   }),
-  studio("descriptors", "Descriptor tree", "A concept pill branching to descriptor pills and their qualities.", "Break the concept into words you can draw; each quality should be testable.", f => {
-    const xs = [M + 20, (SW - 260) / 2, SW - M - 280];
+  studio("descriptors", "Descriptor tree", "Hatched pills plug into circled-X nodes that open onto underlined qualities.", "Break the concept into words you can draw; each quality should be testable.", f => {
+    const names = ["GEOMETRICAL\n+ FORMAL", "ORGANIZATIONAL\n+ SPATIAL", "ATMOSPHERIC\n+ EXPERIENTIAL"];
     return [
-      title(f, "Descriptors"),
-      { kind: "box", ref: "root", parent: f, x: (SW - 300) / 2, y: 130, w: 300, h: 64, title: "", body: "CONCEPT", box: pill({ hatch: 10, cut: 18 }) },
-      ...xs.flatMap((x, i) => [
-        { kind: "box", ref: `d${i}`, parent: f, x, y: 320, w: 260, h: 56, title: "", body: `DESCRIPTOR ${"ABC"[i]}`, box: pill() } as TemplatePiece,
-        { kind: "connect", from: "root", to: `d${i}`, line: fine(WHITE, { weight: 0.5, radius: 4, start: "dot", end: "xnode", startSize: 6, endSize: 10 }) } as TemplatePiece,
-        fline(f, x + 20, 376, 0, 170, fine(GREY, { pattern: "dotted", end: "socket", endSize: 8 })),
-        cap(f, x + 40, 410, 220, "— QUALITY\n— QUALITY\n— QUALITY"),
-      ]),
+      words(f, M, 50, 300, "DESCRIPTORS", "l"),
+      words(f, M, 104, 440, "Essential quality of a space or typology", "s", "grey"),
+      brackets(f, M - 12, 40, 460, 100, GREY),
+      ...[0, 1, 2].flatMap(i => {
+        const c = 230 + i * 190, top = c - 78, bottom = c + 78;
+        return [
+          { kind: "box", ref: `d${i}`, parent: f, x: 140, y: c - 50, w: 270, h: 100, title: "", box: pill({ corner: "round", cut: 26, hatch: 10 }) } as TemplatePiece,
+          words(f, 160, c - 36, 230, names[i], "m", "white", "middle"),
+          // Plug and socket, then a run to the node.
+          fline(f, 420, c, 34, 0, fine(WHITE, { weight: 0.75, start: "dot", startSize: 9, end: "socket", endSize: 22 })),
+          fline(f, 470, c, 190, 0, fine(WHITE, { weight: 0.75, start: "socket", startSize: 12, end: "xnode", endSize: 34 })),
+          // A bracket frame around the qualities, with dotted ends.
+          fline(f, 677, top, 0, bottom - top, fine(WHITE, { weight: 0.75, start: "dot", end: "dot", startSize: 5, endSize: 5 })),
+          fline(f, 677, top, SW - M - 677, 0, fine(WHITE, { weight: 0.75, end: "circle", endSize: 6 })),
+          fline(f, 677, bottom, SW - M - 677, 0, fine(WHITE, { weight: 0.75, end: "circle", endSize: 6 })),
+          ...[0, 1].flatMap(col => [0, 1, 2].flatMap(r => [
+            words(f, 710 + col * 250, top + 18 + r * 40, 230, "Quality", "s"),
+            fline(f, 710 + col * 250, top + 48 + r * 40, 190, 0, fine(SIGNAL, { weight: 1.4 })),
+          ])),
+        ];
+      }),
     ];
   }),
   studio("matrix", "Iteration matrix", "A 3 × 9 study grid with registration marks; picks framed in signal green.", "Show the range you tested, then the picks and why they survived.", f => {
@@ -289,31 +369,42 @@ const studioTemplates: BoardTemplate[] = [
       cap(f, g.x, g.y + g.h + 24, g.w, "27 ITERATIONS · PICKS FRAMED · WHY THEY SURVIVED —"),
     ];
   }),
-  studio("scorecards", "Typology scorecards", "Five cards, each with an image and five n-of-5 ratings.", "Rate each typology against the same five criteria so the choice is visible.", f => {
-    const gap = 14, w = (SW - M * 2 - gap * 4) / 5;
+  studio("scorecards", "Typology scorecards", "Five dotted signal-green cards, each with a [FORM] tab, a numeral and five ratings.", "Rate each typology against the same five criteria so the choice is visible.", f => {
+    const gap = 16, x0 = 76, w = (SW - x0 * 2 - gap * 4) / 5;
     return [
-      title(f, "Typologies"),
+      { kind: "box", ref: "field", parent: f, x: 44, y: 180, w: SW - 88, h: 510, title: "", box: { weight: 1, pattern: "dotted", color: SIGNAL, header: 0, corner: "round", cut: 40, hatch: 0, fill: "none" } },
+      words(f, M, 46, 360, "GATHERING", "l", "light-green"),
+      words(f, M, 88, 520, "SPACE TYPOLOGIES", "l"),
+      words(f, M, 136, 520, "Diagrammatic spatial ideas", "s", "grey"),
+      brackets(f, M - 14, 36, 540, 140, GREY),
+      ...[0, 1, 2, 3].map(i => ({ kind: "shape", parent: f, x: 640 + i * 34, y: 140, w: 22, h: 22, geo: "ellipse", color: i ? "grey" : "light-green", fill: i ? "semi" : "solid" } as TemplatePiece)),
+      words(f, SW - M - 140, 46, 140, "[1.1]", "l", "light-green", "end"),
       ...[0, 1, 2, 3, 4].flatMap(i => {
-        const x = M + i * (w + gap);
+        const x = x0 + i * (w + gap);
         return [
-          { kind: "box", ref: `card${i}`, parent: f, x, y: 110, w, h: 540, title: `[FORM 0${i + 1}]`, color: "white", box: outline({ header: 28, color: i === 2 ? SIGNAL : WHITE, weight: i === 2 ? 1 : 0.5 }) } as TemplatePiece,
-          { kind: "placeholder", parent: f, x: x + 12, y: 152, w: w - 24, h: 220, label: `Form ${i + 1}` } as TemplatePiece,
-          ...RATINGS.map((label, r) => ({ kind: "rating", parent: f, x: x + 12, y: 400 + r * 36, w: w - 24, h: 18, label, value: (i + r * 2) % 5 + 1, ink: WHITE } as TemplatePiece)),
-          ...(i === 2 ? [cap(f, x + 12, 590, w - 24, "SELECTED", "s", "light-green")] : []),
+          { kind: "box", ref: `card${i}`, parent: f, x, y: 220, w, h: 250, title: "", box: { weight: 1, pattern: "dotted", color: SIGNAL, header: 0, corner: "round", cut: 14, hatch: 0, fill: BLACK } } as TemplatePiece,
+          cap(f, x + w - 130, 226, 120, "[ FORM ]", "s", "white", "end"),
+          { kind: "placeholder", parent: f, x: x + 14, y: 256, w: w - 28, h: 200, label: `Form ${i + 1}` } as TemplatePiece,
+          { kind: "box", ref: `score${i}`, parent: f, x, y: 480, w, h: 190, title: "", box: { weight: 0.75, pattern: "solid", color: SIGNAL, header: 0, corner: "round", cut: 12, hatch: 0, fill: BLACK } } as TemplatePiece,
+          { kind: "numeral", parent: f, x: x + 10, y: 488, w: 46, h: 36, text: `0${i + 1}`, style: "solid", ink: WHITE } as TemplatePiece,
+          ...TYPOLOGY_RATINGS.map((label, r) => ({ kind: "rating", parent: f, x: x + 10, y: 534 + r * 26, w: w - 20, h: 14, label, value: (i + r * 2) % 4 + 2, ink: WHITE } as TemplatePiece)),
         ];
       }),
     ];
   }),
-  studio("selection", "Selected + alternatives", "The chosen option framed large, four alternatives beside it.", "Lead with the choice; the alternatives show what it beat.", f => [
-    title(f, "Selected option"),
-    { kind: "box", ref: "chosen", parent: f, x: M, y: 110, w: 700, h: 480, title: "", box: outline({ corner: "chamfer", cut: 32, color: SIGNAL, weight: 1 }) },
-    { kind: "placeholder", parent: f, x: M + 14, y: 124, w: 672, h: 452, label: "Selected" },
-    cap(f, M, 610, 700, "SELECTED — WHY IT WORKS"),
+  studio("selection", "Selected + alternatives", "The chosen option in a hatched frame with its ratings; four alternatives in dotted frames.", "Lead with the choice; the alternatives and their ratings show what it beat.", f => [
+    { kind: "box", ref: "chosen", parent: f, x: M, y: 70, w: 560, h: 580, title: "", box: outline({ corner: "chamfer", cut: 48, hatch: 12, weight: 0.75, fill: "none" }) },
+    { kind: "placeholder", parent: f, x: M + 30, y: 100, w: 500, h: 380, label: "Selected" },
+    ...WORKSPACE_RATINGS.map((label, r) => ({ kind: "rating", parent: f, x: M + 30 + (r < 3 ? 0 : 260), y: 500 + (r % 3) * 30, w: 200, h: 16, label, value: [5, 3, 4, 2, 4][r], ink: WHITE } as TemplatePiece)),
+    fline(f, M + 290, 600, 240, 0, fine(WHITE, { weight: 1.4 })),
+    words(f, M + 290, 560, 240, "WORKSPACE", "m", "light-green", "end"),
     ...[0, 1, 2, 3].flatMap(i => {
-      const x = 812 + (i % 2) * 210, y = 110 + Math.floor(i / 2) * 250;
+      const x = 700 + (i % 2) * 270, y = 50 + Math.floor(i / 2) * 330;
       return [
-        { kind: "placeholder", parent: f, x, y, w: 186, h: 200, label: `Alt 0${i + 1}` } as TemplatePiece,
-        cap(f, x, y + 208, 186, `ALT 0${i + 1} — WHY NOT`),
+        { kind: "box", ref: `alt${i}`, parent: f, x, y, w: 240, h: 170, title: "", box: { weight: 0.75, pattern: "dotted", color: WHITE, header: 0, corner: "chamfer4", cut: 28, hatch: 0, fill: "none" } } as TemplatePiece,
+        { kind: "placeholder", parent: f, x: x + 24, y: y + 16, w: 192, h: 128, label: `Alt 0${i + 1}` } as TemplatePiece,
+        { kind: "numeral", parent: f, x: x - 12, y: y + 140, w: 48, h: 40, text: `0${i + 1}`, style: "solid", ink: WHITE } as TemplatePiece,
+        ...WORKSPACE_RATINGS.map((label, r) => ({ kind: "rating", parent: f, x: x + 50, y: y + 190 + r * 22, w: 190, h: 14, label, value: [1, 1, 4, 2, 3][r], ink: WHITE } as TemplatePiece)),
       ];
     }),
   ]),
@@ -326,7 +417,7 @@ const studioTemplates: BoardTemplate[] = [
         return [
           { kind: "numeral", parent: f, x, y: 100, w: 60, h: 70, text: "AB"[i], style: "outline", ink: WHITE } as TemplatePiece,
           { kind: "placeholder", parent: f, x, y: 190, w, h: 340, label: `Option ${"AB"[i]}` } as TemplatePiece,
-          ...RATINGS.slice(0, 3).map((label, r) => ({ kind: "rating", parent: f, x, y: 552 + r * 30, w: Math.min(w, 320), h: 18, label, value: i ? 4 - r : 2 + r, ink: WHITE } as TemplatePiece)),
+          ...TYPOLOGY_RATINGS.slice(0, 3).map((label, r) => ({ kind: "rating", parent: f, x, y: 552 + r * 30, w: Math.min(w, 360), h: 18, label, value: i ? 4 - r : 2 + r, ink: WHITE } as TemplatePiece)),
         ];
       }),
       fline(f, SW / 2, 190, 0, 340, fine(GREY, { pattern: "center" })),

@@ -37,6 +37,7 @@ export function boxGraphic(id: string, w: number, h: number, box: BoxSpec, band:
         <line x1={0} y1={0} x2={0} y2={5} stroke={box.color} strokeWidth={1.4} />
       </pattern>}
     </defs>
+    {box.shadow > 0 && <path d={outer} transform={`translate(${box.shadow} ${box.shadow})`} fill="#111111" />}
     {box.fill !== "none" && <path d={outer} fill={box.fill} />}
     {box.header > 0 && <rect width={w} height={box.header} fill={band} clipPath={`url(#clip-${key})`} />}
     {box.hatch > 0 && <path d={`${outer} ${boxPath(w, h, box.corner, box.cut, box.hatch)}`} fillRule="evenodd" fill={`url(#hatch-${key})`} />}
@@ -126,6 +127,7 @@ const STUDIO_PIECES = [
   { id: "studio:rating", type: "rating-meter", label: "Add rating meter", w: 280, h: 22 },
   { id: "studio:grid", type: "study-grid", label: "Add study grid (3 × 9)", w: 1350, h: 450 },
   { id: "studio:numeral", type: "numeral", label: "Add section numeral", w: 180, h: 140 },
+  { id: "studio:brackets", type: "corner-brackets", label: "Add corner brackets", w: 240, h: 120 },
 ] as const;
 
 /** Header menu: add a headed box, or choose how connectors look (applies to selected connectors too). */
