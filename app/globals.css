@@ -2437,3 +2437,25 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 
 /* Desktop app install */
 .sidebar-footer .install-app { justify-self: start; padding: 0; color: #f1efe9; font-weight: 600; }
+
+/* Project-first boards: placement chips, grouped board lists, and the project/topic picker. */
+.board-card-place { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #555; }
+.board-card-topics { display: flex; flex-wrap: wrap; gap: 6px; }
+.board-card-topics em { font-style: normal; font-size: 12px; padding: 2px 8px; border: 1px solid #d6d6cf; border-radius: 999px; color: #444; background: #f6f6f1; }
+.board-group { margin-top: 40px; }
+.board-group h2 { margin-bottom: 4px; }
+.board-group .board-list { margin-top: 16px; }
+.board-group-note { color: #666; font-size: 14px; margin: 0; }
+.new-board { margin-top: 24px; padding: 0; border: 0; background: none; }
+.new-board > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.new-board > summary::-webkit-details-marker { display: none; }
+.new-board[open] > form { margin-top: 16px; max-width: 520px; padding: 20px; border: 1px solid #deded8; border-radius: 5px; background: white; }
+.board-organizer { display: grid; gap: 12px; }
+.board-organizer label { display: grid; gap: 6px; }
+.board-organizer input:not([type=checkbox]), .board-organizer select { padding: 10px; border: 1px solid #ccc; border-radius: 3px; background: white; color: #222; }
+.board-details .board-organizer { border-top: 1px solid #ddd; padding-top: 16px; margin-top: 4px; }
+.board-organizer h3 { margin: 0; font-size: 15px; }
+.board-topic-list { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.board-topic-list legend { font-size: 14px; margin-bottom: 6px; }
+.board-topic-list label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.board-organizer-empty { font-size: 13px; color: #666; }

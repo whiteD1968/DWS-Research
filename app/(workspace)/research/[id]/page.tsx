@@ -14,5 +14,5 @@ export default async function TopicPage({ params, searchParams }: { params: Prom
   catch { return <p role="alert">Research workspace could not be loaded. <Link href="/research">Back to research</Link></p>; }
   const topic = context.topics.find(item => item.id === id);
   if (!topic) return <p>Topic unavailable. <Link href="/research">Research</Link></p>;
-  return <ResearchTopicWorkspace topic={topic} context={context} mode={topicModes.includes(query.mode ?? "") ? query.mode! : "overview"} error={query.error} saved={!!query.saved} />;
+  return <ResearchTopicWorkspace ownerId={user.id} topic={topic} context={context} mode={topicModes.includes(query.mode ?? "") ? query.mode! : "overview"} error={query.error} saved={!!query.saved} />;
 }

@@ -56,14 +56,16 @@ export async function renameBoard(id: string, title: string, description: string
 
 export async function convertBoardText(id: string, recordId: string, type: "note" | "reference", title: string, text: string) {
   const { db, user, board } = await ownedBoard(id);
-  if (!["note", "reference"].includes(type) || !text.trim() || text.length > 20000 || !board.research_thread_id) throw new Error("A topic and text are required.");
+  if (!["note", "reference"].includes(type) || !text.trim() || text.length > 20000) throw new Error("Select some text to convert.");
   const table = type === "note" ? "notes" : "references";
-  const row = type === "note" ? { parent_type: "research_thread", parent_id: board.research_thread_id, plain_text: text, content: [] } : { reference_type: "precedent", description: text };
+  // Boards without a topic keep converted notes in the Library rather than under a topic.
+  const parent = board.research_thread_id ? { parent_type: "research_thread", parent_id: board.research_thread_id } : {};
+  const row = type === "note" ? { ...parent, plain_text: text, content: [] } : { reference_type: "precedent", description: text };
   const { error } = await db.from(table).upsert({ id: recordId, owner_id: user.id, title: title.trim().slice(0, 200) || "Board note", ...row }, { onConflict: "id", ignoreDuplicates: true });
   if (error) throw new Error("Unable to create record.");
   const { data: created } = await db.from(table).select("id").eq("id", recordId).eq("owner_id", user.id).single();
   if (!created) throw new Error("Record unavailable.");
-  if (type === "reference") {
+  if (type === "reference" && board.research_thread_id) {
     const { error: linkError } = await db.from("relationships").upsert({ owner_id: user.id, source_type: "research_thread", source_id: board.research_thread_id, relationship_type: "has_reference", target_type: "reference", target_id: recordId }, { onConflict: "source_type,source_id,relationship_type,target_type,target_id", ignoreDuplicates: true });
     if (linkError) throw new Error("Could not link reference. Retry.");
   }

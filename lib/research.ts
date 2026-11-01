@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export const topicStatuses = ["active", "developing", "paused", "archived"];
 export const reviewFields = ["relevance_note", "key_argument", "methodology", "findings", "limitations", "research_gap"];
-export const topicModes = ["overview", "discover", "literature", "precedents", "notes", "themes", "collections", "boards", "projects"];
+// Collections are no longer offered; existing collection links stay in the database.
+export const topicModes = ["overview", "boards", "literature", "precedents", "notes", "themes", "discover", "projects"];
 export const topicLinks = {
   reference: { table: "references", relationship: "has_reference" },
   media: { table: "media", relationship: "has_document" },
