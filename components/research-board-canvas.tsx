@@ -14,6 +14,7 @@ import { fitResearchBoard, initializeResearchBoard, insertResearchRecord, type R
 import { BoardRecords, BoardSourceActions, boardShapeUtils, setExportRecords } from "./research-board-shapes";
 import { BoardArrangeBar, BoardLayoutTools } from "./board-layout-tools";
 import { Presenter, SlidesPanel, useSlides } from "./board-slides";
+import { TemplatesPanel } from "./board-templates";
 import { DiagramBoxUtil, DiagramTools, QuickAdd } from "./board-diagram";
 const shapeUtils = [...boardShapeUtils, DiagramBoxUtil];
 import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts";
@@ -79,6 +80,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
     return () => observer.disconnect();
   }, []);
   const [slidesOpen, setSlidesOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [presentFrom, setPresentFrom] = useState<number | null>(null);
   const slides = useSlides(activeEditor);
   const deck = useMemo(() => slides.filter(s => !s.hidden), [slides]);
@@ -246,13 +248,14 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
     return () => { fitObserver.disconnect(); cancelAnimationFrame(fitFrame); queueSave.current = null; setActiveEditor(null); setReady(false); unsubscribe(); stopNoteStyle(); clearTimeout(timeout); void flush(); window.removeEventListener("beforeunload", beforeUnload); editor.current = null; };
   }
   return <div className={`board-workspace${presentFrom !== null ? " presenting" : ""}`} ref={workspaceRef}>
-    <header className="board-header" ref={headerRef}><Link href={source.href} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>{source.label}</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button disabled={busy} onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError || busy} onClick={() => { setPicker(!picker); setSlidesOpen(false); }}>+ Add</button>
+    <header className="board-header" ref={headerRef}><Link href={source.href} onClick={e => { if ((pending.current || running.current) && !window.confirm("Changes are not saved. Leave this board?")) e.preventDefault(); }}>{source.label}</Link><button className="board-title" onClick={() => setDetails(!details)} title="Edit board details">{title}</button><span role="status">{status}</span>{status === "Error saving" && <button disabled={busy} onClick={() => { stopped.current = false; void flush(); }}>Retry</button>}<button className="button" disabled={!ready || licenseError || busy} onClick={() => { setPicker(!picker); setSlidesOpen(false); setTemplatesOpen(false); }}>+ Add</button>
       <BoardSourceActions editor={activeEditor} records={recordMap} />
       <select aria-label="Convert selected text" value="" onChange={e => convert(e.target.value as "note" | "reference")}><option value="">Convert to...</option><option value="note">Structured Note</option><option value="reference">Reference</option></select>
       <button className="button" title="Fit board to viewport" onClick={() => { if (editor.current) fitResearchBoard(editor.current, true); }}>Fit</button>
       <BoardLayoutTools editor={activeEditor} title={title} onChange={() => queueSave.current?.()} />
       <DiagramTools editor={activeEditor} onChange={() => queueSave.current?.()} />
-      <button type="button" className="button" aria-expanded={slidesOpen} disabled={!ready} onClick={() => { setSlidesOpen(!slidesOpen); setPicker(false); }}>Slides{slides.length ? ` (${deck.length})` : ""}</button>
+      <button type="button" className="button" aria-expanded={templatesOpen} disabled={!ready} onClick={() => { setTemplatesOpen(!templatesOpen); setPicker(false); setSlidesOpen(false); }}>Templates</button>
+      <button type="button" className="button" aria-expanded={slidesOpen} disabled={!ready} onClick={() => { setSlidesOpen(!slidesOpen); setPicker(false); setTemplatesOpen(false); }}>Slides{slides.length ? ` (${deck.length})` : ""}</button>
     </header>
     {draftWarning && <div className="board-error" role="alert">{draftWarning}</div>}
     {status === "Error saving" && <div className="board-error"><span>Your work is retained in this tab and, when available, in this browser’s draft storage. If another session changed the board, preserve both versions with a separate copy.</span><button disabled={busy} onClick={() => void saveSeparateCopy()}>Save as separate board</button><button disabled={busy} onClick={() => void reloadForRecovery()}>Reload and recover</button></div>}
@@ -262,6 +265,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
     {details && <div className="board-delete-control"><DeleteContent kind="board" id={board.id} title={title} /></div>}
     {details && <form className="board-details" onSubmit={async e => { e.preventDefault(); if (pending.current || running.current) { setError("Wait for canvas changes to save before renaming."); return; } setBusy(true); running.current = true; try { revision.current = await renameBoard(board.id, title, description, revision.current); setDetails(false); } catch (e) { setError((e as Error).message); } finally { running.current = false; setBusy(false); void flush(); } }}><label>Title<input value={title} required onChange={e => setTitle(e.target.value)} /></label><label>Description<textarea value={description} onChange={e => setDescription(e.target.value)} /></label><button className="button" disabled={busy}>Save details</button>{organization && <BoardOrganizer boardId={board.id} projects={organization.projects} topics={organization.topics} initial={placement} disabled={busy} run={async task => { if (pending.current || running.current) throw new Error("Wait for canvas changes to save first."); setBusy(true); running.current = true; try { revision.current = await task(revision.current); } finally { running.current = false; setBusy(false); void flush(); } }} onSaved={value => { setPlacement(value); router.refresh(); }} />}</form>}
     {slidesOpen && activeEditor && presentFrom === null && <SlidesPanel editor={activeEditor} title={title} onPresent={setPresentFrom} onClose={() => setSlidesOpen(false)} onChange={() => queueSave.current?.()} />}
+    {templatesOpen && activeEditor && presentFrom === null && <TemplatesPanel editor={activeEditor} onClose={() => setTemplatesOpen(false)} onChange={() => queueSave.current?.()} />}
     {picker && <aside className="board-picker" aria-label="Add research">
       <div className="board-picker-heading"><strong>Add research</strong><button type="button" aria-label="Close Add drawer" onClick={() => setPicker(false)}>×</button></div>
       <input aria-label="Search research" placeholder="Search title, creator or text" value={query} onChange={e => setQuery(e.target.value)} />
