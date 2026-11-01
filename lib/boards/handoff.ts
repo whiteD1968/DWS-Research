@@ -1,4 +1,4 @@
-export type BoardHandoffSource = { type: "collection" | "discover"; id: string };
+export type BoardHandoffSource = { type: "collection" | "discover" | "library"; id: string };
 export type BoardTransfer = { id: string; keys: string[] };
 export function parseTransfer(add: string | undefined, transfer: string | undefined): BoardTransfer | undefined {
   if (typeof add !== "string" || typeof transfer !== "string" || !add || !transfer) return;

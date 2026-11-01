@@ -7,6 +7,7 @@ import { addMediaToProject, deleteMediaMany, tagMedia, untagMedia } from "@/app/
 import { describeSelectedImages } from "@/app/(workspace)/library/describe-actions";
 import { DeleteContent, LibraryEditor } from "@/components/content-controls";
 import { ItemTags } from "@/components/item-tags";
+import { BoardHandoff } from "@/components/board-handoff";
 import { groupByMonth, type LibraryEntry, type LibraryLayout } from "@/lib/library";
 
 export type GridEntry = LibraryEntry & { image: string | null };
@@ -69,6 +70,7 @@ export function LibraryGrid({ entries, layout, grouped = false, selectable, edit
           <option value="">Add to project…</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
         </select>}
         {describable && <button className="button" type="button" disabled={pending || selected.length > 30} title={selected.length > 30 ? "Select up to 30 images" : "Write a title, caption, alt text, and tags with Claude"} onClick={() => { run(() => describeSelectedImages(selected), result => { const r = result as { described: number; failed: number; stopped: string; error: string }; return r.stopped || `Described ${r.described} ${r.described === 1 ? "image" : "images"}.${r.failed ? ` ${r.failed} couldn’t be read${r.error ? `: ${r.error}` : "."}` : ""}`; }); }}>Describe with AI</button>}
+        <BoardHandoff source={{ type: "library", id: "library" }} sourceTitle="Library selection" selected={selected} />
         <button className="button button-danger-quiet" type="button" disabled={pending} onClick={() => { setStatus(""); dialog.current?.showModal(); }}>Delete</button>
         <button className="text-button" type="button" disabled={pending} onClick={() => setSelected(entries.map(entry => entry.id))}>Select page</button>
         <button className="text-button" type="button" disabled={pending} onClick={() => { setSelected([]); setStatus(""); }}>Clear</button>
