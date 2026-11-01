@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { ArrowShapeUtil, SVGContainer, getArrowInfo, useValue, type Editor, type SvgExportContext, type TLArrowInfo, type TLArrowShape, type TLShape } from "tldraw";
+import { ArrowShapeUtil, Mat, SVGContainer, getArrowInfo, useValue, type Editor, type SvgExportContext, type TLArrowInfo, type TLArrowShape, type TLShape } from "tldraw";
+import { crossings, hopPath, routeAround, runsThrough, type Rect } from "@/lib/boards/routing";
 import {
   BOX_FILLS, BUILT_IN_STYLES, CORNERS, DEFAULT_BOX, DEFAULT_LINE, END_SIZES, ENDS, HATCHES, HEADERS, SHADOWS, CORNER_KINDS, SIDE_HATCHES, cornerKinds, LINE_COLORS, PATTERNS, PT, RADII, STYLES_KEY, WEIGHTS,
   dashArray, endInset, endMark, parseStyles, readBox, readLine, roundedPath, simplify, trimEnds,
@@ -9,8 +10,52 @@ import {
 
 type Pt = { x: number; y: number };
 
-/** The connector's drawn line, ends included, from tldraw's routed geometry. */
-export function lineSvg(info: TLArrowInfo | undefined, line: LineSpec) {
+/** Shapes a routed line keeps clear of. Frames count too, unless the line starts or ends inside one. */
+const OBSTACLES = new Set(["diagram-box", "geo", "note", "image", "video", "research-record", "frame"]);
+const unit = (a: Pt, b: Pt) => { const d = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / d, y: (b.y - a.y) / d }; };
+
+/** The points a precise line is drawn through, in its own space: tldraw's route, or one around boxes when asked. */
+function drawnPoints(editor: Editor, shape: TLArrowShape, line: LineSpec, info = getArrowInfo(editor, shape)): Pt[] | null {
+  if (!info?.isValid || info.type === "arc") return null;
+  const raw = info.type === "elbow" ? info.route.points.map(p => ({ x: p.x, y: p.y })) : [info.start.point, info.end.point];
+  if (!line.avoid || info.type !== "elbow" || raw.length < 2) return raw;
+  const toLocal = Mat.Inverse(editor.getShapePageTransform(shape.id));
+  const start = raw[0], end = raw[raw.length - 1];
+  const span = { x: Math.min(start.x, end.x) - 600, y: Math.min(start.y, end.y) - 600, maxX: Math.max(start.x, end.x) + 600, maxY: Math.max(start.y, end.y) + 600 };
+  const obstacles: Rect[] = editor.getCurrentPageShapes().flatMap(o => {
+    if (o.id === shape.id || o.isLocked || !OBSTACLES.has(o.type)) return [];
+    const b = editor.getShapePageBounds(o.id);
+    if (!b) return [];
+    const corners = [Mat.applyToPoint(toLocal, { x: b.x, y: b.y }), Mat.applyToPoint(toLocal, { x: b.maxX, y: b.maxY })];
+    const r = { x: Math.min(corners[0].x, corners[1].x), y: Math.min(corners[0].y, corners[1].y), w: Math.abs(corners[1].x - corners[0].x), h: Math.abs(corners[1].y - corners[0].y) };
+    const holds = (p: Pt) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+    if (holds(start) || holds(end)) return []; // a line can't leave a box it starts inside
+    if (r.x > span.maxX || r.y > span.maxY || r.x + r.w < span.x || r.y + r.h < span.y) return [];
+    return [r];
+  });
+  // Keep tldraw's route while it is clear; only reroute when it actually runs through a box.
+  if (!runsThrough(raw, obstacles)) return raw;
+  return routeAround(start, unit(raw[0], raw[1]), end, unit(raw[raw.length - 1], raw[raw.length - 2]), obstacles) ?? raw;
+}
+
+/** Lines beneath this one (in drawing order) that it should hop over, in its own space. */
+function linesBelow(editor: Editor, shape: TLArrowShape): Pt[][] {
+  const toLocal = Mat.Inverse(editor.getShapePageTransform(shape.id));
+  const out: Pt[][] = [];
+  for (const o of editor.getCurrentPageShapesSorted()) {
+    if (o.id === shape.id) break;
+    if (o.type !== "arrow") continue;
+    const arrow = o as TLArrowShape;
+    const pts = drawnPoints(editor, arrow, readLine(arrow.meta.line) ?? DEFAULT_LINE);
+    if (!pts) continue;
+    const toPage = editor.getShapePageTransform(arrow.id);
+    out.push(pts.map(p => Mat.applyToPoint(toLocal, Mat.applyToPoint(toPage, p))));
+  }
+  return out;
+}
+
+/** The connector's drawn line, ends included, from tldraw's routed geometry or a route of our own. */
+export function lineSvg(info: TLArrowInfo | undefined, line: LineSpec, route?: { points?: Pt[] | null; below?: Pt[][] }) {
   if (!info?.isValid) return null;
   const width = line.weight * PT;
   const stroke = { stroke: line.color, strokeWidth: width, fill: "none", strokeLinecap: line.pattern === "dotted" ? "round" as const : "butt" as const, strokeLinejoin: "round" as const };
@@ -25,11 +70,13 @@ export function lineSvg(info: TLArrowInfo | undefined, line: LineSpec) {
     const along = (p: Pt, by: number) => { const a = Math.atan2(p.y - center.y, p.x - center.x) + by; return { x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius }; };
     startFrom = along(start, dir * step); endFrom = along(end, -dir * step);
   } else {
-    const raw = info.type === "elbow" ? info.route.points : [start, end];
+    const raw = route?.points ?? (info.type === "elbow" ? info.route.points : [start, end]);
     const points = simplify(raw.map(p => ({ x: p.x, y: p.y })));
     if (points.length < 2) return null;
     const trimmed = trimEnds(points, endInset(line.start, line.startSize), endInset(line.end, line.endSize));
-    d = roundedPath(trimmed, info.type === "elbow" ? line.radius : 0);
+    const radius = info.type === "elbow" ? line.radius : 0;
+    const hops = line.jumps && route?.below?.length ? crossings(trimmed, route.below) : [];
+    d = hops.length ? hopPath(trimmed, radius, hops, Math.max(7, width * 5)) : roundedPath(trimmed, radius);
     startFrom = points[1]; endFrom = points[points.length - 2];
   }
   const marks = [endMark(line.start, start, startFrom, line.startSize), endMark(line.end, end, endFrom, line.endSize)];
@@ -42,8 +89,16 @@ export function lineSvg(info: TLArrowInfo | undefined, line: LineSpec) {
   </g>;
 }
 
+function preciseSvg(editor: Editor, shape: TLArrowShape, line: LineSpec) {
+  const info = getArrowInfo(editor, shape);
+  const points = line.avoid ? drawnPoints(editor, shape, line, info) : null;
+  const below = line.jumps ? linesBelow(editor, shape) : undefined;
+  return lineSvg(info, line, { points, below });
+}
+
 /**
- * Connectors with a precise line style draw their own line; tldraw still routes, binds and labels them.
+ * Connectors with a precise line style draw their own line; tldraw still binds and labels them, and
+ * routes them unless the line is set to find its own way around boxes.
  * Without one, they look exactly as before.
  */
 export class PreciseArrowUtil extends ArrowShapeUtil {
@@ -51,9 +106,8 @@ export class PreciseArrowUtil extends ArrowShapeUtil {
     const base = super.component(shape); // always called, so its hooks run in the same order
     const line = readLine(shape.meta.line);
     if (!line) return base;
-    const info = getArrowInfo(this.editor, shape);
     return <>
-      <SVGContainer style={{ minWidth: 50, minHeight: 50 }}>{lineSvg(info, line)}</SVGContainer>
+      <SVGContainer style={{ minWidth: 50, minHeight: 50 }}>{preciseSvg(this.editor, shape, line)}</SVGContainer>
       {base}
     </>;
   }
@@ -61,7 +115,7 @@ export class PreciseArrowUtil extends ArrowShapeUtil {
     const base = super.toSvg(shape, ctx);
     const line = readLine(shape.meta.line);
     if (!line) return base;
-    return <g>{lineSvg(getArrowInfo(this.editor, shape), line)}{base}</g>;
+    return <g>{preciseSvg(this.editor, shape, line)}{base}</g>;
   }
 }
 // tldraw's own stroke is hidden for precise lines; its label keeps working.
@@ -93,7 +147,9 @@ export function applyLine(editor: Editor, arrows: TLArrowShape[], change: Partia
   editor.markHistoryStoppingPoint("Line style");
   editor.run(() => editor.updateShapes(arrows.map(a => {
     const line = { ...(readLine(a.meta.line) ?? DEFAULT_LINE), ...change };
-    return { id: a.id, type: "arrow" as const, meta: { ...a.meta, ...precise(line) }, props: { arrowheadStart: "none" as const, arrowheadEnd: "none" as const } };
+    // Routing around boxes works on elbow lines, so turning it on makes the line an elbow.
+    const kind = change.avoid ? { kind: "elbow" as const } : {};
+    return { id: a.id, type: "arrow" as const, meta: { ...a.meta, ...precise(line) }, props: { arrowheadStart: "none" as const, arrowheadEnd: "none" as const, ...kind } };
   })));
 }
 function resetLine(editor: Editor, arrows: TLArrowShape[]) {
@@ -148,6 +204,8 @@ function LineControls({ line, onChange }: { line: LineSpec; onChange: (change: P
     <label className="line-panel-wide">Elbow corners<select value={line.radius} onChange={e => onChange({ radius: Number(e.target.value) })}>
       {[...new Set([...RADII, line.radius])].sort((a, b) => a - b).map(r => <option key={r} value={r}>{r === 0 ? "Square" : `Rounded ${r}`}</option>)}
     </select></label>
+    <label className="line-panel-check"><input type="checkbox" checked={!!line.avoid} onChange={e => onChange({ avoid: e.target.checked })} /> Route around boxes <small>(elbow lines)</small></label>
+    <label className="line-panel-check"><input type="checkbox" checked={!!line.jumps} onChange={e => onChange({ jumps: e.target.checked })} /> Jump over lines it crosses</label>
   </>;
 }
 

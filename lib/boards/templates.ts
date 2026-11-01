@@ -219,7 +219,7 @@ const studio = (id: string, label: string, description: string, notes: string, b
   ({ id: `studio-${id}`, group: "Studio", label, description, pieces: board("s", label, notes, body("s"), light) });
 
 const TYPOLOGY_RATINGS = ["System legibility", "Graduated participation", "Multi-scale adaptation", "Interaction geometry", "Movement + gathering"];
-const WORKSPACE_RATINGS = ["S D", "F+E", "W C", "R S", "S G"];
+const WORKSPACE_RATINGS = ["S *D*", "F+*E*", "W *C*", "R *S*", "S *G*"]; // asterisks mark the accent letter
 const studioTemplates: BoardTemplate[] = [
   studio("divider", "Section divider", "Hatched numeral, title band, course line and crosshair rule.", "Open each section with its number and one line on what it covers.", f => [
     { kind: "numeral", parent: f, x: M, y: 210, w: 260, h: 200, text: "01", style: "hatch", ink: WHITE },

@@ -50,3 +50,11 @@ test('corner brackets draw four L marks with arms capped at half a side', () => 
   assert.match(d, /^M14,0 H0 V14/);
   assert.match(s.bracketPath(20, 10, 40), /^M5,0 H0 V5/);
 });
+
+test('asterisks mark accent letters in a label, and truncation counts visible letters', () => {
+  assert.deepEqual(s.accentRuns('S *D*'), [{ text: 'S ', accent: false }, { text: 'D', accent: true }]);
+  assert.deepEqual(s.accentRuns('F+*E*'), [{ text: 'F+', accent: false }, { text: 'E', accent: true }]);
+  assert.deepEqual(s.accentRuns('Plain'), [{ text: 'Plain', accent: false }]);
+  assert.deepEqual(s.accentRuns('a*b'), [{ text: 'a*b', accent: false }]); // a lone asterisk stays as typed
+  assert.deepEqual(s.accentRuns('ABC *DEF*', 5), [{ text: 'ABC ', accent: false }, { text: 'D', accent: true }]);
+});

@@ -12,7 +12,9 @@ test('stored line specs are read defensively', () => {
   assert.equal(l.readLine('dashed'), null);
   assert.deepEqual(l.readLine({}), l.DEFAULT_LINE);
   const bad = l.readLine({ weight: 999, pattern: 'zigzag', color: 'red; x', radius: -3, start: 'skull', end: 'tick', startSize: 1, endSize: 100 });
-  assert.deepEqual(bad, { weight: 12, pattern: 'solid', color: '#111111', radius: 0, start: 'none', end: 'tick', startSize: 2, endSize: 40 });
+  assert.deepEqual(bad, { weight: 12, pattern: 'solid', color: '#111111', radius: 0, start: 'none', end: 'tick', startSize: 2, endSize: 40, avoid: false, jumps: false });
+  assert.equal(l.readLine({ avoid: true, jumps: 'yes' }).avoid, true);
+  assert.equal(l.readLine({ avoid: true, jumps: 'yes' }).jumps, false);
   assert.equal(l.readLine({ color: '#C2413A' }).color, '#c2413a');
 });
 
@@ -58,7 +60,7 @@ test('end marks point along the line', () => {
 });
 
 test('built-in styles are valid, and saved styles drop junk', () => {
-  for (const s of l.BUILT_IN_STYLES) assert.deepEqual(l.readLine(s.line), s.line, s.id);
+  for (const s of l.BUILT_IN_STYLES) assert.deepEqual(l.readLine(s.line), { avoid: false, jumps: false, ...s.line }, s.id);
   assert.deepEqual(l.parseStyles('nope'), []);
   const saved = l.parseStyles(JSON.stringify([{ id: '1', name: 'Section cut', line: { weight: 2, pattern: 'solid' } }, { id: 2 }, null]));
   assert.equal(saved.length, 1);
