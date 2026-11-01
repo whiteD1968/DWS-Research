@@ -232,7 +232,8 @@ const studioTemplates: BoardTemplate[] = [
   studio("analysis", "Analysis cards", "Two precedent cards: hatched cut-corner frame, [ANALYSIS] tag, name, data and crosshairs.", "One card per precedent: what it is, who made it, where, when and how big.", f => [0, 1].flatMap(i => {
     const x = M + i * 596, w = 540;
     return [
-      { kind: "box", ref: `card${i}`, parent: f, x, y: 50, w, h: 420, title: "", box: outline({ corner: "chamfer", cut: 44, hatch: 12, weight: 0.75, fill: "none" }) } as TemplatePiece,
+      // Corners and hatch runs differ side by side, like a worn card frame; change them in the line panel.
+      { kind: "box", ref: `card${i}`, parent: f, x, y: 50, w, h: 420, title: "", box: outline({ corner: "chamfer", corners: ["cut", "cut", "round", "round"], sides: ["full", "full", "start", "ends"], cut: 44, hatch: 14, weight: 1, fill: "none" }) } as TemplatePiece,
       { kind: "placeholder", parent: f, x: x + 22, y: 72, w: w - 44, h: 376, label: `Precedent ${"AB"[i]} drawing` } as TemplatePiece,
       cap(f, x, 494, 200, "[ANALYSIS]", "s", "grey"),
       words(f, x, 520, 440, "PRECEDENT NAME", "l"),

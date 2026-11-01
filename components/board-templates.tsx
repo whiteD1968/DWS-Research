@@ -7,7 +7,7 @@ import {
 } from "@/lib/boards/templates";
 import { boxColor } from "@/lib/boards/diagram";
 import { useSlides } from "./board-slides";
-import { DEFAULT_BOX, DEFAULT_LINE, boxPath, readBox, readLine } from "@/lib/boards/lines";
+import { DEFAULT_BOX, DEFAULT_LINE, boxPath, cornerKinds, readBox, readLine } from "@/lib/boards/lines";
 import type { DiagramBoxShape } from "./board-diagram";
 import type { BracketShape, GridShape, NumeralShape, RatingShape } from "./board-studio";
 import { bracketPath } from "@/lib/boards/studio";
@@ -138,7 +138,7 @@ function TemplatePreview({ template }: { template: BoardTemplate }) {
           boxes.set(p.ref, { x, y, w: p.w, h: p.h });
           if (p.box) {
             const box = readBox({ ...DEFAULT_BOX, ...p.box });
-            return <path key={i} transform={`translate(${x} ${y})`} d={boxPath(p.w, p.h, box.corner, box.cut)} fill={box.fill === "none" ? "none" : box.fill}
+            return <path key={i} transform={`translate(${x} ${y})`} d={boxPath(p.w, p.h, cornerKinds(box.corner, box.corners), box.cut)} fill={box.fill === "none" ? "none" : box.fill}
               stroke={box.color} strokeWidth={Math.max(b.w / 400, box.weight * (box.hatch ? 6 : 2))} strokeDasharray={box.pattern === "solid" ? undefined : `${b.w / 200} ${b.w / 200}`} />;
           }
           return <g key={i}><rect x={x} y={y} width={p.w} height={p.h} fill="#ffffff" stroke="#3a3a37" strokeWidth={b.w / 300} /><rect x={x} y={y} width={p.w} height={p.h * 0.25} fill={boxColor(p.color ?? "black").band} /></g>;

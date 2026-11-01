@@ -2525,3 +2525,5 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .studio-edit-label { position: absolute; left: 0; top: 0; border: 0; border-bottom: 1px dashed #999; background: #ffffffcc; outline: 0; padding: 0 2px; font: 12px 'IBM Plex Mono', Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: 0.1em; pointer-events: all; }
 .studio-rating-hit { position: absolute; border: 0; background: transparent; padding: 0; cursor: pointer; pointer-events: all; border-radius: 3px; }
 .studio-rating-hit:hover, .studio-rating-hit:focus-visible { outline: 2px solid #3c64c8; outline-offset: 1px; }
+.line-panel-quad { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 6px; }
+.line-panel-quad > span { grid-column: 1 / -1; color: #55574f; font-size: 11px; }

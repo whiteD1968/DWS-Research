@@ -8,7 +8,7 @@ import {
 import { BOX_HEADER, CONNECTOR_PRESETS, boxColor, quickAddPosition, type Side } from "@/lib/boards/diagram";
 import { wrapText, type TextStyle } from "@/lib/boards/card-svg";
 import { measure } from "./research-board-shapes";
-import { BUILT_IN_STYLES, PT, boxPath, dashArray, isDark, readBox, type BoxSpec } from "@/lib/boards/lines";
+import { BUILT_IN_STYLES, PT, boxPath, cornerKinds, dashArray, hatchRuns, isDark, readBox, type BoxSpec } from "@/lib/boards/lines";
 import { applyLine, setNextLine } from "./board-lines";
 
 type DiagramBoxProps = { w: number; h: number; title: string; body: string; color: TLDefaultColorStyle };
@@ -28,19 +28,22 @@ const PAD = 10;
 export function boxGraphic(id: string, w: number, h: number, box: BoxSpec, band: string) {
   const sw = box.weight * PT;
   const key = id.replace(/[^a-zA-Z0-9_-]/g, "");
-  const outer = boxPath(w, h, box.corner, box.cut);
-  const stroke = boxPath(w, h, box.corner, box.cut, sw / 2);
+  const kinds = cornerKinds(box.corner, box.corners);
+  const outer = boxPath(w, h, kinds, box.cut);
+  const stroke = boxPath(w, h, kinds, box.cut, sw / 2);
+  const partial = box.hatch > 0 && box.sides.some(s => s !== "full");
   return <>
     <defs>
       <clipPath id={`clip-${key}`}><path d={outer} /></clipPath>
       {box.hatch > 0 && <pattern id={`hatch-${key}`} width={5} height={5} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
         <line x1={0} y1={0} x2={0} y2={5} stroke={box.color} strokeWidth={1.4} />
       </pattern>}
+      {partial && <clipPath id={`runs-${key}`}>{hatchRuns(w, h, box.hatch, box.sides).map((r, i) => <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} />)}</clipPath>}
     </defs>
     {box.shadow > 0 && <path d={outer} transform={`translate(${box.shadow} ${box.shadow})`} fill="#111111" />}
     {box.fill !== "none" && <path d={outer} fill={box.fill} />}
     {box.header > 0 && <rect width={w} height={box.header} fill={band} clipPath={`url(#clip-${key})`} />}
-    {box.hatch > 0 && <path d={`${outer} ${boxPath(w, h, box.corner, box.cut, box.hatch)}`} fillRule="evenodd" fill={`url(#hatch-${key})`} />}
+    {box.hatch > 0 && <path d={`${outer} ${boxPath(w, h, kinds, box.cut, box.hatch)}`} fillRule="evenodd" fill={`url(#hatch-${key})`} clipPath={partial ? `url(#runs-${key})` : undefined} />}
     <path d={stroke} fill="none" stroke={box.color} strokeWidth={sw} strokeDasharray={dashArray(box.pattern, box.weight)} strokeLinecap={box.pattern === "dotted" ? "round" : "butt"} strokeLinejoin="miter" />
   </>;
 }

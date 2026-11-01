@@ -157,7 +157,22 @@ export function parseStyles(raw: string | null): LineStyle[] {
 
 // ---------- Box outline and header ----------
 export type BoxCorner = "square" | "round" | "chamfer" | "chamfer4";
-export type BoxSpec = { weight: number; pattern: LinePattern; color: string; header: number; corner: BoxCorner; cut: number; hatch: number; fill: string; shadow: number };
+/** One corner's shape, for boxes whose corners differ (top-left, top-right, bottom-right, bottom-left). */
+export type CornerKind = "square" | "round" | "cut";
+/** Where a side's hatched band runs, following the outline clockwise from the top-left. */
+export type SideHatch = "full" | "start" | "end" | "ends" | "middle" | "none";
+export type BoxSpec = {
+  weight: number; pattern: LinePattern; color: string; header: number; corner: BoxCorner; cut: number; hatch: number; fill: string; shadow: number;
+  /** Per-corner shapes; null follows `corner`. */
+  corners: CornerKind[] | null;
+  /** Hatched runs for the top, right, bottom and left sides. */
+  sides: SideHatch[];
+};
+export const CORNER_KINDS: { id: CornerKind; label: string }[] = [{ id: "square", label: "Square" }, { id: "round", label: "Rounded" }, { id: "cut", label: "Cut" }];
+export const SIDE_HATCHES: { id: SideHatch; label: string }[] = [
+  { id: "full", label: "Full" }, { id: "start", label: "Start" }, { id: "end", label: "End" }, { id: "ends", label: "Both ends" }, { id: "middle", label: "Middle" }, { id: "none", label: "None" },
+];
+const ALL_SIDES: SideHatch[] = ["full", "full", "full", "full"];
 export const HEADERS = [{ h: 0, label: "None" }, { h: 8, label: "Thin" }, { h: 16, label: "Medium" }, { h: 28, label: "Titled" }];
 export const CORNERS: { id: BoxCorner; label: string }[] = [
   { id: "square", label: "Square" }, { id: "round", label: "Rounded" }, { id: "chamfer", label: "Cut corners (2)" }, { id: "chamfer4", label: "Cut corners (4)" },
@@ -165,7 +180,7 @@ export const CORNERS: { id: BoxCorner; label: string }[] = [
 export const HATCHES = [0, 6, 10, 16];
 export const BOX_FILLS = ["#ffffff", "none", "#111111", "#f4f3ef", "#e9e9e7", "#d4f53c", "#1f3a4d"];
 export const SHADOWS = [0, 6, 12, 20];
-export const DEFAULT_BOX: BoxSpec = { weight: 0.75, pattern: "solid", color: "#3a3a37", header: 28, corner: "square", cut: 24, hatch: 0, fill: "#ffffff", shadow: 0 };
+export const DEFAULT_BOX: BoxSpec = { weight: 0.75, pattern: "solid", color: "#3a3a37", header: 28, corner: "square", cut: 24, hatch: 0, fill: "#ffffff", shadow: 0, corners: null, sides: ALL_SIDES };
 export function readBox(value: unknown): BoxSpec {
   if (!value || typeof value !== "object") return DEFAULT_BOX;
   const v = value as Record<string, unknown>;
@@ -179,6 +194,8 @@ export function readBox(value: unknown): BoxSpec {
     hatch: clamp(v.hatch, 0, 60, DEFAULT_BOX.hatch),
     fill: v.fill === "none" ? "none" : typeof v.fill === "string" && HEX.test(v.fill) ? v.fill.toLowerCase() : DEFAULT_BOX.fill,
     shadow: clamp(v.shadow, 0, 60, DEFAULT_BOX.shadow),
+    corners: Array.isArray(v.corners) && v.corners.length === 4 && v.corners.every(c => CORNER_KINDS.some(k => k.id === c)) ? [...v.corners] as CornerKind[] : null,
+    sides: Array.isArray(v.sides) && v.sides.length === 4 && v.sides.every(x => SIDE_HATCHES.some(k => k.id === x)) ? [...v.sides] as SideHatch[] : ALL_SIDES,
   };
 }
 /** True for dark fills, so text on them turns light. */
@@ -188,13 +205,44 @@ export function isDark(hex: string) {
   return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) < 110;
 }
 
-/** Outline of a box inset by `i`: square, rounded, or with cut corners (top-left and bottom-right, or all four). */
-export function boxPath(w: number, h: number, corner: BoxCorner, cut: number, i = 0) {
+/** The four corner shapes (top-left, top-right, bottom-right, bottom-left) a box spec draws. */
+export function cornerKinds(corner: BoxCorner, corners?: CornerKind[] | null): CornerKind[] {
+  if (corners && corners.length === 4) return corners;
+  if (corner === "round") return ["round", "round", "round", "round"];
+  if (corner === "chamfer") return ["cut", "square", "cut", "square"];
+  if (corner === "chamfer4") return ["cut", "cut", "cut", "cut"];
+  return ["square", "square", "square", "square"];
+}
+/** Outline of a box inset by `i`; each corner is square, rounded or cut. */
+export function boxPath(w: number, h: number, corner: BoxCorner | CornerKind[], cut: number, i = 0) {
+  const kinds = Array.isArray(corner) ? cornerKinds("square", corner) : cornerKinds(corner);
   const x0 = i, y0 = i, x1 = w - i, y1 = h - i;
   const c = Math.max(0, Math.min(cut - i * 0.6, (x1 - x0) / 2, (y1 - y0) / 2));
-  if (corner === "square" || c <= 0) return `M${r2(x0)},${r2(y0)} H${r2(x1)} V${r2(y1)} H${r2(x0)} Z`;
-  if (corner === "round") return `M${r2(x0 + c)},${r2(y0)} H${r2(x1 - c)} Q${r2(x1)},${r2(y0)} ${r2(x1)},${r2(y0 + c)} V${r2(y1 - c)} Q${r2(x1)},${r2(y1)} ${r2(x1 - c)},${r2(y1)} H${r2(x0 + c)} Q${r2(x0)},${r2(y1)} ${r2(x0)},${r2(y1 - c)} V${r2(y0 + c)} Q${r2(x0)},${r2(y0)} ${r2(x0 + c)},${r2(y0)} Z`;
-  const all = corner === "chamfer4";
-  const tr = all ? c : 0, bl = all ? c : 0;
-  return `M${r2(x0 + c)},${r2(y0)} H${r2(x1 - tr)} L${r2(x1)},${r2(y0 + tr)} V${r2(y1 - c)} L${r2(x1 - c)},${r2(y1)} H${r2(x0 + bl)} L${r2(x0)},${r2(y1 - bl)} V${r2(y0 + c)} Z`;
+  if (c <= 0 || kinds.every(k => k === "square")) return `M${r2(x0)},${r2(y0)} H${r2(x1)} V${r2(y1)} H${r2(x0)} Z`;
+  // Each corner: the point where it leaves the incoming side, then how it reaches the outgoing side.
+  const corners: [number, number, number, number, number, number][] = [
+    // [cornerX, cornerY, inX, inY, outX, outY] with in/out as unit steps along the sides
+    [x0, y0, 0, 1, 1, 0], [x1, y0, -1, 0, 0, 1], [x1, y1, 0, -1, -1, 0], [x0, y1, 1, 0, 0, -1],
+  ];
+  const parts: string[] = [];
+  corners.forEach(([cx, cy, ix, iy, ox, oy], n) => {
+    const k = kinds[n];
+    const a = `${r2(cx + ix * c)},${r2(cy + iy * c)}`, b = `${r2(cx + ox * c)},${r2(cy + oy * c)}`;
+    if (k === "square") parts.push(`${n ? "L" : "M"}${r2(cx)},${r2(cy)}`);
+    else if (k === "round") parts.push(`${n ? "L" : "M"}${a} Q${r2(cx)},${r2(cy)} ${b}`);
+    else parts.push(`${n ? "L" : "M"}${a} L${b}`);
+  });
+  return `${parts.join(" ")} Z`;
+}
+/** Rectangles (x, y, w, h) covering the hatched runs of each side, for masking the hatch band. */
+export function hatchRuns(w: number, h: number, band: number, sides: SideHatch[]) {
+  const spans = (s: SideHatch): [number, number][] =>
+    s === "full" ? [[0, 1]] : s === "start" ? [[0, 0.45]] : s === "end" ? [[0.55, 1]] : s === "ends" ? [[0, 0.25], [0.75, 1]] : s === "middle" ? [[0.3, 0.7]] : [];
+  const out: { x: number; y: number; w: number; h: number }[] = [];
+  const b = Math.max(0, band) + 1;
+  spans(sides[0]).forEach(([a, z]) => out.push({ x: a * w, y: 0, w: (z - a) * w, h: b }));
+  spans(sides[1]).forEach(([a, z]) => out.push({ x: w - b, y: a * h, w: b, h: (z - a) * h }));
+  spans(sides[2]).forEach(([a, z]) => out.push({ x: (1 - z) * w, y: h - b, w: (z - a) * w, h: b }));
+  spans(sides[3]).forEach(([a, z]) => out.push({ x: 0, y: (1 - z) * h, w: b, h: (z - a) * h }));
+  return out.map(r => ({ x: r2(r.x), y: r2(r.y), w: r2(r.w), h: r2(r.h) }));
 }

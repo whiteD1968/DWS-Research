@@ -80,12 +80,33 @@ test('box specs fall back to the original headed box', () => {
 test('box outlines cut, round or square their corners, and inset evenly', () => {
   assert.equal(l.boxPath(100, 50, 'square', 20), 'M0,0 H100 V50 H0 Z');
   const chamfer = l.boxPath(100, 50, 'chamfer', 20);
-  assert.match(chamfer, /^M20,0/); // top-left cut
+  assert.match(chamfer, /^M0,20 L20,0/); // top-left cut
+  assert.match(chamfer, /L100,0/); // top-right stays square
   assert.ok(!l.boxPath(100, 50, 'chamfer4', 20).includes('M0,0'));
   assert.match(l.boxPath(100, 50, 'round', 10), /Q/);
   const big = l.boxPath(100, 50, 'chamfer', 500); // cut is limited by the box
   assert.ok(!/-|NaN/.test(big), big);
   assert.match(l.boxPath(100, 50, 'square', 0, 5), /^M5,5/);
+  // Each corner can differ: cut, cut, rounded, rounded.
+  const mixed = l.boxPath(100, 50, ['cut', 'cut', 'round', 'round'], 10);
+  assert.equal((mixed.match(/Q/g) || []).length, 2);
+  assert.match(mixed, /^M0,10 L10,0 L90,0 L100,10/);
+  assert.deepEqual(l.cornerKinds('chamfer'), ['cut', 'square', 'cut', 'square']);
+  assert.deepEqual(l.cornerKinds('chamfer', ['round', 'cut', 'square', 'square']), ['round', 'cut', 'square', 'square']);
+});
+
+test('hatch runs cover only the chosen stretch of each side', () => {
+  assert.equal(l.hatchRuns(100, 50, 10, ['full', 'full', 'full', 'full']).length, 4);
+  assert.deepEqual(l.hatchRuns(100, 50, 10, ['none', 'none', 'none', 'none']), []);
+  const [top] = l.hatchRuns(100, 50, 10, ['start', 'none', 'none', 'none']);
+  assert.deepEqual(top, { x: 0, y: 0, w: 45, h: 11 });
+  const [bottom] = l.hatchRuns(100, 50, 10, ['none', 'none', 'end', 'none']); // bottom runs right to left, so its end is on the left
+  assert.equal(bottom.x, 0); assert.equal(bottom.y, 39);
+  assert.equal(l.hatchRuns(100, 50, 10, ['none', 'none', 'none', 'ends']).length, 2);
+  const box = l.readBox({ corners: ['cut', 'cut', 'round', 'round'], sides: ['full', 'full', 'end', 'ends'] });
+  assert.deepEqual(box.sides, ['full', 'full', 'end', 'ends']);
+  assert.equal(l.readBox({ corners: ['cut', 'star', 'round', 'round'] }).corners, null);
+  assert.deepEqual(l.readBox({ sides: ['full'] }).sides, ['full', 'full', 'full', 'full']);
 });
 
 test('dark fills switch box text to light ink', () => {
