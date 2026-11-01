@@ -15,8 +15,9 @@ import { BoardRecords, BoardSourceActions, boardShapeUtils, setExportRecords } f
 import { BoardArrangeBar, BoardLayoutTools } from "./board-layout-tools";
 import { Presenter, SlidesPanel, useSlides } from "./board-slides";
 import { TemplatesPanel } from "./board-templates";
+import { LinePanel, preciseArrowUtil, registerLineDefaults } from "./board-lines";
 import { DiagramBoxUtil, DiagramTools, QuickAdd } from "./board-diagram";
-const shapeUtils = [...boardShapeUtils, DiagramBoxUtil];
+const shapeUtils = [...boardShapeUtils, DiagramBoxUtil, preciseArrowUtil];
 import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts";
 import { copyRecoveredBoard } from "@/app/(workspace)/boards/recovery-actions";
 import type { BoardTransfer } from "@/lib/boards/handoff";
@@ -36,6 +37,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
   const recordMap = useMemo(() => new Map(records.map(r => [r.key, r])), [records]);
   useEffect(() => { setExportRecords(recordMap); }, [recordMap]);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+  useEffect(() => activeEditor ? registerLineDefaults(activeEditor) : undefined, [activeEditor]);
   const [draftWarning, setDraftWarning] = useState(recoveryWarning);
   const journal = useRef<DraftJournal | null>(null);
   const copyId = useRef("");
@@ -283,6 +285,6 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
       <div className="board-picker-tools"><small>Sketch & annotate</small><div className="board-form-row">{["text", "note", "draw", "arrow", "frame", "geo"].map(tool => <button key={tool} className="button" onClick={() => { editor.current?.setCurrentTool(tool); setPicker(false); }}>{tool === "draw" ? "Sketch" : tool === "geo" ? "Rectangle" : tool === "note" ? "Sticky" : tool}</button>)}</div></div>
     </aside>}
     {conversion && <div role="dialog" aria-modal="true" aria-label="Convert loose text" className="board-conversion"><form onSubmit={async e => { e.preventDefault(); setBusy(true); try { const record = await convertBoardText(board.id, conversion.id, conversion.type, conversion.title, conversion.text); setRecords(prev => [...prev.filter(r => r.key !== record.key), record]); const ed = editor.current; const shape = ed?.getShape(conversion.shapeId as RecordShape["id"]); if (ed && shape) { const point = ed.getShapePageBounds(shape)?.point; ed.run(() => { if (!place(record, point)) throw new Error("Record saved, but placement failed. Try again when the editor is available."); ed.deleteShapes([shape.id]); }); } setConversion(null); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><h2>Convert to {conversion.type}</h2><label>Title<input required value={conversion.title} onChange={e => setConversion({ ...conversion, title: e.target.value })} /></label><label>Text<textarea required value={conversion.text} onChange={e => setConversion({ ...conversion, text: e.target.value })} /></label><button disabled={busy} className="button">Create {conversion.type}</button><button type="button" className="button" onClick={() => setConversion(null)}>Cancel</button></form></div>}
-    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={shapeUtils} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider>{presentFrom === null ? <><BoardArrangeBar editor={activeEditor} onChange={() => queueSave.current?.()} /><QuickAdd editor={activeEditor} onChange={() => queueSave.current?.()} /></> : activeEditor && deck.length > 0 && <Presenter editor={activeEditor} slides={deck} start={presentFrom} root={workspaceRef} onExit={() => setPresentFrom(null)} />}</div>
+    <div className="board-surface" ref={surfaceRef}><BoardRecords.Provider value={recordMap}><Tldraw shapeUtils={shapeUtils} onMount={mount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} /></BoardRecords.Provider>{presentFrom === null ? <><BoardArrangeBar editor={activeEditor} onChange={() => queueSave.current?.()} /><QuickAdd editor={activeEditor} onChange={() => queueSave.current?.()} /><LinePanel editor={activeEditor} onChange={() => queueSave.current?.()} /></> : activeEditor && deck.length > 0 && <Presenter editor={activeEditor} slides={deck} start={presentFrom} root={workspaceRef} onExit={() => setPresentFrom(null)} />}</div>
   </div>;
 }
