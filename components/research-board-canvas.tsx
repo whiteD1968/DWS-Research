@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { BoardRecord, Composition } from "@/lib/boards/layout";
 
 import { fitResearchBoard, initializeResearchBoard, insertResearchRecord, type RecordShape } from "@/lib/boards/insertion";
-import { BoardRecords, BoardSourceActions, boardShapeUtils } from "./research-board-shapes";
+import { BoardRecords, BoardSourceActions, boardShapeUtils, setExportRecords } from "./research-board-shapes";
 import { BoardArrangeBar, BoardLayoutTools } from "./board-layout-tools";
 import { Presenter, SlidesPanel, useSlides } from "./board-slides";
 import { DraftJournal, removeDraft, type BoardDraft } from "@/lib/boards/drafts";
@@ -29,6 +29,7 @@ export function ResearchBoardCanvas({ board, records: initialRecords, ownerId, i
     : { href: "/boards", label: "Boards" };
   const [records, setRecords] = useState(initialRecords);
   const recordMap = useMemo(() => new Map(records.map(r => [r.key, r])), [records]);
+  useEffect(() => { setExportRecords(recordMap); }, [recordMap]);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [draftWarning, setDraftWarning] = useState(recoveryWarning);
   const journal = useRef<DraftJournal | null>(null);
