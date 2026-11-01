@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { contentKinds, isContentKind } from "@/lib/content";
 import { thumbnailBucket, thumbnailPath } from "@/lib/thumbnails";
+import { forgetPins } from "@/lib/pinterest-sync";
 
 export async function deleteContent(kind: string, id: string, confirmation: string) {
   const user = await requireUser();
@@ -20,6 +21,9 @@ export async function deleteContent(kind: string, id: string, confirmation: stri
   }
   const result = await db.rpc("delete_research_content", { p_kind: kind, p_id: id });
   if (result.error) throw new Error(kind === "media" ? "File removal completed but library cleanup failed. Retry deletion to finish." : "Deletion could not be completed. Please retry.");
+  // A deleted Pinterest image shouldn't come back the next time its board is checked.
+  const pinId = kind === "media" ? (data.metadata as { pinterest?: { pin_id?: unknown } } | null)?.pinterest?.pin_id : null;
+  if (typeof pinId === "string") await forgetPins(db, user.id, [pinId]).catch(() => null);
   revalidatePath("/", "layout");
   return kind === "media" && data.media_type === "document" ? "/library?view=documents" : contentKinds[kind].destination;
 }

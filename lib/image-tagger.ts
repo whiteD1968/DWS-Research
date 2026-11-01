@@ -11,7 +11,7 @@ export const imageTaggingReady = () => !!process.env.ANTHROPIC_API_KEY;
 const columns = "id,title,original_filename,bucket,storage_path,alt_text,caption,metadata";
 
 // The cached library thumbnail is plenty for describing an image and keeps each request small; it is made here if missing.
-async function imageBytes(db: SupabaseClient, ownerId: string, media: Media) {
+export async function imageBytes(db: SupabaseClient, ownerId: string, media: Media) {
   const path = thumbnailPath(ownerId, media.id);
   const existing = await db.storage.from(thumbnailBucket).download(path);
   if (existing.data) return Buffer.from(await existing.data.arrayBuffer());

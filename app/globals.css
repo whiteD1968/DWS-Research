@@ -2352,3 +2352,24 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .privacy-page h2 { font-size: 17px; margin: 28px 0 6px; }
 .privacy-page p { margin: 0 0 10px; }
 .privacy-updated { color: var(--text-muted); font-size: 13px; }
+
+/* Duplicate images */
+.duplicates { display: grid; gap: 18px; max-width: 980px; }
+.duplicates-count, .duplicates-done { margin: 0; font-size: 14px; color: var(--text-muted); }
+.duplicates-group { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface, #fff); }
+.duplicates-images { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.duplicates-images li { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.duplicates-images li > button { position: relative; display: block; padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: var(--border); cursor: pointer; aspect-ratio: 1; }
+.duplicates-images li > button img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .55; transition: opacity .15s; }
+.duplicates-images li.is-kept > button { border-color: #1f4fd8; }
+.duplicates-images li.is-kept > button img { opacity: 1; }
+.duplicates-badge { position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(255,255,255,.92); color: #9b2c2c; }
+.duplicates-images li.is-kept .duplicates-badge { background: #1f4fd8; color: #fff; }
+.duplicates-images li > div { display: grid; gap: 2px; min-width: 0; }
+.duplicates-images li > div a { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duplicates-images small { font-size: 12px; color: var(--text-muted); }
+.duplicates-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.duplicates-confirm { display: grid; gap: 10px; padding-top: 4px; }
+.duplicates-confirm p { margin: 0; font-size: 14px; }
+.duplicates .button { width: auto; }
+@media (max-width: 600px) { .duplicates-images { grid-template-columns: repeat(2, minmax(0, 1fr)); } .duplicates-group { padding: 12px; } }

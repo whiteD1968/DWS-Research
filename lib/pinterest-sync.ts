@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hashImage, saveFingerprints } from "@/lib/image-fingerprints";
 import { extensionFor, feedsFrom, imageCandidates, parseFeed, pinRecord, pinterestParent, type FeedPin, type PinterestFeed } from "@/lib/pinterest";
 
 const headers = { "User-Agent": "Mozilla/5.0 (compatible; DWS Research)", Accept: "application/rss+xml, application/xml, text/xml" };
@@ -30,7 +31,7 @@ async function download(url: string): Promise<{ bytes: Buffer } | { reason: stri
   return { reason };
 }
 
-type Saved = { id: string } | { reason: string };
+type Saved = { id: string; hash?: string } | { reason: string };
 
 async function saveImage(db: SupabaseClient, ownerId: string, pin: FeedPin, feed: PinterestFeed): Promise<Saved> {
   const downloaded = await download(pin.image);
@@ -47,7 +48,7 @@ async function saveImage(db: SupabaseClient, ownerId: string, pin: FeedPin, feed
   const id = crypto.randomUUID();
   const { error } = await db.from("media").insert({ id, owner_id: ownerId, media_type: "image", bucket: "research-media", storage_path: path, mime_type: mime, byte_size: bytes.length, width: info?.width || null, height: info?.height || null, ...record, original_filename: `${record.original_filename}.${extension}`, title: record.title === record.original_filename ? `${record.title}.${extension}` : record.title });
   if (error) { await db.storage.from("research-media").remove([path]); return { reason: `the Library couldn’t save the record (${error.message})` }; }
-  return { id };
+  return { id, hash: await hashImage(bytes).catch(() => undefined) };
 }
 
 // Each followed board has its own Collection, made the first time it imports.
@@ -65,26 +66,44 @@ export type FeedResult = { imported: number; skipped: number; failed: number; fo
 
 // Brings in the pins in one board's feed that aren't in the Library yet.
 export async function importFeed(db: SupabaseClient, ownerId: string, feed: PinterestFeed, deadline = Date.now() + 45000): Promise<FeedResult> {
-  const { title, pins, items, sample } = await fetchFeed(feed.url);
+  const fetched = await fetchFeed(feed.url);
+  const { title, items, sample } = fetched;
+  // Pins whose image was deleted from the Library stay out, rather than coming back on the next check.
+  const ignored = new Set(ignoredPins((await pinterestSettings(db, ownerId))?.metadata));
+  const pins = fetched.pins.filter(pin => !ignored.has(pin.id));
   const collectionId = await feedCollection(db, ownerId, feed, title);
   const { data: known } = pins.length ? await db.from("media").select("id,metadata->pinterest->>pin_id").eq("owner_id", ownerId).in("metadata->pinterest->>pin_id", pins.map(pin => pin.id)) : { data: [] };
   const existing = new Map((known || []).map(row => [String((row as Record<string, unknown>).pin_id), String(row.id)]));
   const ids: string[] = []; let imported = 0; let skipped = 0; let failed = 0;
-  const reasons = new Map<string, number>();
+  const reasons = new Map<string, number>(); const hashes: Record<string, string> = {};
   for (let index = 0; index < pins.length; index += 4) {
     if (Date.now() > deadline) break;
     await Promise.all(pins.slice(index, index + 4).map(async pin => {
       const already = existing.get(pin.id);
       if (already) { skipped += 1; ids.push(already); return; }
       const saved = await saveImage(db, ownerId, pin, feed).catch((problem: unknown): Saved => ({ reason: problem instanceof Error ? problem.message : "an unexpected error" }));
-      if ("id" in saved) { imported += 1; ids.push(saved.id); return; }
+      if ("id" in saved) { imported += 1; ids.push(saved.id); if (saved.hash) hashes[saved.id] = saved.hash; return; }
       failed += 1; reasons.set(saved.reason, (reasons.get(saved.reason) || 0) + 1);
     }));
   }
   if (ids.length) await db.from("collection_items").upsert(ids.map(id => ({ owner_id: ownerId, collection_id: collectionId, record_type: "media", record_id: id })), { onConflict: "collection_id,record_type,record_id", ignoreDuplicates: true });
+  if (Object.keys(hashes).length) await saveFingerprints(db, ownerId, { add: hashes }).catch(() => null);
   // The most common reason pins failed, so the page can say why.
   const reason = [...reasons].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
   return { imported, skipped, failed, found: pins.length, items, sample, reason, collectionId, title: title || feed.label };
+}
+
+const ignoredPins = (metadata: unknown) => {
+  const list = (metadata as { ignoredPins?: unknown } | null | undefined)?.ignoredPins;
+  return Array.isArray(list) ? list.filter((id): id is string => typeof id === "string") : [];
+};
+
+// Remembers pins deleted from the Library so following their board doesn't import them again.
+export async function forgetPins(db: SupabaseClient, ownerId: string, pinIds: string[]) {
+  const row = await pinterestSettings(db, ownerId);
+  if (!row || !pinIds.length) return;
+  const ignored = [...new Set([...ignoredPins(row.metadata), ...pinIds])].slice(-5000);
+  await db.from("notes").update({ metadata: { ...row.metadata, ignoredPins: ignored } }).eq("owner_id", ownerId).eq("id", row.id);
 }
 
 export async function pinterestSettings(db: SupabaseClient, ownerId: string) {
