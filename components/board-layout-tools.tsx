@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createShapeId, exportAs, useValue, type Editor, type TLShapeId } from "tldraw";
+import { fitToPlaceholder } from "./board-templates";
 import { FRAME_PRESETS, exportFileName, type ExportScope } from "@/lib/boards/layout-tools";
 
 const GRID_KEY = "dws-board-grid";
@@ -95,6 +96,7 @@ function ExportPanel({ editor, title, onClose }: { editor: Editor; title: string
 /** Floating bar shown while two or more shapes are selected. */
 export function BoardArrangeBar({ editor, onChange }: { editor: Editor | null; onChange: () => void }) {
   const count = useValue("selected count", () => editor?.getSelectedShapeIds().length ?? 0, [editor]);
+  const placeholder = useValue("placeholder selected", () => count === 2 && !!editor?.getSelectedShapes().some(s => s.meta.templatePlaceholder), [editor, count]);
   if (!editor || count < 2) return null;
   const act = (label: string, fn: (ids: TLShapeId[]) => void) => () => {
     editor.markHistoryStoppingPoint(label);
@@ -118,6 +120,7 @@ export function BoardArrangeBar({ editor, onChange }: { editor: Editor | null; o
     ["Column", "Line up in a column with even gaps", act("Stack", ids => editor.stackShapes(ids, "vertical", 24))],
   ];
   return <div className="board-arrange" role="toolbar" aria-label="Arrange selection">
+    {placeholder && <button type="button" className="board-arrange-fit" title="Move and resize the other shape to fill the placeholder" onClick={() => { if (fitToPlaceholder(editor)) onChange(); }}>Fit to placeholder</button>}
     {[...buttons, ...spacing, ...stack].map(([label, name, onClick]) => <button key={name} type="button" title={name} aria-label={name} onClick={onClick}>{label}</button>)}
   </div>;
 }
