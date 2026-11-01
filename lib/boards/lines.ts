@@ -1,7 +1,7 @@
 // Precise line drawing for connectors: weights in points, drafting line types, exact colours,
 // rounded elbows and sized line ends. Kept as plain geometry so it can be tested off-canvas.
 export type LinePattern = "solid" | "dashed" | "longdash" | "dotted" | "center" | "hidden" | "phantom";
-export type LineEnd = "none" | "arrow" | "open" | "dot" | "circle" | "tick" | "bar" | "diamond";
+export type LineEnd = "none" | "arrow" | "open" | "dot" | "circle" | "tick" | "bar" | "diamond" | "socket" | "xnode";
 export type LineSpec = { weight: number; pattern: LinePattern; color: string; radius: number; start: LineEnd; end: LineEnd; startSize: number; endSize: number };
 type Pt = { x: number; y: number };
 
@@ -16,8 +16,9 @@ export const PATTERNS: { id: LinePattern; label: string }[] = [
 export const ENDS: { id: LineEnd; label: string }[] = [
   { id: "none", label: "None" }, { id: "arrow", label: "Arrow" }, { id: "open", label: "Open arrow" }, { id: "dot", label: "Dot" },
   { id: "circle", label: "Circle" }, { id: "tick", label: "Tick (architectural)" }, { id: "bar", label: "Bar" }, { id: "diamond", label: "Diamond" },
+  { id: "socket", label: "Socket (cup)" }, { id: "xnode", label: "Circled X (node)" },
 ];
-export const LINE_COLORS = ["#111111", "#3a3a37", "#6b6d66", "#9a9c95", "#c4c5bf", "#c2413a", "#3c64c8"];
+export const LINE_COLORS = ["#111111", "#3a3a37", "#6b6d66", "#9a9c95", "#c4c5bf", "#ffffff", "#d4f53c", "#c2413a", "#3c64c8"];
 
 export const DEFAULT_LINE: LineSpec = { weight: 0.5, pattern: "solid", color: "#111111", radius: 4, start: "none", end: "arrow", startSize: 6, endSize: 6 };
 
@@ -100,10 +101,10 @@ export function roundedPath(points: Pt[], radius: number) {
 
 /** How far to pull the line back under each end so it does not poke through a closed shape. */
 export function endInset(end: LineEnd, size: number) {
-  return end === "arrow" ? size * 0.8 : end === "diamond" ? size * 1.6 : end === "circle" ? size / 2 : 0;
+  return end === "arrow" ? size * 0.8 : end === "diamond" ? size * 1.6 : end === "circle" ? size : end === "xnode" ? size / 2 : 0;
 }
 
-export type EndMark = { kind: "path"; d: string; fill: boolean } | { kind: "circle"; cx: number; cy: number; r: number; fill: boolean };
+export type EndMark = { kind: "path"; d: string; fill: boolean } | { kind: "circle"; cx: number; cy: number; r: number; fill: boolean; cross?: string };
 /** Geometry for one line end. `tip` is the end point; `from` is a point back along the line, giving direction. */
 export function endMark(end: LineEnd, tip: Pt, from: Pt, size: number): EndMark | null {
   if (end === "none") return null;
@@ -121,6 +122,13 @@ export function endMark(end: LineEnd, tip: Pt, from: Pt, size: number): EndMark 
     case "tick": return { kind: "path", d: `M${at(-s * 0.5, -s * 0.5)} L${at(s * 0.5, s * 0.5)}`, fill: false };
     case "dot": return { kind: "circle", cx: r2(tip.x), cy: r2(tip.y), r: r2(s / 2), fill: true };
     case "circle": return { kind: "circle", cx: r2(tip.x - ux * s / 2), cy: r2(tip.y - uy * s / 2), r: r2(s / 2), fill: false };
+    // Socket: a half circle around the end, open away from the line, ready to take a plug.
+    case "socket": return { kind: "path", d: `M${at(s * 0.5, s * 0.5)} A${r2(s / 2)},${r2(s / 2)} 0 0 0 ${at(s * 0.5, -s * 0.5)}`, fill: false };
+    // Node: an open circle with an X, centred on the end point.
+    case "xnode": {
+      const k = s / 2 * 0.62;
+      return { kind: "circle", cx: r2(tip.x), cy: r2(tip.y), r: r2(s / 2), fill: false, cross: `M${r2(tip.x - k)},${r2(tip.y - k)} L${r2(tip.x + k)},${r2(tip.y + k)} M${r2(tip.x - k)},${r2(tip.y + k)} L${r2(tip.x + k)},${r2(tip.y - k)}` };
+    }
   }
 }
 
@@ -148,9 +156,15 @@ export function parseStyles(raw: string | null): LineStyle[] {
 }
 
 // ---------- Box outline and header ----------
-export type BoxSpec = { weight: number; pattern: LinePattern; color: string; header: number };
+export type BoxCorner = "square" | "round" | "chamfer" | "chamfer4";
+export type BoxSpec = { weight: number; pattern: LinePattern; color: string; header: number; corner: BoxCorner; cut: number; hatch: number; fill: string };
 export const HEADERS = [{ h: 0, label: "None" }, { h: 8, label: "Thin" }, { h: 16, label: "Medium" }, { h: 28, label: "Titled" }];
-export const DEFAULT_BOX: BoxSpec = { weight: 0.75, pattern: "solid", color: "#3a3a37", header: 28 };
+export const CORNERS: { id: BoxCorner; label: string }[] = [
+  { id: "square", label: "Square" }, { id: "round", label: "Rounded" }, { id: "chamfer", label: "Cut corners (2)" }, { id: "chamfer4", label: "Cut corners (4)" },
+];
+export const HATCHES = [0, 6, 10, 16];
+export const BOX_FILLS = ["#ffffff", "none", "#111111", "#f4f3ef"];
+export const DEFAULT_BOX: BoxSpec = { weight: 0.75, pattern: "solid", color: "#3a3a37", header: 28, corner: "square", cut: 24, hatch: 0, fill: "#ffffff" };
 export function readBox(value: unknown): BoxSpec {
   if (!value || typeof value !== "object") return DEFAULT_BOX;
   const v = value as Record<string, unknown>;
@@ -159,5 +173,26 @@ export function readBox(value: unknown): BoxSpec {
     pattern: PATTERNS.some(p => p.id === v.pattern) ? v.pattern as LinePattern : DEFAULT_BOX.pattern,
     color: typeof v.color === "string" && HEX.test(v.color) ? v.color.toLowerCase() : DEFAULT_BOX.color,
     header: HEADERS.some(h => h.h === v.header) ? v.header as number : DEFAULT_BOX.header,
+    corner: CORNERS.some(c => c.id === v.corner) ? v.corner as BoxCorner : DEFAULT_BOX.corner,
+    cut: clamp(v.cut, 0, 200, DEFAULT_BOX.cut),
+    hatch: clamp(v.hatch, 0, 60, DEFAULT_BOX.hatch),
+    fill: v.fill === "none" ? "none" : typeof v.fill === "string" && HEX.test(v.fill) ? v.fill.toLowerCase() : DEFAULT_BOX.fill,
   };
+}
+/** True for dark fills, so text on them turns light. */
+export function isDark(hex: string) {
+  if (!HEX.test(hex)) return false;
+  const n = parseInt(hex.slice(1), 16);
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) < 110;
+}
+
+/** Outline of a box inset by `i`: square, rounded, or with cut corners (top-left and bottom-right, or all four). */
+export function boxPath(w: number, h: number, corner: BoxCorner, cut: number, i = 0) {
+  const x0 = i, y0 = i, x1 = w - i, y1 = h - i;
+  const c = Math.max(0, Math.min(cut - i * 0.6, (x1 - x0) / 2, (y1 - y0) / 2));
+  if (corner === "square" || c <= 0) return `M${r2(x0)},${r2(y0)} H${r2(x1)} V${r2(y1)} H${r2(x0)} Z`;
+  if (corner === "round") return `M${r2(x0 + c)},${r2(y0)} H${r2(x1 - c)} Q${r2(x1)},${r2(y0)} ${r2(x1)},${r2(y0 + c)} V${r2(y1 - c)} Q${r2(x1)},${r2(y1)} ${r2(x1 - c)},${r2(y1)} H${r2(x0 + c)} Q${r2(x0)},${r2(y1)} ${r2(x0)},${r2(y1 - c)} V${r2(y0 + c)} Q${r2(x0)},${r2(y0)} ${r2(x0 + c)},${r2(y0)} Z`;
+  const all = corner === "chamfer4";
+  const tr = all ? c : 0, bl = all ? c : 0;
+  return `M${r2(x0 + c)},${r2(y0)} H${r2(x1 - tr)} L${r2(x1)},${r2(y0 + tr)} V${r2(y1 - c)} L${r2(x1 - c)},${r2(y1)} H${r2(x0 + bl)} L${r2(x0)},${r2(y1 - bl)} V${r2(y0 + c)} Z`;
 }

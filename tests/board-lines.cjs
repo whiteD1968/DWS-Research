@@ -68,6 +68,36 @@ test('built-in styles are valid, and saved styles drop junk', () => {
 test('box specs fall back to the original headed box', () => {
   assert.deepEqual(l.readBox(undefined), l.DEFAULT_BOX);
   assert.equal(l.DEFAULT_BOX.header, 28);
-  assert.deepEqual(l.readBox({ weight: 0.5, pattern: 'dashed', header: 0 }), { weight: 0.5, pattern: 'dashed', color: '#3a3a37', header: 0 });
+  assert.deepEqual(l.readBox({ weight: 0.5, pattern: 'dashed', header: 0 }), { ...l.DEFAULT_BOX, weight: 0.5, pattern: 'dashed', header: 0 });
   assert.equal(l.readBox({ header: 13 }).header, 28);
+  const bad = l.readBox({ corner: 'star', cut: 9999, hatch: -5, fill: 'url(#x)' });
+  assert.equal(bad.corner, 'square'); assert.equal(bad.hatch, 0); assert.equal(bad.fill, '#ffffff'); assert.ok(bad.cut <= 200);
+  assert.equal(l.readBox({ fill: 'none', corner: 'chamfer', hatch: 10 }).fill, 'none');
+});
+
+test('box outlines cut, round or square their corners, and inset evenly', () => {
+  assert.equal(l.boxPath(100, 50, 'square', 20), 'M0,0 H100 V50 H0 Z');
+  const chamfer = l.boxPath(100, 50, 'chamfer', 20);
+  assert.match(chamfer, /^M20,0/); // top-left cut
+  assert.ok(!l.boxPath(100, 50, 'chamfer4', 20).includes('M0,0'));
+  assert.match(l.boxPath(100, 50, 'round', 10), /Q/);
+  const big = l.boxPath(100, 50, 'chamfer', 500); // cut is limited by the box
+  assert.ok(!/-|NaN/.test(big), big);
+  assert.match(l.boxPath(100, 50, 'square', 0, 5), /^M5,5/);
+});
+
+test('dark fills switch box text to light ink', () => {
+  assert.equal(l.isDark('#111111'), true);
+  assert.equal(l.isDark('#ffffff'), false);
+  assert.equal(l.isDark('#d4f53c'), false);
+  assert.equal(l.isDark('nonsense'), false);
+});
+
+test('socket and circled-X ends draw at the tip and are listed', () => {
+  for (const id of ['socket', 'xnode']) assert.ok(l.ENDS.some(e => e.id === id), id);
+  const socket = l.endMark('socket', { x: 0, y: 0 }, { x: 10, y: 0 }, 8);
+  const xnode = l.endMark('xnode', { x: 0, y: 0 }, { x: 10, y: 0 }, 8);
+  assert.ok(socket && xnode);
+  assert.equal(l.endInset('xnode', 8), 4);
+  assert.equal(l.endInset('socket', 8), 0);
 });

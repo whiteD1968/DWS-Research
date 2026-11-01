@@ -1,5 +1,6 @@
 // Board templates: slide layouts, starter boards and diagram starters, described as plain data
 // so they can be tested without the canvas. The canvas turns each piece into a tldraw shape.
+import type { BoxSpec, LineSpec } from "./lines";
 export type TemplateColor = "black" | "grey" | "light-violet" | "violet" | "blue" | "light-blue" | "yellow" | "orange" | "green" | "light-green" | "light-red" | "red" | "white";
 export type TemplatePiece =
   | { kind: "frame"; ref: string; x: number; y: number; w: number; h: number; name: string; slide?: boolean; notes?: string }
@@ -7,10 +8,14 @@ export type TemplatePiece =
   | { kind: "placeholder"; ref?: string; parent?: string; x: number; y: number; w: number; h: number; label: string }
   | { kind: "shape"; ref?: string; parent?: string; x: number; y: number; w: number; h: number; geo: "rectangle" | "ellipse" | "diamond"; label?: string; color?: TemplateColor; fill?: "none" | "semi" | "solid"; dash?: "solid" | "dashed" | "dotted" }
   | { kind: "note"; ref?: string; parent?: string; x: number; y: number; text: string; color?: TemplateColor }
-  | { kind: "box"; ref: string; parent?: string; x: number; y: number; w: number; h: number; title: string; body?: string; color?: TemplateColor }
-  | { kind: "line"; parent?: string; x: number; y: number; dx: number; dy: number; dash?: "solid" | "dashed" | "dotted"; end?: "none" | "arrow" }
-  | { kind: "connect"; from: string; to: string; label?: string };
-export type BoardTemplate = { id: string; group: "Slide layouts" | "Decks" | "Starter boards" | "Diagrams"; label: string; description: string; pieces: TemplatePiece[] };
+  | { kind: "box"; ref: string; parent?: string; x: number; y: number; w: number; h: number; title: string; body?: string; color?: TemplateColor; box?: Partial<BoxSpec>; locked?: boolean }
+  | { kind: "line"; parent?: string; x: number; y: number; dx: number; dy: number; dash?: "solid" | "dashed" | "dotted"; end?: "none" | "arrow"; line?: Partial<LineSpec> }
+  | { kind: "connect"; from: string; to: string; label?: string; line?: Partial<LineSpec> }
+  | { kind: "rating"; parent?: string; x: number; y: number; w: number; h: number; label: string; value: number; max?: number; ink?: string }
+  | { kind: "grid"; parent?: string; x: number; y: number; w: number; h: number; rows: number; cols: number; ink?: string }
+  | { kind: "numeral"; parent?: string; x: number; y: number; w: number; h: number; text: string; style?: "hatch" | "outline" | "solid"; ink?: string };
+export type TemplateGroup = "Slide layouts" | "Decks" | "Starter boards" | "Diagrams" | "Studio";
+export type BoardTemplate = { id: string; group: TemplateGroup; label: string; description: string; pieces: TemplatePiece[] };
 
 const SW = 1280, SH = 720, GAP = 160;
 const M = 72; // slide margin
@@ -176,8 +181,183 @@ const diagrams: BoardTemplate[] = [
   ] },
 ];
 
-export const TEMPLATES: BoardTemplate[] = [...slideLayouts, ...decks, ...starters, ...diagrams];
-export const TEMPLATE_GROUPS = ["Slide layouts", "Decks", "Starter boards", "Diagrams"] as const;
+// ---------- Studio: the studio's drawing conventions for communicating a project ----------
+// Black boards, white and signal-green ink, mono uppercase captions, hatched cut-corner frames,
+// crop and registration marks, n-of-5 ratings and big section numerals. Every page is a slide.
+const WHITE = "#f4f3ef", SIGNAL = "#d4f53c", GREY = "#9a9c95", BLACK = "#111111";
+const fine = (color = WHITE, extra: Partial<LineSpec> = {}): Partial<LineSpec> => ({ weight: 0.35, pattern: "solid", color, radius: 0, start: "none", end: "none", ...extra });
+const flow = (extra: Partial<LineSpec> = {}): Partial<LineSpec> => ({ weight: 0.75, pattern: "solid", color: WHITE, radius: 4, start: "none", end: "arrow", endSize: 6, ...extra });
+const pill = (extra: Partial<BoxSpec> = {}): Partial<BoxSpec> => ({ weight: 0.75, pattern: "solid", color: WHITE, header: 0, corner: "chamfer", cut: 14, hatch: 6, fill: BLACK, ...extra });
+const outline = (extra: Partial<BoxSpec> = {}): Partial<BoxSpec> => ({ weight: 0.5, pattern: "solid", color: WHITE, header: 0, corner: "square", cut: 24, hatch: 0, fill: BLACK, ...extra });
+const cap = (f: string, x: number, y: number, w: number, text: string, size: "s" | "m" = "s", color: TemplateColor = "white", align?: "start" | "middle" | "end"): TemplatePiece =>
+  ({ kind: "text", parent: f, x, y, w, text, size, font: "mono", color, align });
+const title = (f: string, text: string, y = 40): TemplatePiece => ({ kind: "text", parent: f, x: M, y, w: SW - M * 2, text, size: "l", font: "sans", color: "white" });
+const fline = (f: string, x: number, y: number, dx: number, dy: number, line: Partial<LineSpec>): TemplatePiece => ({ kind: "line", parent: f, x, y, dx, dy, line });
+/** Crop marks in the four corners of the page, as on a printed board. */
+function crops(f: string, inset = 28, k = 18): TemplatePiece[] {
+  return [[inset, inset, 1, 1], [SW - inset, inset, -1, 1], [inset, SH - inset, 1, -1], [SW - inset, SH - inset, -1, -1]].flatMap(([x, y, sx, sy]) => [
+    fline(f, x, y, sx * k, 0, fine(GREY)), fline(f, x, y, 0, sy * k, fine(GREY)),
+  ]);
+}
+/** A black page: a slide frame with a locked black board behind everything on it. */
+function board(f: string, name: string, notes: string, body: TemplatePiece[]): TemplatePiece[] {
+  return [
+    { kind: "frame", ref: f, x: 0, y: 0, w: SW, h: SH, name, slide: true, notes },
+    { kind: "box", ref: `${f}-board`, parent: f, x: 0, y: 0, w: SW, h: SH, title: "", box: outline({ weight: 0.25, color: BLACK }), locked: true },
+    ...crops(f),
+    ...body,
+  ];
+}
+const studio = (id: string, label: string, description: string, notes: string, body: (f: string) => TemplatePiece[]): BoardTemplate =>
+  ({ id: `studio-${id}`, group: "Studio", label, description, pieces: board("s", label, notes, body("s")) });
+
+const RATINGS = ["Light", "Porosity", "Structure", "Program", "Context"];
+const studioTemplates: BoardTemplate[] = [
+  studio("divider", "Section divider", "Hatched numeral, title band, course line and crosshair rule.", "Open each section with its number and one line on what it covers.", f => [
+    { kind: "numeral", parent: f, x: M, y: 210, w: 260, h: 200, text: "01", style: "hatch", ink: WHITE },
+    { kind: "box", ref: "band", parent: f, x: 380, y: 250, w: SW - 380 - M, h: 96, title: "", box: outline({ weight: 0.25, color: WHITE, fill: WHITE }) },
+    { kind: "text", parent: f, x: 404, y: 266, w: SW - 404 - M - 24, text: "SECTION TITLE", size: "xl", font: "sans", color: "black" },
+    cap(f, 380, 370, SW - 380 - M, "COURSE · STUDIO · TERM — WHAT THIS SECTION SHOWS"),
+    fline(f, M, 560, SW - M * 2, 0, fine(WHITE, { start: "xnode", end: "xnode", startSize: 10, endSize: 10 })),
+    fline(f, SW / 2, 548, 0, 24, fine(WHITE)),
+  ]),
+  studio("precedent", "Precedent spread", "Framed panels whose lines of analysis fan into a hero image, with a data block.", "Name the precedent, then say which move you are taking from it.", f => {
+    const hero = { x: 640, y: 110, w: SW - 640 - M, h: 450 };
+    return [
+      title(f, "Precedent — name, architect, year"),
+      ...[0, 1, 2].flatMap(i => [
+        { kind: "box", ref: `p${i}`, parent: f, x: M, y: 120 + i * 150, w: 300, h: 130, title: "", box: outline() } as TemplatePiece,
+        { kind: "placeholder", parent: f, x: M + 8, y: 128 + i * 150, w: 284, h: 114, label: ["Plan", "Section", "Detail"][i] } as TemplatePiece,
+        // A bundle of fine lines carries each panel into the hero image.
+        ...[-14, 0, 14].map(o => fline(f, M + 300, 185 + i * 150 + o, hero.x - (M + 300), hero.y + hero.h / 2 + o * 2 + (i - 1) * 40 - (185 + i * 150 + o), fine(WHITE, { weight: 0.25 }))),
+      ]),
+      { kind: "box", ref: "hero", parent: f, ...hero, title: "", box: outline({ corner: "chamfer", cut: 40, hatch: 10, weight: 0.75 }) },
+      { kind: "placeholder", parent: f, x: hero.x + 16, y: hero.y + 16, w: hero.w - 32, h: hero.h - 32, label: "Hero image" },
+      cap(f, M, 590, 300, "[ANALYSIS]", "s", "light-green"),
+      cap(f, M, 618, 520, "PROJECT_\nARCHITECT_\nYEAR_  LOCATION_"),
+      cap(f, hero.x, 590, hero.w, "WHAT I AM TAKING FROM IT —"),
+    ];
+  }),
+  studio("process", "Process 01 → 02 → 03", "Three numbered steps with images, captions and dotted-to-solid arrows.", "Walk through how the idea moved from first move to resolved form.", f => {
+    const w = 320, xs = [M, (SW - w) / 2, SW - M - w];
+    return [
+      title(f, "Process"),
+      ...xs.flatMap((x, i) => [
+        { kind: "numeral", parent: f, x, y: 110, w: 110, h: 80, text: `0${i + 1}`, style: "outline", ink: WHITE } as TemplatePiece,
+        { kind: "placeholder", parent: f, x, y: 210, w, h: 300, label: `Step ${i + 1}` } as TemplatePiece,
+        cap(f, x, 530, w, ["FIRST MOVE — WHAT STARTED IT", "TESTING — WHAT CHANGED", "RESOLVED — WHAT IT BECAME"][i]),
+      ]),
+      // Early steps are tentative (dotted); the last step commits (solid).
+      fline(f, xs[0] + w + 12, 360, xs[1] - xs[0] - w - 24, 0, flow({ pattern: "dotted" })),
+      fline(f, xs[1] + w + 12, 360, xs[2] - xs[1] - w - 24, 0, flow()),
+    ];
+  }),
+  studio("workflow", "Workflow strip", "Seven steps in a row under a labelled pill.", "Show the whole method at a glance; point to where you are now.", f => {
+    const steps = ["Brief", "Research", "Precedent", "Concept", "Iterate", "Develop", "Present"];
+    const gap = 26, w = (SW - M * 2 - gap * 6) / 7;
+    return [
+      title(f, "How the project was made"),
+      { kind: "box", ref: "wf", parent: f, x: (SW - 280) / 2, y: 170, w: 280, h: 56, title: "", body: "WORKFLOW", box: pill() },
+      ...steps.flatMap((name, i) => [
+        { kind: "box", ref: `w${i}`, parent: f, x: M + i * (w + gap), y: 300, w, h: 200, title: "", body: `${String(i + 1).padStart(2, "0")}\n${name.toUpperCase()}`, box: outline({ color: i === 4 ? SIGNAL : WHITE }) } as TemplatePiece,
+        cap(f, M + i * (w + gap), 520, w, "NOTE"),
+      ]),
+      ...steps.slice(1).map((_, i) => ({ kind: "connect", from: `w${i}`, to: `w${i + 1}`, line: flow({ endSize: 4 }) } as TemplatePiece)),
+    ];
+  }),
+  studio("descriptors", "Descriptor tree", "A concept pill branching to descriptor pills and their qualities.", "Break the concept into words you can draw; each quality should be testable.", f => {
+    const xs = [M + 20, (SW - 260) / 2, SW - M - 280];
+    return [
+      title(f, "Descriptors"),
+      { kind: "box", ref: "root", parent: f, x: (SW - 300) / 2, y: 130, w: 300, h: 64, title: "", body: "CONCEPT", box: pill({ hatch: 10, cut: 18 }) },
+      ...xs.flatMap((x, i) => [
+        { kind: "box", ref: `d${i}`, parent: f, x, y: 320, w: 260, h: 56, title: "", body: `DESCRIPTOR ${"ABC"[i]}`, box: pill() } as TemplatePiece,
+        { kind: "connect", from: "root", to: `d${i}`, line: fine(WHITE, { weight: 0.5, radius: 4, start: "dot", end: "xnode", startSize: 6, endSize: 10 }) } as TemplatePiece,
+        fline(f, x + 20, 376, 0, 170, fine(GREY, { pattern: "dotted", end: "socket", endSize: 8 })),
+        cap(f, x + 40, 410, 220, "— QUALITY\n— QUALITY\n— QUALITY"),
+      ]),
+    ];
+  }),
+  studio("matrix", "Iteration matrix", "A 3 × 9 study grid with registration marks; picks framed in signal green.", "Show the range you tested, then the picks and why they survived.", f => {
+    const g = { x: 112, y: 120, w: SW - 112 - M, h: 480 }, cw = g.w / 9, ch = g.h / 3;
+    return [
+      title(f, "Iterations"),
+      { kind: "grid", parent: f, ...g, rows: 3, cols: 9, ink: GREY },
+      ...["A", "B", "C"].map((r, i) => cap(f, M, g.y + i * ch + ch / 2 - 12, 30, r, "m")),
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(c => cap(f, g.x + (c - 1) * cw, g.y - 30, cw, String(c).padStart(2, "0"), "s", "grey", "middle")),
+      ...[[2, 1], [6, 0], [7, 2]].map(([c, r], i) => ({ kind: "box", ref: `pick${i}`, parent: f, x: g.x + c * cw + 6, y: g.y + r * ch + 6, w: cw - 12, h: ch - 12, title: "", box: { weight: 1, pattern: "dotted", color: SIGNAL, header: 0, corner: "chamfer", cut: 16, hatch: 0, fill: "none" } } as TemplatePiece)),
+      cap(f, g.x, g.y + g.h + 24, g.w, "27 ITERATIONS · PICKS FRAMED · WHY THEY SURVIVED —"),
+    ];
+  }),
+  studio("scorecards", "Typology scorecards", "Five cards, each with an image and five n-of-5 ratings.", "Rate each typology against the same five criteria so the choice is visible.", f => {
+    const gap = 14, w = (SW - M * 2 - gap * 4) / 5;
+    return [
+      title(f, "Typologies"),
+      ...[0, 1, 2, 3, 4].flatMap(i => {
+        const x = M + i * (w + gap);
+        return [
+          { kind: "box", ref: `card${i}`, parent: f, x, y: 110, w, h: 540, title: `[FORM 0${i + 1}]`, color: "white", box: outline({ header: 28, color: i === 2 ? SIGNAL : WHITE, weight: i === 2 ? 1 : 0.5 }) } as TemplatePiece,
+          { kind: "placeholder", parent: f, x: x + 12, y: 152, w: w - 24, h: 220, label: `Form ${i + 1}` } as TemplatePiece,
+          ...RATINGS.map((label, r) => ({ kind: "rating", parent: f, x: x + 12, y: 400 + r * 36, w: w - 24, h: 18, label, value: (i + r * 2) % 5 + 1, ink: WHITE } as TemplatePiece)),
+          ...(i === 2 ? [cap(f, x + 12, 590, w - 24, "SELECTED", "s", "light-green")] : []),
+        ];
+      }),
+    ];
+  }),
+  studio("selection", "Selected + alternatives", "The chosen option framed large, four alternatives beside it.", "Lead with the choice; the alternatives show what it beat.", f => [
+    title(f, "Selected option"),
+    { kind: "box", ref: "chosen", parent: f, x: M, y: 110, w: 700, h: 480, title: "", box: outline({ corner: "chamfer", cut: 32, color: SIGNAL, weight: 1 }) },
+    { kind: "placeholder", parent: f, x: M + 14, y: 124, w: 672, h: 452, label: "Selected" },
+    cap(f, M, 610, 700, "SELECTED — WHY IT WORKS"),
+    ...[0, 1, 2, 3].flatMap(i => {
+      const x = 812 + (i % 2) * 210, y = 110 + Math.floor(i / 2) * 250;
+      return [
+        { kind: "placeholder", parent: f, x, y, w: 186, h: 200, label: `Alt 0${i + 1}` } as TemplatePiece,
+        cap(f, x, y + 208, 186, `ALT 0${i + 1} — WHY NOT`),
+      ];
+    }),
+  ]),
+  studio("compare", "Comparison pair", "Option A against option B, with the same ratings under each.", "Compare like with like: same view, same scale, same criteria.", f => {
+    const w = (SW - M * 2 - 60) / 2;
+    return [
+      title(f, "A / B"),
+      ...[0, 1].flatMap(i => {
+        const x = M + i * (w + 60);
+        return [
+          { kind: "numeral", parent: f, x, y: 100, w: 60, h: 70, text: "AB"[i], style: "outline", ink: WHITE } as TemplatePiece,
+          { kind: "placeholder", parent: f, x, y: 190, w, h: 340, label: `Option ${"AB"[i]}` } as TemplatePiece,
+          ...RATINGS.slice(0, 3).map((label, r) => ({ kind: "rating", parent: f, x, y: 552 + r * 30, w: Math.min(w, 320), h: 18, label, value: i ? 4 - r : 2 + r, ink: WHITE } as TemplatePiece)),
+        ];
+      }),
+      fline(f, SW / 2, 190, 0, 340, fine(GREY, { pattern: "center" })),
+    ];
+  }),
+  studio("concept", "Concept map", "Three linked ideas, from a source idea to a strategy to a building element.", "Read left to right: where the idea comes from, what it does, what it becomes.", f => {
+    const w = 320, xs = [M, (SW - w) / 2, SW - M - w];
+    const names = ["WEAVING", "FILTER / PERMEABILITY", "SCREENS / FACADE"];
+    return [
+      title(f, "Concept"),
+      ...xs.flatMap((x, i) => [
+        { kind: "box", ref: `c${i}`, parent: f, x, y: 120, w, h: 60, title: "", body: names[i], box: pill() } as TemplatePiece,
+        { kind: "placeholder", parent: f, x, y: 220, w, h: 280, label: ["Source", "Strategy", "Element"][i] } as TemplatePiece,
+        cap(f, x, 520, w, ["WHERE THE IDEA COMES FROM", "WHAT IT DOES", "WHAT IT BECOMES"][i]),
+      ]),
+      { kind: "connect", from: "c0", to: "c1", line: flow({ start: "dot", startSize: 6 }) },
+      { kind: "connect", from: "c1", to: "c2", line: flow({ start: "dot", startSize: 6 }) },
+    ];
+  }),
+  studio("brief", "Project brief", "Type, focus, site and question in mono over an image collage.", "State the brief in the studio's terms before showing any work.", f => [
+    title(f, "Brief"),
+    cap(f, M, 140, 460, "TYPE_\n\nFOCUS_\n\nSITE_\n\nPROGRAM_\n\nQUESTION_", "m"),
+    ...[[600, 110, 380, 260], [880, 220, 330, 230], [640, 400, 300, 220], [930, 470, 280, 170]].map(([x, y, w, h], i) => ({ kind: "placeholder", parent: f, x, y, w, h, label: `Collage ${i + 1}` } as TemplatePiece)),
+    fline(f, M, 600, 440, 0, fine(SIGNAL, { weight: 1 })),
+  ]),
+];
+
+export const TEMPLATES: BoardTemplate[] = [...slideLayouts, ...decks, ...starters, ...diagrams, ...studioTemplates];
+export const TEMPLATE_GROUPS = ["Slide layouts", "Decks", "Starter boards", "Diagrams", "Studio"] as const;
+/** Templates that add slides: they join the end of the deck instead of landing in view. */
+export const isSlideGroup = (group: TemplateGroup) => group === "Slide layouts" || group === "Decks" || group === "Studio";
 
 /** Bounds of a template's top-level pieces (children sit inside their frames). */
 export function templateBounds(pieces: TemplatePiece[]) {
