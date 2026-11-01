@@ -85,7 +85,7 @@ function ExportPanel({ editor, title, onClose }: { editor: Editor; title: string
       {format === "png" && <label>Scale <select value={scale} onChange={e => setScale(Number(e.target.value))}>{[1, 2, 4].map(s => <option key={s} value={s}>{s}x</option>)}</select></label>}
     </fieldset>
     <label><input type="checkbox" checked={background} onChange={e => setBackground(e.target.checked)} /> Include background</label>
-    {format === "svg" && <small className="board-export-note">Sketches, shapes, text and frames export as clean vectors. Research cards export as embedded web content for now, so some design apps may not show them.</small>}
+    {format === "svg" && <small className="board-export-note">Exports as editable vectors: text stays text, and card images are embedded, so the file opens in Illustrator, Inkscape, Figma and Penpot.</small>}
     {error && <p className="board-export-error" role="alert">{error}</p>}
     <button type="button" className="button" disabled={busy} onClick={() => void run()}>{busy ? "Exporting…" : `Download ${format.toUpperCase()}`}</button>
   </div>;
