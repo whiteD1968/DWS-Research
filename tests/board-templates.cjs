@@ -31,6 +31,10 @@ test('children sit inside their frame', () => {
     for (const p of tpl.pieces) {
       if (!p.parent || p.kind === 'text' || p.kind === 'note') continue;
       const f = frames.get(p.parent);
+      if (p.kind === 'line') {
+        for (const [x, y] of [[p.x, p.y], [p.x + p.dx, p.y + p.dy]]) assert.ok(x >= 0 && y >= 0 && x <= f.w && y <= f.h, `${tpl.id}: line end`);
+        continue;
+      }
       assert.ok(p.x >= 0 && p.y >= 0 && p.x + p.w <= f.w + 0.5 && p.y + p.h <= f.h + 0.5, `${tpl.id}: ${p.kind} ${p.label || ''}`);
     }
   }
@@ -100,4 +104,29 @@ test('a template whose spot is taken starts below existing work instead of on to
   const b = { x: 0, y: 0, w: 100, h: 100 };
   assert.deepEqual(t.clearOrigin(b, { x: 500, y: 500 }, [{ x: 0, y: 0, w: 50, h: 50 }]), { x: 500, y: 500 });
   assert.deepEqual(t.clearOrigin(b, { x: 0, y: 0 }, [{ x: -40, y: 10, w: 300, h: 200 }, { x: 600, y: 900, w: 10, h: 10 }]), { x: -40, y: 1150 });
+});
+
+test('studio templates are black or light-grey slides with crop marks, studio pieces and valid line and box specs', () => {
+  const studio = t.TEMPLATES.filter(x => x.group === 'Studio');
+  assert.ok(studio.length >= 10);
+  const kinds = new Set(studio.flatMap(x => x.pieces.map(p => p.kind)));
+  for (const k of ['rating', 'grid', 'numeral', 'brackets', 'connect', 'line', 'box']) assert.ok(kinds.has(k), k);
+  for (const tpl of studio) {
+    assert.ok(t.isSlideGroup(tpl.group));
+    const frame = tpl.pieces[0];
+    assert.equal(frame.kind, 'frame'); assert.ok(frame.slide); assert.equal(frame.w / frame.h, 16 / 9);
+    assert.ok(frame.notes, `${tpl.id}: speaker note`);
+    const board = tpl.pieces[1];
+    assert.equal(board.kind, 'box'); assert.ok(board.locked); assert.ok(['#111111', '#e9e9e7'].includes(board.box.fill), tpl.id);
+    assert.ok(tpl.pieces.filter(p => p.kind === 'line').length >= 8, `${tpl.id}: crop marks`);
+    for (const p of tpl.pieces) {
+      if (p.kind === 'text') assert.notEqual(p.text, '', tpl.id);
+      if (p.kind === 'rating') assert.ok(p.value >= 1 && p.value <= (p.max ?? 5), tpl.id);
+      if (p.line) assert.ok(/^#[0-9a-f]{6}$/.test(p.line.color), `${tpl.id}: line colour`);
+      if (p.box) assert.ok(p.box.fill === 'none' || /^#[0-9a-f]{6}$/.test(p.box.fill), `${tpl.id}: box fill`);
+    }
+  }
+  assert.ok(studio.some(x => x.pieces[1].box.fill === '#e9e9e7'), 'a light board');
+  assert.ok(studio.some(x => x.pieces.some(p => p.box && p.box.shadow > 0)), 'a drop shadow');
+  assert.equal(t.isSlideGroup('Diagrams'), false);
 });

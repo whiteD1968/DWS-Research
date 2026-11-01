@@ -2,12 +2,15 @@
 import { useMemo, useState } from "react";
 import { createShapeId, toRichText, useValue, type Editor, type TLArrowShape, type TLContent, type TLFrameShape, type TLShape, type TLShapeId } from "tldraw";
 import {
-  SAVED_KEY, SAVED_LIMIT, SAVED_MAX_BYTES, TEMPLATES, TEMPLATE_GROUPS, clearOrigin, parseSaved, stripForTemplate, templateBounds, templateOrigin,
+  SAVED_KEY, SAVED_LIMIT, SAVED_MAX_BYTES, TEMPLATES, TEMPLATE_GROUPS, clearOrigin, isSlideGroup, parseSaved, stripForTemplate, templateBounds, templateOrigin,
   type BoardTemplate, type SavedTemplate,
 } from "@/lib/boards/templates";
 import { boxColor } from "@/lib/boards/diagram";
 import { useSlides } from "./board-slides";
+import { DEFAULT_BOX, DEFAULT_LINE, boxPath, cornerKinds, readBox, readLine } from "@/lib/boards/lines";
 import type { DiagramBoxShape } from "./board-diagram";
+import type { BracketShape, GridShape, NumeralShape, RatingShape } from "./board-studio";
+import { bracketPath } from "@/lib/boards/studio";
 
 const SLIDE_GAP = 160;
 
@@ -15,7 +18,7 @@ const SLIDE_GAP = 160;
 export function insertTemplate(editor: Editor, template: BoardTemplate, deckSize: number) {
   const pieces = template.pieces;
   const bounds = templateBounds(pieces);
-  const slideTemplate = template.group === "Slide layouts" || template.group === "Decks";
+  const slideTemplate = isSlideGroup(template.group);
   let after: { x: number; y: number } | undefined;
   if (slideTemplate) {
     const frames = editor.getSortedChildIdsForParent(editor.getCurrentPageId()).map(id => editor.getShape(id)).filter((s): s is TLFrameShape => s?.type === "frame" && !s.meta.slideHidden && !s.meta.boardZone && typeof s.meta.recordKey !== "string");
@@ -68,10 +71,24 @@ export function insertTemplate(editor: Editor, template: BoardTemplate, deckSize
           editor.createShape({ id, type: "note", ...at, props: { richText: toRichText(p.text), color: p.color ?? "yellow", size: "s", font: "sans" } });
           break;
         case "box":
-          editor.createShape<DiagramBoxShape>({ id, type: "diagram-box", ...at, props: { w: p.w, h: p.h, title: p.title, body: p.body ?? "", color: p.color ?? "black" } });
+          editor.createShape<DiagramBoxShape>({ id, type: "diagram-box", ...at, isLocked: !!p.locked, ...(p.box ? { meta: { box: { ...DEFAULT_BOX, ...p.box } } } : {}),
+            props: { w: p.w, h: p.h, title: p.title, body: p.body ?? "", color: p.color ?? "black" } });
           break;
         case "line":
-          editor.createShape<TLArrowShape>({ id, type: "arrow", ...at, props: { kind: "arc", dash: p.dash ?? "solid", size: "s", color: "black", arrowheadStart: "none", arrowheadEnd: p.end ?? "none", start: { x: 0, y: 0 }, end: { x: p.dx, y: p.dy } } });
+          editor.createShape<TLArrowShape>({ id, type: "arrow", ...at, ...(p.line ? { meta: { line: { ...DEFAULT_LINE, ...p.line } } } : {}),
+            props: { kind: "arc", dash: p.dash ?? "solid", size: "s", color: "black", arrowheadStart: "none", arrowheadEnd: p.line ? "none" : p.end ?? "none", start: { x: 0, y: 0 }, end: { x: p.dx, y: p.dy } } });
+          break;
+        case "rating":
+          editor.createShape<RatingShape>({ id, type: "rating-meter", ...at, props: { w: p.w, h: p.h, label: p.label, value: p.value, max: p.max ?? 5, ink: p.ink ?? "#111111" } });
+          break;
+        case "grid":
+          editor.createShape<GridShape>({ id, type: "study-grid", ...at, props: { w: p.w, h: p.h, rows: p.rows, cols: p.cols, ink: p.ink ?? "#9a9c95" } });
+          break;
+        case "numeral":
+          editor.createShape<NumeralShape>({ id, type: "numeral", ...at, props: { w: p.w, h: p.h, text: p.text, style: p.style ?? "hatch", ink: p.ink ?? "#111111" } });
+          break;
+        case "brackets":
+          editor.createShape<BracketShape>({ id, type: "corner-brackets", ...at, props: { w: p.w, h: p.h, arm: p.arm ?? 14, dashed: p.dashed ?? true, ink: p.ink ?? "#c2413a" } });
           break;
       }
     }
@@ -79,8 +96,8 @@ export function insertTemplate(editor: Editor, template: BoardTemplate, deckSize
       if (p.kind !== "connect") continue;
       const arrow = createShapeId();
       created.push(arrow);
-      editor.createShape<TLArrowShape>({ id: arrow, type: "arrow", parentId: editor.getCurrentPageId(), x: 0, y: 0, props: {
-        kind: "elbow", dash: "solid", size: "s", color: "black", arrowheadStart: "none", arrowheadEnd: "arrow", start: { x: 0, y: 0 }, end: { x: 1, y: 1 },
+      editor.createShape<TLArrowShape>({ id: arrow, type: "arrow", parentId: editor.getCurrentPageId(), x: 0, y: 0, ...(p.line ? { meta: { line: { ...DEFAULT_LINE, ...p.line } } } : {}), props: {
+        kind: "elbow", dash: "solid", size: "s", color: "black", arrowheadStart: "none", arrowheadEnd: p.line ? "none" : "arrow", start: { x: 0, y: 0 }, end: { x: 1, y: 1 },
         ...(p.label ? { richText: toRichText(p.label) } : {}),
       } });
       const bind = (to: TLShapeId, terminal: "start" | "end") => editor.createBinding({ type: "arrow", fromId: arrow, toId: to, props: { terminal, normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false, snap: "none" } });
@@ -117,22 +134,39 @@ function TemplatePreview({ template }: { template: BoardTemplate }) {
             : <rect key={i} x={x} y={y} width={p.w} height={p.h} fill={fill} fillOpacity={p.fill === "semi" ? 0.5 : 1} stroke="#3a3a37" strokeWidth={b.w / 300} />;
         }
         case "note": return <rect key={i} x={x} y={y} width={200} height={200} fill={boxColor(p.color ?? "yellow").band} />;
-        case "box":
+        case "box": {
           boxes.set(p.ref, { x, y, w: p.w, h: p.h });
+          if (p.box) {
+            const box = readBox({ ...DEFAULT_BOX, ...p.box });
+            return <path key={i} transform={`translate(${x} ${y})`} d={boxPath(p.w, p.h, cornerKinds(box.corner, box.corners), box.cut)} fill={box.fill === "none" ? "none" : box.fill}
+              stroke={box.color} strokeWidth={Math.max(b.w / 400, box.weight * (box.hatch ? 6 : 2))} strokeDasharray={box.pattern === "solid" ? undefined : `${b.w / 200} ${b.w / 200}`} />;
+          }
           return <g key={i}><rect x={x} y={y} width={p.w} height={p.h} fill="#ffffff" stroke="#3a3a37" strokeWidth={b.w / 300} /><rect x={x} y={y} width={p.w} height={p.h * 0.25} fill={boxColor(p.color ?? "black").band} /></g>;
+        }
+        case "rating": {
+          const n = p.max ?? 5, s = Math.min(p.h, p.w / (n * 2.4));
+          return <g key={i} fill={p.ink ?? "#111111"}>{Array.from({ length: n }, (_, k) => <rect key={k} x={x + p.w - (n - k) * s * 1.4} y={y} width={s} height={s} fillOpacity={k < p.value ? 1 : 0.3} />)}</g>;
+        }
+        case "grid": return <rect key={i} x={x} y={y} width={p.w} height={p.h} fill="none" stroke={p.ink ?? "#9a9c95"} strokeWidth={b.w / 400} strokeDasharray={`${b.w / 150} ${b.w / 150}`} />;
+        case "numeral": return <text key={i} x={x} y={y + p.h * 0.85} fontSize={p.h} fontWeight={800} fontFamily="Arial, sans-serif" textLength={p.w} lengthAdjust="spacingAndGlyphs"
+          fill={p.style === "solid" ? p.ink : "none"} stroke={p.ink ?? "#111111"} strokeWidth={b.w / 300}>{p.text}</text>;
+        case "brackets": return <path key={i} transform={`translate(${x} ${y})`} d={bracketPath(p.w, p.h, p.arm ?? 14)} fill="none" stroke={p.ink ?? "#c2413a"} strokeWidth={b.w / 400} />;
         case "text": {
           const h = p.size === "xl" ? 44 : p.size === "l" ? 32 : p.size === "m" ? 22 : 14;
           const w = Math.min(p.w, p.text.length * h * 0.5);
           const left = p.align === "middle" ? x + (p.w - w) / 2 : p.align === "end" ? x + p.w - w : x;
-          return <rect key={i} x={left} y={y + 6} width={w} height={h} rx={h / 4} fill={p.color === "grey" ? "#b3b5ad" : "#3a3a37"} />;
+          return <rect key={i} x={left} y={y + 6} width={w} height={h} rx={h / 4} fill={p.color === "grey" ? "#b3b5ad" : p.color === "white" ? "#f4f3ef" : p.color === "light-green" ? "#d4f53c" : p.color === "red" ? "#c2413a" : "#3a3a37"} />;
         }
-        case "line": return <line key={i} x1={x} y1={y} x2={x + p.dx} y2={y + p.dy} stroke="#3a3a37" strokeWidth={b.w / 250} />;
+        case "line": {
+          const line = p.line ? readLine({ ...DEFAULT_LINE, ...p.line }) : null;
+          return <line key={i} x1={x} y1={y} x2={x + p.dx} y2={y + p.dy} stroke={line?.color ?? "#3a3a37"} strokeWidth={b.w / (line ? 400 : 250)} strokeDasharray={line && line.pattern !== "solid" ? `${b.w / 250} ${b.w / 250}` : undefined} />;
+        }
       }
     });
     const links = template.pieces.flatMap((p, i) => {
       if (p.kind !== "connect") return [];
       const a = boxes.get(p.from), z = boxes.get(p.to);
-      return a && z ? [<line key={`c${i}`} x1={a.x + a.w / 2} y1={a.y + a.h / 2} x2={z.x + z.w / 2} y2={z.y + z.h / 2} stroke="#3a3a37" strokeWidth={b.w / 250} />] : [];
+      return a && z ? [<line key={`c${i}`} x1={a.x + a.w / 2} y1={a.y + a.h / 2} x2={z.x + z.w / 2} y2={z.y + z.h / 2} stroke={p.line?.color ?? "#3a3a37"} strokeWidth={b.w / 250} />] : [];
     });
     return { viewBox: `${b.x - pad} ${b.y - pad} ${b.w + pad * 2} ${b.h + pad * 2}`, items: [...links, ...items] };
   }, [template]);

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ArrowShapeUtil, SVGContainer, getArrowInfo, useValue, type Editor, type SvgExportContext, type TLArrowInfo, type TLArrowShape, type TLShape } from "tldraw";
 import {
-  BUILT_IN_STYLES, DEFAULT_BOX, DEFAULT_LINE, END_SIZES, ENDS, HEADERS, LINE_COLORS, PATTERNS, PT, RADII, STYLES_KEY, WEIGHTS,
+  BOX_FILLS, BUILT_IN_STYLES, CORNERS, DEFAULT_BOX, DEFAULT_LINE, END_SIZES, ENDS, HATCHES, HEADERS, SHADOWS, CORNER_KINDS, SIDE_HATCHES, cornerKinds, LINE_COLORS, PATTERNS, PT, RADII, STYLES_KEY, WEIGHTS,
   dashArray, endInset, endMark, parseStyles, readBox, readLine, roundedPath, simplify, trimEnds,
   type BoxSpec, type LineSpec, type LineStyle,
 } from "@/lib/boards/lines";
@@ -37,7 +37,7 @@ export function lineSvg(info: TLArrowInfo | undefined, line: LineSpec) {
   return <g className="precise-line">
     <path d={d} {...stroke} strokeDasharray={dashArray(line.pattern, line.weight)} />
     {marks.map((m, i) => !m ? null : m.kind === "circle"
-      ? <circle key={i} cx={m.cx} cy={m.cy} r={m.r} fill={m.fill ? line.color : "#ffffff"} stroke={line.color} strokeWidth={m.fill ? 0 : markStroke} />
+      ? <g key={i}><circle cx={m.cx} cy={m.cy} r={m.r} fill={m.fill ? line.color : "none"} stroke={line.color} strokeWidth={m.fill ? 0 : markStroke} />{m.cross && <path d={m.cross} stroke={line.color} strokeWidth={markStroke} strokeLinecap="round" />}</g>
       : <path key={i} d={m.d} fill={m.fill ? line.color : "none"} stroke={line.color} strokeWidth={m.fill ? 0 : markStroke} strokeLinejoin="round" strokeLinecap="round" />)}
   </g>;
 }
@@ -112,6 +112,12 @@ function applyRoute(editor: Editor, arrows: TLArrowShape[], route: "straight" | 
 function applyBox(editor: Editor, boxes: TLShape[], change: Partial<BoxSpec>) {
   editor.markHistoryStoppingPoint("Box style");
   editor.run(() => editor.updateShapes(boxes.map(b => ({ id: b.id, type: b.type, meta: { ...b.meta, box: { ...readBox(b.meta.box), ...change } } }))));
+}
+
+// Runs follow the outline clockwise, so name each side's start and end by where they are.
+const SIDE_ENDS = [["left", "right"], ["top", "bottom"], ["right", "left"], ["bottom", "top"]];
+function sideLabel(side: number, id: string, label: string) {
+  return id === "start" ? `${SIDE_ENDS[side][0]} part` : id === "end" ? `${SIDE_ENDS[side][1]} part` : label;
 }
 
 function readStyles() { try { return parseStyles(localStorage.getItem(STYLES_KEY)); } catch { return []; } }
@@ -240,6 +246,40 @@ export function LinePanel({ editor, onChange }: { editor: Editor | null; onChang
           {LINE_COLORS.map(c => <button key={c} type="button" aria-label={`Outline ${c}`} aria-pressed={box.color === c} style={{ background: c }} onClick={() => { applyBox(editor, boxes, { color: c }); onChange(); }} />)}
           <input type="color" aria-label="Custom outline colour" value={box.color} onChange={e => { applyBox(editor, boxes, { color: e.target.value }); onChange(); }} />
         </div>
+        <div className="line-panel-row">
+          <label>Corners<select value={box.corner} onChange={e => { applyBox(editor, boxes, { corner: e.target.value as BoxSpec["corner"], corners: null }); onChange(); }}>
+            {CORNERS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select></label>
+          <label>Corner size<select value={box.cut} onChange={e => { applyBox(editor, boxes, { cut: Number(e.target.value) }); onChange(); }}>
+            {[...new Set([8, 16, 24, 40, 64, box.cut])].sort((a, b) => a - b).map(c => <option key={c} value={c}>{c}</option>)}
+          </select></label>
+        </div>
+        <div className="line-panel-row">
+          <label>Hatched border<select value={box.hatch} onChange={e => { applyBox(editor, boxes, { hatch: Number(e.target.value) }); onChange(); }}>
+            {[...new Set([...HATCHES, box.hatch])].sort((a, b) => a - b).map(hh => <option key={hh} value={hh}>{hh ? `${hh} wide` : "None"}</option>)}
+          </select></label>
+          <label>Fill<select value={box.fill} onChange={e => { applyBox(editor, boxes, { fill: e.target.value }); onChange(); }}>
+            {[...new Set([...BOX_FILLS, box.fill])].map(f => <option key={f} value={f}>{f === "none" ? "None" : f === "#ffffff" ? "White" : f === "#111111" ? "Black" : f === "#f4f3ef" ? "Paper" : f === "#e9e9e7" ? "Light grey" : f === "#d4f53c" ? "Signal green" : f === "#1f3a4d" ? "Navy" : f}</option>)}
+          </select></label>
+        </div>
+        <div className="line-panel-quad" role="group" aria-label="Corner shapes">
+          <span>Each corner</span>
+          {["Top left", "Top right", "Bottom right", "Bottom left"].map((name, n) => {
+            const kinds = cornerKinds(box.corner, box.corners);
+            return <select key={name} aria-label={`${name} corner`} title={`${name} corner`} value={kinds[n]} onChange={e => { const next = [...kinds]; next[n] = e.target.value as typeof kinds[number]; applyBox(editor, boxes, { corners: next }); onChange(); }}>
+              {CORNER_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
+            </select>;
+          })}
+        </div>
+        {box.hatch > 0 && <div className="line-panel-quad" role="group" aria-label="Hatched sides">
+          <span>Hatch runs</span>
+          {["Top", "Right", "Bottom", "Left"].map((name, n) => <select key={name} aria-label={`${name} side hatch`} title={`${name} side`} value={box.sides[n]} onChange={e => { const next = [...box.sides]; next[n] = e.target.value as typeof box.sides[number]; applyBox(editor, boxes, { sides: next }); onChange(); }}>
+            {SIDE_HATCHES.map(k => <option key={k.id} value={k.id}>{name}: {sideLabel(n, k.id, k.label)}</option>)}
+          </select>)}
+        </div>}
+        <label className="line-panel-wide">Drop shadow<select value={box.shadow} onChange={e => { applyBox(editor, boxes, { shadow: Number(e.target.value) }); onChange(); }}>
+          {[...new Set([...SHADOWS, box.shadow])].sort((a, b) => a - b).map(sh => <option key={sh} value={sh}>{sh ? `${sh} offset` : "None"}</option>)}
+        </select></label>
         <label className="line-panel-wide">Header band<select value={box.header} onChange={e => { applyBox(editor, boxes, { header: Number(e.target.value) }); onChange(); }}>
           {HEADERS.map(h => <option key={h.h} value={h.h}>{h.label}</option>)}
         </select></label>

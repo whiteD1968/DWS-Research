@@ -1528,12 +1528,12 @@ select:focus {
 .board-arrange { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; gap: 2px; padding: 4px; background: white; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
 .board-arrange button { border: 0; background: transparent; padding: 6px 8px; border-radius: 5px; font-size: 13px; white-space: nowrap; cursor: pointer; }
 .board-arrange button:hover { background: #efefeb; }
-.diagram-box { position: relative; background: #fff; display: flex; flex-direction: column; overflow: hidden; color: #292a27; font-family: Arial, Helvetica, sans-serif; }
-.diagram-box-band { flex: none; display: flex; align-items: center; padding: 0 10px; font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; }
+.diagram-box { position: relative; background: transparent; display: flex; flex-direction: column; overflow: visible; color: #292a27; font-family: Arial, Helvetica, sans-serif; }
+.diagram-box-band { position: relative; flex: none; display: flex; align-items: center; padding: 0 10px; font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; }
 .diagram-box-band span { overflow: hidden; text-overflow: ellipsis; }
 .diagram-box-band input { width: 100%; background: transparent; border: 0; outline: 0; padding: 0; font: inherit; }
-.diagram-box p { margin: 0; padding: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
-.diagram-box textarea { flex: 1; border: 0; outline: 0; resize: none; padding: 10px; font: 12px/1.45 Arial, Helvetica, sans-serif; background: #fafaf7; min-height: 0; }
+.diagram-box p { position: relative; flex: 1; min-height: 0; margin: 0; padding: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.diagram-box textarea { position: relative; flex: 1; border: 0; outline: 0; resize: none; padding: 10px; font: 12px/1.45 Arial, Helvetica, sans-serif; background: #fafaf7; min-height: 0; }
 .diagram-quick-add { position: absolute; z-index: 300; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; border: 1px solid #3c64c8; background: #fff; color: #3c64c8; font-size: 15px; line-height: 1; padding: 0; cursor: pointer; box-shadow: 0 1px 4px #0002; }
 .diagram-quick-add:hover { background: #3c64c8; color: #fff; }
 .board-slides { position: absolute; top: calc(var(--board-header-h, 64px) + 11px); right: 16px; width: 340px; max-width: calc(100% - 32px); max-height: calc(100% - 150px); overflow: auto; z-index: 500; background: white; border: 1px solid #ccc; padding: 16px; display: grid; gap: 12px; align-content: start; box-shadow: 0 4px 20px #0001; font-size: 13px; }
@@ -2485,7 +2485,6 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .presenting .board-templates { display: none; }
 
 /* Precise lines and boxes */
-.diagram-box.is-open { background: transparent; }
 .diagram-box-outline { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .line-panel { position: absolute; left: 12px; top: 56px; z-index: 320; width: 248px; max-height: calc(100% - 140px); overflow: auto; background: white; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 10px #0002; font-size: 12px; }
 .line-panel-toggle { display: block; width: 100%; text-align: left; border: 0; background: #f5f5f2; padding: 8px 10px; font-weight: 600; font-size: 12px; cursor: pointer; border-radius: 8px 8px 0 0; }
@@ -2515,3 +2514,16 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .line-panel small { color: #6b6d64; font-size: 10.5px; }
 .presenting .line-panel { display: none; }
 @media (max-width: 600px) { .line-panel { top: auto; bottom: 120px; width: calc(100% - 24px); max-height: 40%; } }
+/* Studio pieces: rating meters, study grids and numerals */
+.studio-edit-bar { position: absolute; left: 0; top: calc(100% + 8px); display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 2px 8px #0002; font: 11px Arial, Helvetica, sans-serif; color: #55574f; white-space: nowrap; pointer-events: all; z-index: 2; }
+.studio-edit-bar label { display: flex; gap: 4px; align-items: center; }
+.studio-edit-bar input, .studio-edit-bar select { padding: 3px 4px; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; background: white; }
+.studio-edit-bar input[type="number"] { width: 48px; }
+.studio-inks { display: flex; gap: 4px; }
+.studio-inks button { width: 18px; height: 18px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px #bbb; padding: 0; cursor: pointer; }
+.studio-inks button[aria-pressed="true"] { box-shadow: 0 0 0 2px #32372e; }
+.studio-edit-label { position: absolute; left: 0; top: 0; border: 0; border-bottom: 1px dashed #999; background: #ffffffcc; outline: 0; padding: 0 2px; font: 12px 'IBM Plex Mono', Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: 0.1em; pointer-events: all; }
+.studio-rating-hit { position: absolute; border: 0; background: transparent; padding: 0; cursor: pointer; pointer-events: all; border-radius: 3px; }
+.studio-rating-hit:hover, .studio-rating-hit:focus-visible { outline: 2px solid #3c64c8; outline-offset: 1px; }
+.line-panel-quad { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 6px; }
+.line-panel-quad > span { grid-column: 1 / -1; color: #55574f; font-size: 11px; }

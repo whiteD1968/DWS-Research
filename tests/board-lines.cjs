@@ -68,6 +68,59 @@ test('built-in styles are valid, and saved styles drop junk', () => {
 test('box specs fall back to the original headed box', () => {
   assert.deepEqual(l.readBox(undefined), l.DEFAULT_BOX);
   assert.equal(l.DEFAULT_BOX.header, 28);
-  assert.deepEqual(l.readBox({ weight: 0.5, pattern: 'dashed', header: 0 }), { weight: 0.5, pattern: 'dashed', color: '#3a3a37', header: 0 });
+  assert.deepEqual(l.readBox({ weight: 0.5, pattern: 'dashed', header: 0 }), { ...l.DEFAULT_BOX, weight: 0.5, pattern: 'dashed', header: 0 });
   assert.equal(l.readBox({ header: 13 }).header, 28);
+  const bad = l.readBox({ corner: 'star', cut: 9999, hatch: -5, fill: 'url(#x)' });
+  assert.equal(bad.corner, 'square'); assert.equal(bad.hatch, 0); assert.equal(bad.fill, '#ffffff'); assert.ok(bad.cut <= 200);
+  assert.equal(l.readBox({ fill: 'none', corner: 'chamfer', hatch: 10 }).fill, 'none');
+  assert.equal(l.readBox({ shadow: 12 }).shadow, 12);
+  assert.equal(l.readBox({ shadow: 'x' }).shadow, 0);
+});
+
+test('box outlines cut, round or square their corners, and inset evenly', () => {
+  assert.equal(l.boxPath(100, 50, 'square', 20), 'M0,0 H100 V50 H0 Z');
+  const chamfer = l.boxPath(100, 50, 'chamfer', 20);
+  assert.match(chamfer, /^M0,20 L20,0/); // top-left cut
+  assert.match(chamfer, /L100,0/); // top-right stays square
+  assert.ok(!l.boxPath(100, 50, 'chamfer4', 20).includes('M0,0'));
+  assert.match(l.boxPath(100, 50, 'round', 10), /Q/);
+  const big = l.boxPath(100, 50, 'chamfer', 500); // cut is limited by the box
+  assert.ok(!/-|NaN/.test(big), big);
+  assert.match(l.boxPath(100, 50, 'square', 0, 5), /^M5,5/);
+  // Each corner can differ: cut, cut, rounded, rounded.
+  const mixed = l.boxPath(100, 50, ['cut', 'cut', 'round', 'round'], 10);
+  assert.equal((mixed.match(/Q/g) || []).length, 2);
+  assert.match(mixed, /^M0,10 L10,0 L90,0 L100,10/);
+  assert.deepEqual(l.cornerKinds('chamfer'), ['cut', 'square', 'cut', 'square']);
+  assert.deepEqual(l.cornerKinds('chamfer', ['round', 'cut', 'square', 'square']), ['round', 'cut', 'square', 'square']);
+});
+
+test('hatch runs cover only the chosen stretch of each side', () => {
+  assert.equal(l.hatchRuns(100, 50, 10, ['full', 'full', 'full', 'full']).length, 4);
+  assert.deepEqual(l.hatchRuns(100, 50, 10, ['none', 'none', 'none', 'none']), []);
+  const [top] = l.hatchRuns(100, 50, 10, ['start', 'none', 'none', 'none']);
+  assert.deepEqual(top, { x: 0, y: 0, w: 45, h: 11 });
+  const [bottom] = l.hatchRuns(100, 50, 10, ['none', 'none', 'end', 'none']); // bottom runs right to left, so its end is on the left
+  assert.equal(bottom.x, 0); assert.equal(bottom.y, 39);
+  assert.equal(l.hatchRuns(100, 50, 10, ['none', 'none', 'none', 'ends']).length, 2);
+  const box = l.readBox({ corners: ['cut', 'cut', 'round', 'round'], sides: ['full', 'full', 'end', 'ends'] });
+  assert.deepEqual(box.sides, ['full', 'full', 'end', 'ends']);
+  assert.equal(l.readBox({ corners: ['cut', 'star', 'round', 'round'] }).corners, null);
+  assert.deepEqual(l.readBox({ sides: ['full'] }).sides, ['full', 'full', 'full', 'full']);
+});
+
+test('dark fills switch box text to light ink', () => {
+  assert.equal(l.isDark('#111111'), true);
+  assert.equal(l.isDark('#ffffff'), false);
+  assert.equal(l.isDark('#d4f53c'), false);
+  assert.equal(l.isDark('nonsense'), false);
+});
+
+test('socket and circled-X ends draw at the tip and are listed', () => {
+  for (const id of ['socket', 'xnode']) assert.ok(l.ENDS.some(e => e.id === id), id);
+  const socket = l.endMark('socket', { x: 0, y: 0 }, { x: 10, y: 0 }, 8);
+  const xnode = l.endMark('xnode', { x: 0, y: 0 }, { x: 10, y: 0 }, 8);
+  assert.ok(socket && xnode);
+  assert.equal(l.endInset('xnode', 8), 4);
+  assert.equal(l.endInset('socket', 8), 0);
 });
