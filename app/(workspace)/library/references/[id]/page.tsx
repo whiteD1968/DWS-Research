@@ -8,7 +8,10 @@ import {
   setReferencePrimaryMedia,
   unlinkReferenceMedia,
   updateMediaDetails,
+  updateReferenceCitation,
 } from "../actions";
+import { ApaCitation } from "@/components/apa-citation";
+import { citationText, referenceCitation } from "@/lib/citation";
 import { MediaLightbox } from "@/components/media-lightbox";
 import { MediaUploadPanel } from "@/components/media-upload-panel";
 import { createClient } from "@/lib/supabase/server";
@@ -48,6 +51,8 @@ type Source = {
   id: string;
   url: string | null;
   title: string | null;
+  publication: string | null;
+  doi: string | null;
 };
 
 export default async function ReferenceDetailPage({
@@ -82,7 +87,7 @@ export default async function ReferenceDetailPage({
   ] = await Promise.all([
     supabase.from("projects").select("id,title").order("updated_at", { ascending: false }).returns<Project[]>(),
     reference.primary_source_id
-      ? supabase.from("sources").select("id,title,url").eq("id", reference.primary_source_id).single<Source>()
+      ? supabase.from("sources").select("id,title,url,publication,doi").eq("id", reference.primary_source_id).single<Source>()
       : Promise.resolve({ data: null }),
     supabase
       .from("relationships")
@@ -123,6 +128,8 @@ export default async function ReferenceDetailPage({
   const primaryMedia =
     mediaItems.find((item) => item.id === reference.primary_media_id) ?? mediaItems[0] ?? null;
 
+  const citation = referenceCitation(reference, sourceResult.data);
+
   return (
     <>
       <section className="breadcrumb-row">
@@ -161,6 +168,23 @@ export default async function ReferenceDetailPage({
             </Link>
           </div>
         </div>
+      </section>
+
+      <section className="panel section-block" aria-labelledby="citation-heading">
+        <p className="panel-kicker" id="citation-heading">APA citation (7th ed.){citation.edited ? " · edited" : ""}</p>
+        <ApaCitation parts={citation.parts} />
+        <details className="citation-edit">
+          <summary>Edit citation</summary>
+          <form action={updateReferenceCitation} className="form-stack">
+            <input name="reference_id" type="hidden" value={reference.id} />
+            <label className="field">
+              <span>Citation text (italics are not kept when edited by hand)</span>
+              <textarea defaultValue={citationText(citation.parts)} name="citation" rows={3} />
+            </label>
+            <p className="record-meta">Clear the text and save to go back to the generated citation, which follows edits to the title, creator and date.</p>
+            <button className="button" type="submit">Save citation</button>
+          </form>
+        </details>
       </section>
 
       <section className="two-column">

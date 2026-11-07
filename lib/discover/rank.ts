@@ -13,7 +13,14 @@ const hits = (text: string, expression: RegExp) => [...new Set(text.match(expres
 
 export function discoverMode(value: string): DiscoverMode {
   if (value === "studio") return "lab";
-  return ["project", "paper", "lab", "video", "image"].includes(value) ? value as DiscoverMode : "all";
+  return ["project", "paper", "scholarly", "book", "lab", "video", "image"].includes(value) ? value as DiscoverMode : "all";
+}
+
+// Which provider family a mode searches. Moving between families needs a new search;
+// moving within one only reorders the current results.
+export function discoverFamily(value: string) {
+  const mode = discoverMode(value);
+  return mode === "image" || mode === "scholarly" || mode === "book" ? mode : "web";
 }
 
 export function classifyDiscoverResult(result: DiscoverResult) {
@@ -31,6 +38,8 @@ export function classifyDiscoverResult(result: DiscoverResult) {
   function classify(type: DiscoverResult["resultType"], reason: string) { classification = type; evidence.push(reason); }
 
   if (result.resultType === "image") classify("image", "Image search result");
+  else if (result.provider === "openlibrary" || result.resultType === "book") classify("book", "Book catalog record");
+  else if (result.provider === "openalex") classify("paper", "Scholarly index record");
   else if (onDomain(host, ["youtube.com", "youtu.be", "vimeo.com"]) || /\/(video|watch|videos)(\/|$)/.test(path) || result.resultType === "video") classify("video", "Video source or page");
   else if (/\/(products?|shop|store|catalog)(\/|$)/.test(path) || /\b(buy now|add to cart|request a quote|for sale)\b/.test(text)) classify("product", "Product or sales page");
   else if (journal || /\b(doi|proceedings|journal|thesis|dissertation|research paper|conference paper)\b/.test(text) || (/\.pdf$/.test(path) && /\b(abstract|authors?|research|conference|study)\b/.test(text))) classify("paper", "Scholarly source or publication language");
@@ -41,7 +50,8 @@ export function classifyDiscoverResult(result: DiscoverResult) {
   else if (result.summary || result.resultType === "article") classify("article", "General editorial page");
 
   const classified = classification as DiscoverResult["resultType"];
-  const sourceType = classified === "video" ? "Video" : ["vendor", "product"].includes(classified) ? "Vendor" :
+  const sourceType = result.provider === "openalex" ? "Scholarly index" : result.provider === "openlibrary" ? "Book catalog" :
+    result.provider === "wikimedia-commons" ? "Wikimedia Commons" : result.provider === "artic" ? "Museum collection" : classified === "video" ? "Video" : ["vendor", "product"].includes(classified) ? "Vendor" :
     journal ? "Journal" : /\b(proceedings|conference paper)\b/.test(text) ? "Conference" : university ? "University" :
     office ? "Architecture office" : projectPage ? "Project page" : classified === "lab" ? "Lab" :
     onDomain(host, publications) ? "Publication" : "Web source";
@@ -49,11 +59,13 @@ export function classifyDiscoverResult(result: DiscoverResult) {
 }
 
 const modeOrder: Record<DiscoverMode, string[]> = {
-  all: [], project: ["project", "lab", "paper", "article", "video", "image", "other", "vendor", "product"],
-  paper: ["paper", "lab", "article", "project", "video", "image", "other", "vendor", "product"],
-  lab: ["lab", "project", "paper", "article", "video", "image", "other", "vendor", "product"],
-  video: ["video", "project", "lab", "paper", "article", "image", "other", "vendor", "product"],
-  image: ["image", "project", "article", "paper", "lab", "video", "other", "vendor", "product"],
+  all: [], project: ["project", "lab", "paper", "article", "video", "image", "book", "other", "vendor", "product"],
+  paper: ["paper", "lab", "article", "project", "book", "video", "image", "other", "vendor", "product"],
+  scholarly: ["paper", "book", "article", "lab", "project", "video", "image", "other", "vendor", "product"],
+  book: ["book", "paper", "article", "project", "lab", "video", "image", "other", "vendor", "product"],
+  lab: ["lab", "project", "paper", "article", "video", "image", "book", "other", "vendor", "product"],
+  video: ["video", "project", "lab", "paper", "article", "image", "book", "other", "vendor", "product"],
+  image: ["image", "project", "article", "paper", "lab", "video", "book", "other", "vendor", "product"],
 };
 
 export function rankDiscoverResults(results: DiscoverResult[], query: string, mode: DiscoverMode = "all"): DiscoverResult[] {

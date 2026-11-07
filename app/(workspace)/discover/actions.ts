@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { normalizeUrl } from "@/lib/discover/normalize";
 import { createDiscoverSnapshot } from "@/lib/discover/snapshot";
 import { redirect } from "next/navigation";
+import { storeCitations } from "@/lib/citation-store";
 
 export async function renameDiscoverSession(form: FormData) {
   const user = await requireUser(); const db = await createClient();
@@ -33,7 +34,7 @@ export async function runDiscover(query: string, filters: DiscoverFilters): Prom
 }
 
 export async function importDiscover(sessionId: string, ids: string[], collectionId?: string, collectionTitle?: string) {
-  await requireUser();
+  const user = await requireUser();
   try {
     const db = await createClient();
     const sourceMatches: Record<string, string> = {};
@@ -51,6 +52,8 @@ export async function importDiscover(sessionId: string, ids: string[], collectio
       source_matches: sourceMatches,
     });
     if (error) return { error: "The selected results could not be saved. Nothing in this batch was imported. Please retry." };
+    // Every saved item gets an APA citation; a hand-edited one is kept.
+    await storeCitations(db, user.id, Object.values((data.savedItems ?? {}) as Record<string, string>));
     for (const path of ["/discover", "/library", "/library/references", "/collections"]) revalidatePath(path);
     if (data.collectionId) revalidatePath(`/collections/${data.collectionId}`);
     revalidatePath(`/discover/sessions/${sessionId}`);

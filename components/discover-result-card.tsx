@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { DiscoverResult } from "@/lib/discover/types";
+import { citationFromResult, formatApa } from "@/lib/citation";
+import { ApaCitation } from "@/components/apa-citation";
 
 export function DiscoverResultCard({ result, selected, disabled, referenceId, onSelect }: {
   result: DiscoverResult; selected: boolean; disabled: boolean; referenceId?: string; onSelect: (checked: boolean) => void;
@@ -36,6 +38,7 @@ export function DiscoverResultCard({ result, selected, disabled, referenceId, on
       <details className="discover-details"><summary>Details</summary>
         {result.summary && <p>{result.summary}</p>}
         <dl><dt>Source</dt><dd>{result.sourceName || new URL(sourceUrl).hostname}</dd><dt>URL</dt><dd><a href={sourceUrl} target="_blank" rel="noopener noreferrer">{sourceUrl}</a></dd><dt>Date</dt><dd>{result.publishedAt || "Not supplied"}</dd><dt>Classification</dt><dd>{result.resultType}</dd><dt>Relevance</dt><dd>{result.relevanceReason || "Not supplied"}</dd></dl>
+        <p className="discover-citation-label">APA citation (7th ed.)</p><ApaCitation compact parts={formatApa(citationFromResult(result))} />
         {result.metadata && <details><summary>Ranking and source metadata</summary><pre>{JSON.stringify(result.metadata, null, 2)}</pre></details>}
       </details>
     </div>

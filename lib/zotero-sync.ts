@@ -34,7 +34,9 @@ async function save(db: SupabaseClient, ownerId: string, rows: Row[]) {
     const sourceId = sourceByKey.get(row.key)!;
     await db.from("sources").update(row.source).eq("owner_id", ownerId).eq("id", sourceId);
     const ref = refBySource.get(sourceId);
-    if (ref) await db.from("references").update({ ...row.reference, metadata: { ...(ref.metadata || {}), ...row.reference.metadata } }).eq("owner_id", ownerId).eq("id", ref.id);
+    // A citation the owner edited on the site outlives re-syncs.
+    const edited = (ref?.metadata?.apa_citation as { edited?: boolean } | undefined)?.edited ? { apa_citation: ref!.metadata!.apa_citation } : {};
+    if (ref) await db.from("references").update({ ...row.reference, metadata: { ...(ref.metadata || {}), ...row.reference.metadata, ...edited } }).eq("owner_id", ownerId).eq("id", ref.id);
     else await db.from("references").insert({ owner_id: ownerId, ...row.reference, primary_source_id: sourceId });
     updated += 1;
   }

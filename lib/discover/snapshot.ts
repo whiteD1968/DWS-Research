@@ -5,7 +5,7 @@ import type { DiscoverResult } from "./types";
 export function createDiscoverSnapshot(results: DiscoverResult[]): DiscoverResult[] {
   return results.map(result => {
     const metadata: Record<string, unknown> = {};
-    for (const key of ["provider", "provider_rank", "classification", "classificationEvidence", "sourceType", "relevanceScore", "scoreBreakdown", "penalties", "rankingVersion", "rankingMode", "originalRank"]) {
+    for (const key of ["provider", "provider_rank", "classification", "classificationEvidence", "sourceType", "relevanceScore", "scoreBreakdown", "penalties", "rankingVersion", "rankingMode", "originalRank", "citation", "license", "isbn", "citedBy", "openAccessUrl"]) {
       if (result.metadata?.[key] !== undefined) metadata[key] = result.metadata[key];
     }
     return {

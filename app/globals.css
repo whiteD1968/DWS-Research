@@ -2527,3 +2527,11 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .studio-rating-hit:hover, .studio-rating-hit:focus-visible { outline: 2px solid #3c64c8; outline-offset: 1px; }
 .line-panel-quad { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 6px; }
 .line-panel-quad > span { grid-column: 1 / -1; color: #55574f; font-size: 11px; }
+
+/* APA citations: hanging indent, as in a reference list. */
+.apa-citation-text { margin: 0; padding-left: 2em; text-indent: -2em; line-height: 1.6; overflow-wrap: anywhere; user-select: text; }
+.apa-citation.is-compact .apa-citation-text { font-size: 13px; }
+.apa-citation .inline-actions { margin-top: 6px; }
+.discover-citation-label { margin: 12px 0 4px; font-size: 12px; color: #555; }
+.citation-edit { margin-top: 12px; }
+.citation-edit textarea { width: 100%; }
