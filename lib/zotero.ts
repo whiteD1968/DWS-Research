@@ -1,4 +1,5 @@
 // Maps Zotero Web API items onto the site's sources and references. Pure, so the sync rules stay testable.
+import { citationFromReference, storedCitation, type CitationName } from "@/lib/citation";
 
 export const zoteroParent = "zotero_settings";
 export const zoteroPageSize = 100;
@@ -33,7 +34,7 @@ export function itemsUrl(settings: Pick<ZoteroSettings, "userId" | "collection">
 }
 
 type Creator = { creatorType?: string; firstName?: string; lastName?: string; name?: string };
-export type ZoteroItem = { key?: string; version?: number; data?: { key?: string; itemType?: string; title?: string; creators?: Creator[]; date?: string; url?: string; DOI?: string; ISBN?: string; publicationTitle?: string; bookTitle?: string; publisher?: string; place?: string; abstractNote?: string; tags?: { tag?: string }[]; parentItem?: string; deleted?: boolean } };
+export type ZoteroItem = { key?: string; version?: number; data?: { key?: string; itemType?: string; title?: string; creators?: Creator[]; date?: string; url?: string; DOI?: string; ISBN?: string; publicationTitle?: string; bookTitle?: string; publisher?: string; place?: string; volume?: string; issue?: string; pages?: string; edition?: string; abstractNote?: string; tags?: { tag?: string }[]; parentItem?: string; deleted?: boolean } };
 
 const skipTypes = new Set(["attachment", "note", "annotation"]);
 const typeMap: Record<string, string> = {
@@ -66,13 +67,23 @@ export function zoteroRecord(item: ZoteroItem) {
   const doi = clean(data.DOI, 200).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
   const publication = clean(data.publicationTitle || data.bookTitle || data.publisher, 300);
   const tags = (data.tags || []).map(tag => clean(tag.tag, 80)).filter(Boolean).slice(0, 30);
+  // Structured names and numbers for the APA citation; editors stand in only when a work has no authors.
+  const people = (data.creators || []).filter(creator => ["author", "artist", "director", "presenter", "programmer"].includes(creator.creatorType || "author"));
+  const creators: CitationName[] = (people.length ? people : (data.creators || []).filter(creator => creator.creatorType === "editor")).slice(0, 50)
+    .map(creator => clean(creator.name, 200) ? { literal: clean(creator.name, 200) } : { family: clean(creator.lastName, 120), given: clean(creator.firstName, 120) || undefined })
+    .filter(name => name.literal || name.family);
+  const zotero = { key, item_type: data.itemType, version: item.version ?? null, tags, publication: publication || null, doi: doi || null, isbn: clean(data.ISBN, 60) || null, url: url || null,
+    creators, date: clean(data.date, 60) || null, volume: clean(data.volume, 40) || null, issue: clean(data.issue, 40) || null, pages: clean(data.pages, 40) || null,
+    publisher: clean(data.publisher, 300) || null };
+  const sourceUrl = url || (doi ? `https://doi.org/${doi}` : null);
+  const citation = storedCitation(citationFromReference({ title, reference_type: typeMap[data.itemType] ?? "other", creator, metadata: { zotero } }, { url: sourceUrl, doi, publication }));
   return {
     key,
-    source: { source_type: "zotero", title, url: url || (doi ? `https://doi.org/${doi}` : null), creator: creator || null, publication: publication || null, doi: doi || null, zotero_item_key: key },
+    source: { source_type: "zotero", title, url: sourceUrl, creator: creator || null, publication: publication || null, doi: doi || null, zotero_item_key: key },
     reference: {
       title, reference_type: typeMap[data.itemType] ?? "other", creator: creator || null, reference_date: zoteroYear(data.date) || null,
       location: clean(data.place, 200) || null, description: clean(data.abstractNote, 4000) || null,
-      metadata: { zotero: { key, item_type: data.itemType, version: item.version ?? null, tags, publication: publication || null, doi: doi || null, isbn: clean(data.ISBN, 60) || null, url: url || null } },
+      metadata: { zotero, apa_citation: citation },
     },
   };
 }

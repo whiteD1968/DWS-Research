@@ -2,7 +2,7 @@ export type DiscoverResult = {
   id: string;
   provider: string;
   origin: "external" | "internal";
-  resultType: "project" | "article" | "paper" | "studio" | "lab" | "video" | "image" | "vendor" | "product" | "other";
+  resultType: "project" | "article" | "paper" | "studio" | "lab" | "video" | "image" | "book" | "vendor" | "product" | "other";
   title: string;
   subtitle?: string;
   summary?: string;
@@ -19,7 +19,7 @@ export type DiscoverResult = {
   metadata?: Record<string, unknown>;
   relevanceReason?: string;
 };
-export type DiscoverMode = "all" | "project" | "paper" | "lab" | "video" | "image";
+export type DiscoverMode = "all" | "project" | "paper" | "scholarly" | "book" | "lab" | "video" | "image";
 export type DiscoverFilters = { freshness: string; contentType: string; topic: string; yearFrom?: string; yearTo?: string };
 export type ResearchSession = {
   id: string; title: string; query: string; filters: DiscoverFilters;

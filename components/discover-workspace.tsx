@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { runDiscover, importDiscover } from "@/app/(workspace)/discover/actions";
 import type { DiscoverFilters, ResearchSession } from "@/lib/discover/types";
-import { discoverMode, rankDiscoverResults } from "@/lib/discover/rank";
+import { discoverFamily, discoverMode, rankDiscoverResults } from "@/lib/discover/rank";
 import { DiscoverResultCard } from "@/components/discover-result-card";
 import { BoardHandoff } from "@/components/board-handoff";
 import { DiscoverTopicAction } from "@/components/discover-topic-action";
@@ -26,7 +26,8 @@ export function DiscoverWorkspace({ initial, initialQuery = "", collections, mat
   const [newTitle, setNewTitle] = useState("");
   const [destination, setDestination] = useState<string | null>(null);
   const mode = discoverMode(filters.contentType);
-  const requiresSearch = !!initial && ((mode === "image") !== (discoverMode(initial.filters.contentType) === "image"));
+  const family = discoverFamily(filters.contentType);
+  const requiresSearch = !!initial && family !== discoverFamily(initial.filters.contentType);
   const results = useMemo(() => {
     if (!initial || requiresSearch) return [];
     // Reopening preserves the snapshot; changing mode locally previews a different order.
@@ -43,7 +44,7 @@ export function DiscoverWorkspace({ initial, initialQuery = "", collections, mat
         if (response.error) { setError(response.error); return; }
         setSaved(previous => ({ ...previous, ...response.savedItems }));
         setDestination(response.collectionId ?? null);
-        setMessage(toCollection ? "Selection added to collection." : "Selection saved to library.");
+        setMessage(toCollection ? "Selection added to collection, with APA citations." : "Selection saved to library, with APA citations.");
         router.refresh();
       } catch { setError("Unable to save. Please try again."); }
     });
@@ -64,23 +65,25 @@ export function DiscoverWorkspace({ initial, initialQuery = "", collections, mat
       <textarea id="research-question" required maxLength={400} value={query} onChange={event => setQuery(event.target.value)}
         placeholder="Find architectural projects using robotic 3D printing with stone, concrete, clay, or bio-based materials..." />
       <div className="discover-modes" role="group" aria-label="Content mode">
-        {[["all", "All"], ["project", "Projects"], ["paper", "Papers"], ["lab", "Labs"], ["video", "Videos"], ["image", "Images"]].map(([value, label]) =>
+        {[["all", "All"], ["project", "Projects"], ["paper", "Web papers"], ["lab", "Labs"], ["video", "Videos"], ["scholarly", "Articles"], ["book", "Books"], ["image", "Images"]].map(([value, label]) =>
           <button type="button" key={value} aria-pressed={mode === value} disabled={pending}
-            onClick={() => { setSelected([]); setFilters({ ...filters, contentType: value, ...(value === "image" ? { freshness: "", yearFrom: "", yearTo: "" } : {}) }); }}>{label}</button>)}
+            onClick={() => { setSelected([]); setFilters({ ...filters, contentType: value, ...(value === "image" ? { freshness: "", yearFrom: "", yearTo: "" } : ["scholarly", "book"].includes(value) ? { freshness: "" } : {}) }); }}>{label}</button>)}
       </div>
       <div className="discover-query-footer"><div className="discover-filters">
-        <label>Date range<select disabled={mode === "image" || Boolean(filters.yearFrom || filters.yearTo)} value={filters.freshness} onChange={event => setFilters({ ...filters, freshness: event.target.value })}>
+        <label>Date range<select disabled={family !== "web" || Boolean(filters.yearFrom || filters.yearTo)} value={filters.freshness} onChange={event => setFilters({ ...filters, freshness: event.target.value })}>
           <option value="">Any time</option><option value="pd">Past day</option><option value="pw">Past week</option><option value="pm">Past month</option><option value="py">Past year</option>
         </select></label>
-        <label>From year<input disabled={mode === "image"} type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearFrom ?? ""} onChange={event => setFilters({ ...filters, yearFrom: event.target.value })} /></label>
-        <label>To year<input disabled={mode === "image"} type="number" min="1900" max={new Date().getFullYear()} placeholder="Any" value={filters.yearTo ?? ""} onChange={event => setFilters({ ...filters, yearTo: event.target.value })} /></label>
+        <label>From year<input disabled={mode === "image"} type="number" min={family === "web" ? 1900 : 1000} max={new Date().getFullYear()} placeholder="Any" value={filters.yearFrom ?? ""} onChange={event => setFilters({ ...filters, yearFrom: event.target.value })} /></label>
+        <label>To year<input disabled={mode === "image"} type="number" min={family === "web" ? 1900 : 1000} max={new Date().getFullYear()} placeholder="Any" value={filters.yearTo ?? ""} onChange={event => setFilters({ ...filters, yearTo: event.target.value })} /></label>
         <label>Focus<select value={filters.topic} onChange={event => setFilters({ ...filters, topic: event.target.value })}>
           <option value="">All disciplines</option>{["architecture", "fabrication", "materials"].map(value => <option key={value}>{value}</option>)}
         </select></label>
-      </div><button className="button button-primary" disabled={pending} type="submit">{pending ? "Working..." : mode === "image" ? "Search images" : initial ? "Search again" : "Search"}</button></div>
+      </div><button className="button button-primary" disabled={pending} type="submit">{pending ? "Working..." : mode === "image" ? "Search images" : mode === "scholarly" ? "Search articles" : mode === "book" ? "Search books" : initial ? "Search again" : "Search"}</button></div>
     </form>
-    {mode === "image" && <p className="discover-image-help">Image search uses visual results. Date filters are unavailable. Saving keeps an image reference and its source page; it does not upload a copy of the original image.</p>}
-    {requiresSearch && <p role="status">Run {mode === "image" ? "Search images" : "Search again"} to fetch results for this mode.</p>}
+    {mode === "scholarly" && <p className="discover-image-help">Articles searches OpenAlex, an open index of journal articles, conference papers and theses. Saved items get an APA citation built from the record&apos;s authors, journal, volume, pages and DOI.</p>}
+    {mode === "book" && <p className="discover-image-help">Books searches the Open Library catalog. Saved books get an APA citation; check the publisher against the edition you actually use.</p>}
+    {mode === "image" && <p className="discover-image-help">Image search draws on Wikimedia Commons, the Art Institute of Chicago and web image results. Date filters are unavailable. Saving keeps an image reference and its source page; it does not upload a copy of the original image.</p>}
+    {requiresSearch && <p role="status">Run {mode === "image" ? "Search images" : mode === "scholarly" ? "Search articles" : mode === "book" ? "Search books" : "Search again"} to fetch results for this mode.</p>}
     {error && <p className="discover-error" role="alert">{error}</p>}
     {message && <p role="status">{message} {destination && <Link href={`/collections/${destination}`}>Open collection</Link>}</p>}
     {initial && !requiresSearch && <>

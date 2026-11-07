@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getFormValue, getOptionalFormValue, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { storeCitations } from "@/lib/citation-store";
 import {
   buildStoragePath,
   createMediaFromFile,
@@ -116,6 +117,7 @@ export async function createReference(formData: FormData) {
     redirect(`/library/references?error=${encodeURIComponent(error?.message ?? "Unknown error")}`);
   }
 
+  await storeCitations(supabase, user.id, [data.id]);
   revalidatePath("/library");
   revalidatePath("/library/references");
   redirect(`/library/references/${data.id}?created=1`);
@@ -168,6 +170,7 @@ export async function updateReference(formData: FormData) {
     redirect(`/library/references/${referenceId}/edit?error=${encodeURIComponent(error.message)}`);
   }
 
+  await storeCitations(supabase, user.id, [referenceId]);
   revalidatePath("/library/references");
   revalidatePath(`/library/references/${referenceId}`);
   redirect(`/library/references/${referenceId}?updated=reference`);
@@ -300,4 +303,23 @@ export async function updateMediaDetails(formData: FormData) {
 
   revalidatePath(returnTo);
   redirect(`${returnTo}?updated=media`);
+}
+
+// The owner can correct the generated APA citation; clearing the text returns to the generated one.
+export async function updateReferenceCitation(formData: FormData) {
+  const user = await requireUser();
+  const referenceId = getFormValue(formData, "reference_id");
+  const text = String(formData.get("citation") ?? "").replace(/\s+/g, " ").trim().slice(0, 4000);
+  if (!referenceId) redirect("/library/references?error=reference-required");
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("references").select("metadata").eq("owner_id", user.id).eq("id", referenceId).single();
+  if (error || !data) redirect(`/library/references/${referenceId}?error=${encodeURIComponent("Reference not found.")}`);
+  const metadata = { ...((data.metadata ?? {}) as Record<string, unknown>) };
+  if (text) metadata.apa_citation = { style: "apa7", text, html: "", generated_at: new Date().toISOString(), edited: true };
+  else delete metadata.apa_citation;
+  const { error: writeError } = await supabase.from("references").update({ metadata }).eq("owner_id", user.id).eq("id", referenceId);
+  if (writeError) redirect(`/library/references/${referenceId}?error=${encodeURIComponent("The citation could not be saved.")}`);
+  if (!text) await storeCitations(supabase, user.id, [referenceId]);
+  revalidatePath(`/library/references/${referenceId}`);
+  redirect(`/library/references/${referenceId}?updated=citation`);
 }

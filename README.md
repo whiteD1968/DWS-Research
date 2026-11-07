@@ -606,3 +606,34 @@ again, and a re-description unlinks the AI tags it no longer gives.
 Set `ANTHROPIC_API_KEY` in Vercel. Run
 `supabase/migrations/20261030170000_media_description_keeps_order.sql` so describing an
 image doesn't move it to the top of "Newest".
+
+## Articles, books, open images and APA citations
+
+Discover has two more modes. **Articles** searches [OpenAlex](https://docs.openalex.org), an open
+index of journal articles, conference papers, theses and scholarly books. **Books** searches the
+[Open Library](https://openlibrary.org/dev/docs/api/search) catalog and shows cover images.
+**Images** now also searches [Wikimedia Commons](https://www.mediawiki.org/wiki/API:Search) and the
+[Art Institute of Chicago](https://api.artic.edu/docs), interleaved with Brave image results when
+`BRAVE_SEARCH_API_KEY` is set, so image search works without a paid key and one failing source
+doesn't fail the search. None of these sources needs a key. Optionally set `OPENALEX_EMAIL` to join
+OpenAlex's faster "polite pool". The old Papers mode is now labelled "Web papers" and still uses Brave.
+Articles and Books accept From/To years back to 1000; relative date ranges are web-only.
+
+Each provider records structured citation data (`metadata.citation`: authors, year, journal,
+volume, issue, pages, DOI, publisher, holding institution) in the session snapshot. `lib/citation.ts`
+turns it into an APA 7th edition reference: author initials, "&" and the 21+ author rule, n.d.,
+italics for journals/volumes and stand-alone works, `[Photograph]`/`[Painting]` descriptions,
+DOIs as `https://doi.org/...`, and "Retrieved ... from" for undated web pages. Web results without
+structured data cite as web pages from title, site and date.
+
+Saving from Discover (to the library, a collection, a topic or a board) stores the citation in
+`references.metadata.apa_citation`. Manual references and Zotero syncs (which now also keep
+structured creators, volume, issue and pages) store one too. The reference page shows the citation
+with *Copy citation*, which copies rich text so italics paste into Word or Google Docs, and *Edit
+citation* for corrections. An edited citation is kept through edits and re-syncs; clearing it goes
+back to the generated one. Discover result Details also preview the citation before saving.
+
+Titles are kept as the source gives them; APA wants sentence case for article and book titles, so
+check capitalization before submitting. Open Library's publisher comes from one edition of the
+work. No migration is needed. `tests/citation.cjs` covers formatting and every provider mapping
+with fixtures; the live APIs were not called from the test environment.
