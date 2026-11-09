@@ -17,6 +17,11 @@ export function LinkShelf({ links, projects, memberships, smartTagging, initialP
   const [tag, setTag] = useState(initialTag || "");
   const [project, setProject] = useState(initialProject && projects.some(item => item.id === initialProject) ? initialProject : "");
   const [groupBy, setGroupBy] = useState<GroupBy>("batch");
+  const [view, setView] = useState<"list" | "cards">("list");
+  // The list-or-pictures choice is remembered on this computer.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { try { if (localStorage.getItem("dws-links-view") === "cards") setView("cards"); } catch { /* storage unavailable */ } }, []);
+  const chooseView = (next: "list" | "cards") => { setView(next); try { localStorage.setItem("dws-links-view", next); } catch { /* storage unavailable */ } };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState<LinkDraft[] | null>(null);
   const [message, setMessage] = useState(""); const [error, setError] = useState("");
@@ -62,6 +67,7 @@ export function LinkShelf({ links, projects, memberships, smartTagging, initialP
       {links.length > 0 && <input className="contacts-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${links.length} ${links.length === 1 ? "link" : "links"}`} aria-label="Search links" />}
       {links.length > 0 && projects.length > 0 && <select className="links-select" value={project} onChange={event => setProject(event.target.value)} aria-label="Filter by project"><option value="">All projects</option>{projects.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select>}
       {links.length > 0 && <select className="links-select" value={groupBy} onChange={event => setGroupBy(event.target.value as GroupBy)} aria-label="Group by">{(Object.keys(groupLabels) as GroupBy[]).map(key => <option key={key} value={key}>{key === "none" ? groupLabels[key] : `By ${groupLabels[key].toLowerCase()}`}</option>)}</select>}
+      {links.length > 0 && <div className="links-view" role="radiogroup" aria-label="View"><button type="button" role="radio" aria-checked={view === "list"} className={view === "list" ? "cv-kind cv-kind-on" : "cv-kind"} onClick={() => chooseView("list")}>List</button><button type="button" role="radio" aria-checked={view === "cards"} className={view === "cards" ? "cv-kind cv-kind-on" : "cv-kind"} onClick={() => chooseView("cards")}>Pictures</button></div>}
     </div>
     {links.length > 0 && <div className="cv-kinds contacts-filters links-tags" role="radiogroup" aria-label="Filter by tag">
       <button type="button" role="radio" aria-checked={!tag} className={!tag ? "cv-kind cv-kind-on" : "cv-kind"} onClick={() => setTag("")}>All · {links.length}</button>
@@ -89,7 +95,18 @@ export function LinkShelf({ links, projects, memberships, smartTagging, initialP
       return <section key={group.key} className="links-group" aria-label={group.label}>
         {groupBy !== "none" && <div className="links-group-head"><label className="links-check"><input type="checkbox" checked={all} onChange={() => toggleMany(ids)} aria-label={`Select all in ${group.label}`} /></label><h2>{group.label}</h2><span>{group.links.length}</span>
           <button type="button" className="text-button" onClick={() => { for (const link of group.links.slice(0, 40)) window.open(link.url, "_blank", "noopener"); opened(ids.slice(0, 40)); }} title="Opens each link in a new Chrome tab">Open all ↗</button></div>}
-        <ul className="links-list">{group.links.map(link => <li key={`${group.key}-${link.id}`} className={selected.has(link.id) ? "link-row link-row-on" : "link-row"}>
+        {view === "cards" ? <ul className="links-cards">{group.links.map(link => <li key={`${group.key}-${link.id}`} className={selected.has(link.id) ? "link-card link-card-on" : "link-card"}>
+          <Link href={`/links/${link.id}`} className="link-card-image" onClick={() => opened([link.id])} tabIndex={-1} aria-hidden="true"><LinkImage link={link} /></Link>
+          <label className="links-check link-card-check"><input type="checkbox" checked={selected.has(link.id)} onChange={() => toggle(link.id)} aria-label={`Select ${link.title}`} /></label>
+          <div className="link-card-body">
+            <Link href={`/links/${link.id}`} className="link-title" onClick={() => opened([link.id])}>{link.title}{!link.openedAt && <span className="link-new" aria-label="Not opened yet" />}</Link>
+            <span className="link-meta">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="link-favicon-small" src={faviconUrl(link.domain)} alt="" width={14} height={14} loading="lazy" referrerPolicy="no-referrer" />{link.domain}
+              <a href={link.url} target="_blank" rel="noreferrer" onClick={() => opened([link.id])} aria-label={`Open ${link.title} in a new tab`} title="Open in a new Chrome tab">↗</a></span>
+            {link.tags.length > 0 && <span className="link-chips">{link.tags.slice(0, 3).map(name => <button key={name} type="button" className="link-tag" onClick={() => setTag(name)}>{name}</button>)}</span>}
+          </div>
+        </li>)}</ul> : <ul className="links-list">{group.links.map(link => <li key={`${group.key}-${link.id}`} className={selected.has(link.id) ? "link-row link-row-on" : "link-row"}>
           <label className="links-check"><input type="checkbox" checked={selected.has(link.id)} onChange={() => toggle(link.id)} aria-label={`Select ${link.title}`} /></label>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="link-favicon" src={faviconUrl(link.domain)} alt="" width={20} height={20} loading="lazy" referrerPolicy="no-referrer" />
@@ -101,16 +118,26 @@ export function LinkShelf({ links, projects, memberships, smartTagging, initialP
               {(linkProjects.get(link.id) || []).map(id => <span key={id} className="link-project"><Link href={`/projects/${id}?mode=links`}>{projectTitle.get(id)}</Link><button type="button" aria-label={`Remove from ${projectTitle.get(id)}`} disabled={pending} onClick={() => run(() => removeLinkFromProject(link.id, id))}>×</button></span>)}
             </span>}
           </div>
+          {link.image ? <Link href={`/links/${link.id}`} className="link-thumb" onClick={() => opened([link.id])} tabIndex={-1} aria-hidden="true"><LinkImage link={link} /></Link> : <span />}
           <div className="link-actions">
             <Link className="cv-kind" href={`/links/${link.id}`} onClick={() => opened([link.id])}>Open</Link>
             <a className="cv-kind" href={link.url} target="_blank" rel="noreferrer" onClick={() => opened([link.id])} title="Open in a new Chrome tab" aria-label={`Open ${link.title} in a new tab`}>↗</a>
           </div>
-        </li>)}</ul>
+        </li>)}</ul>}
       </section>;
     })}
 
     {importing && <ImportDialog initial={importing} existing={links} projects={projects} defaultProject={project} onClose={() => setImporting(null)} onSaved={note => { setImporting(null); setMessage(note); setError(""); router.refresh(); }} />}
   </>;
+}
+
+// The page's own preview picture; when there isn't one, or it won't load, the site's icon stands in.
+function LinkImage({ link }: { link: Weblink }) {
+  const [failed, setFailed] = useState(false);
+  // eslint-disable-next-line @next/next/no-img-element
+  if (link.image && !failed) return <img src={link.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <span className="link-image-empty"><img src={faviconUrl(link.domain)} alt="" width={32} height={32} loading="lazy" referrerPolicy="no-referrer" /></span>;
 }
 
 function groupLinks(links: Weblink[], by: GroupBy) {

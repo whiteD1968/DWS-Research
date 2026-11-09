@@ -49,6 +49,8 @@ export function LinkReader({ link, embed, projects, linkedProjects }: { link: We
           <label className="field"><span>Notes</span><textarea value={notes} onChange={event => setNotes(event.target.value)} rows={5} maxLength={20000} /></label>
           <div className="cv-form-actions"><button type="button" className="button" onClick={() => setEditing(false)}>Cancel</button><button className="button button-primary" disabled={pending}>Save</button></div>
         </form> : <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {link.image && frameSrc && <img className="link-reader-hero" src={link.image} alt="" referrerPolicy="no-referrer" />}
           {link.description && <p className="link-side-desc">{link.description}</p>}
           {link.notes ? <p className="opp-notes">{link.notes}</p> : <button type="button" className="text-button" onClick={() => setEditing(true)}>+ Add a note</button>}
           <p className="link-side-url"><a href={link.url} target="_blank" rel="noreferrer">{link.url}</a></p>

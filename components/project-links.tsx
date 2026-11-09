@@ -21,6 +21,8 @@ export async function ProjectLinks({ projectId }: { projectId: string }) {
       <img className="link-favicon" src={faviconUrl(link.domain)} alt="" width={20} height={20} loading="lazy" referrerPolicy="no-referrer" />
       <div className="link-body"><Link href={`/links/${link.id}`} className="link-title">{link.title}</Link><span className="link-meta">{link.domain}{link.description ? ` · ${link.description}` : ""}</span>
         {link.tags.length > 0 && <span className="link-chips">{link.tags.map(tag => <Link key={tag} className="link-tag" href={`/links?tag=${encodeURIComponent(tag)}`}>{tag}</Link>)}</span>}</div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {link.image ? <Link href={`/links/${link.id}`} className="link-thumb" tabIndex={-1} aria-hidden="true"><img src={link.image} alt="" loading="lazy" referrerPolicy="no-referrer" /></Link> : <span />}
       <div className="link-actions"><Link className="cv-kind" href={`/links/${link.id}`}>Open</Link><a className="cv-kind" href={link.url} target="_blank" rel="noreferrer" aria-label={`Open ${link.title} in a new tab`}>↗</a></div>
     </li>)}</ul> : <div className="empty-state"><h2>No links in this project yet.</h2><p>On the Links page, select links and choose <strong>Add to project</strong>, or pick this project when you save a batch of tabs.</p><Link className="button button-primary" href={`/links?project=${projectId}`}>Go to Links</Link></div>}
   </section>;
