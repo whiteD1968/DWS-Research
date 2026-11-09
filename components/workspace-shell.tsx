@@ -26,7 +26,7 @@ const navItems = [
   { href: "/journal", label: "Journal", icon: icons.journal, routes: ["/journal"] },
   { href: "/projects", label: "Projects", icon: icons.projects, routes: ["/projects"] },
   { href: "/boards", label: "Boards", icon: icons.canvas, routes: ["/boards"] },
-  { href: "/library", label: "Library", icon: icons.library, routes: ["/library", "/discover", "/collections"] },
+  { href: "/library", label: "Library", icon: icons.library, routes: ["/library", "/discover", "/links", "/collections"] },
   { href: "/research", label: "Topics", icon: icons.research, routes: ["/research"] },
   { href: "/opportunities", label: "Practice", icon: icons.opportunities, routes: ["/opportunities", "/contacts", "/kit"] },
   { href: "/tenure", label: "Tenure", icon: icons.tenure, routes: ["/tenure"] },
@@ -34,7 +34,7 @@ const navItems = [
 
 // Collections are no longer linked from the menus; their pages still open from old links.
 const sectionTabs = [
-  { routes: ["/library", "/discover"], label: "Library sections", tabs: [{ href: "/library", label: "Library" }, { href: "/discover", label: "Discover" }] },
+  { routes: ["/library", "/discover", "/links"], label: "Library sections", tabs: [{ href: "/library", label: "Library" }, { href: "/links", label: "Links" }, { href: "/discover", label: "Discover" }] },
   { routes: ["/opportunities", "/contacts", "/kit"], label: "Practice sections", tabs: [{ href: "/opportunities", label: "Opportunities" }, { href: "/contacts", label: "Contacts" }, { href: "/kit", label: "Kit" }] },
   { routes: ["/tenure"], label: "Tenure sections", tabs: [{ href: "/tenure", label: "Dossier" }, { href: "/tenure/cv", label: "CV" }] },
 ];

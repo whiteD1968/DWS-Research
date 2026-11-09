@@ -2,6 +2,7 @@ import { DeleteContent } from "@/components/content-controls";
 import Link from "next/link";
 import { ProjectResearchTopics } from "@/components/project-research-topics";
 import { ProjectBoards } from "@/components/project-boards";
+import { ProjectLinks } from "@/components/project-links";
 import { notFound } from "next/navigation";
 import {
   linkReferenceToProject,
@@ -60,13 +61,14 @@ type Collection = {
   description: string | null;
 };
 
-type ProjectMode = "overview" | "boards" | "visuals" | "documents" | "notes" | "workspace";
+type ProjectMode = "overview" | "boards" | "links" | "visuals" | "documents" | "notes" | "workspace";
 
 const projectModes: Array<{ key: ProjectMode; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "boards", label: "Boards" },
   { key: "visuals", label: "Visuals" },
   { key: "documents", label: "Documents" },
+  { key: "links", label: "Links" },
   { key: "workspace", label: "References" },
 ];
 
@@ -266,6 +268,7 @@ export default async function ProjectDetailPage({
       </nav>
 
       {mode === "boards" ? <ProjectBoards projectId={project.id} projectTitle={project.title} /> : null}
+      {mode === "links" ? <ProjectLinks projectId={project.id} /> : null}
 
       {mode === "visuals" ? (
         <>
@@ -365,7 +368,7 @@ export default async function ProjectDetailPage({
 }
 
 function getProjectMode(value: string | null | undefined): ProjectMode {
-  if (value === "boards" || value === "visuals" || value === "documents" || value === "notes" || value === "workspace") {
+  if (value === "boards" || value === "links" || value === "visuals" || value === "documents" || value === "notes" || value === "workspace") {
     return value;
   }
 
