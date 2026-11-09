@@ -2535,3 +2535,92 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .discover-citation-label { margin: 12px 0 4px; font-size: 12px; color: #555; }
 .citation-edit { margin-top: 12px; }
 .citation-edit textarea { width: 100%; }
+
+/* Links: saved web pages, bulk-saved from Chrome, tagged, filed into projects, and read inside the site. */
+.links-toolbar .links-select { width: auto; min-width: 150px; height: 38px; padding: 0 10px; font-size: 13px; }
+.links-tags { margin-bottom: 18px; }
+.links-group { margin-bottom: 22px; }
+.links-group-head { display: flex; align-items: center; gap: 10px; padding: 0 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.links-group-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.links-group-head > span { font-size: 12px; color: var(--text-muted); }
+.links-group-head .text-button { margin-left: auto; font-size: 12px; }
+.links-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.link-row { display: grid; grid-template-columns: auto 20px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 10px 8px; border-radius: 10px; transition: background .12s; }
+.project-links .link-row { grid-template-columns: 20px minmax(0, 1fr) auto; }
+.link-row:hover { background: var(--surface); }
+.link-row-on, .link-row-on:hover { background: var(--accent-muted); }
+.links-check { display: flex; align-items: center; height: 20px; }
+.links-check input { width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--accent); cursor: pointer; }
+.link-favicon { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-muted); object-fit: contain; }
+.link-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.link-title { font-weight: 550; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-title:hover { text-decoration: underline; }
+.link-new { display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+.link-meta { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+.link-tag { padding: 2px 8px; border: 0; border-radius: 999px; background: var(--surface-muted); color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer; }
+.link-tag:hover { background: var(--border); }
+.link-tag-static { cursor: default; }
+.link-project { display: inline-flex; align-items: center; border-radius: 999px; background: var(--accent-muted); color: var(--accent-strong); font-size: 11.5px; }
+.link-project a { padding: 2px 2px 2px 8px; }
+.link-project button { width: 20px; height: 20px; border: 0; border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
+.link-actions { display: flex; gap: 6px; }
+.link-actions .cv-kind { display: inline-flex; align-items: center; height: 28px; }
+.links-selection { position: sticky; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+.links-selection strong { margin-right: 4px; font-size: 13px; }
+.links-selection form { display: flex; gap: 6px; }
+.links-selection input { width: 140px; height: 34px; padding: 0 10px; font-size: 13px; }
+.links-selection select { width: auto; height: 34px; padding: 0 8px; font-size: 13px; }
+.links-selection .button { height: 34px; font-size: 13px; }
+.links-dialog { width: min(760px, calc(100vw - 32px)); display: none; flex-direction: column; gap: 14px; }
+.links-dialog[open] { display: flex; }
+.links-paste { display: grid; gap: 8px; }
+.links-paste textarea { font-family: var(--font-mono), ui-monospace, monospace; font-size: 12.5px; }
+.links-file { position: relative; justify-self: start; font-size: 13px; cursor: pointer; }
+.links-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.links-review-head { margin: 4px 0 0; font-size: 14px; }
+.links-review { list-style: none; margin: 0; padding: 4px; max-height: 42vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.links-review li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 8px; border-radius: 8px; }
+.links-review li:hover { background: var(--surface-muted); }
+.links-review label { display: flex; align-items: center; gap: 9px; min-width: 0; cursor: pointer; }
+.links-review label input { width: 15px; height: 15px; margin: 0; padding: 0; flex-shrink: 0; accent-color: var(--accent); }
+.links-review label span { min-width: 0; display: flex; flex-direction: column; }
+.links-review strong { font-size: 13px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.links-review small { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.links-review .link-chips { flex-shrink: 0; flex-wrap: nowrap; margin: 0; }
+.links-review-off { opacity: .5; }
+.links-auto { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.links-auto input { width: 15px; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
+.links-help ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; line-height: 1.55; font-size: 14px; }
+.links-help code { padding: 1px 5px; border-radius: 4px; background: var(--surface-muted); font-size: 12.5px; }
+.links-help-alt { margin: 14px 0 0; font-size: 13px; color: var(--text-muted); }
+.links-bookmarklet { display: inline-flex; align-items: center; height: 26px; margin-left: 4px; cursor: grab; }
+.link-reader { display: flex; flex-direction: column; gap: 14px; min-height: calc(100vh - 120px); }
+.link-reader-bar { display: flex; align-items: center; gap: 12px; }
+.link-reader-title { flex: 1; min-width: 0; }
+.link-reader-title h1 { margin: 0; font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-reader-title span { font-size: 12px; color: var(--text-muted); }
+.link-reader-layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+.link-frame-wrap { display: flex; flex-direction: column; gap: 6px; min-height: 70vh; }
+.link-frame { flex: 1; width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.link-frame-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+.link-frame-note a { text-decoration: underline; }
+.link-blocked { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 28px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.link-blocked img { width: 100%; max-height: 320px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
+.link-blocked h2 { margin: 0; font-size: 22px; }
+.link-blocked p { margin: 0; line-height: 1.6; max-width: 62ch; }
+.link-blocked-why { font-size: 13px; color: var(--text-muted); margin-top: 6px !important; }
+.link-side { display: flex; flex-direction: column; gap: 10px; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); align-self: start; }
+.link-side h3 { margin: 8px 0 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.link-side-desc { margin: 0; font-size: 13.5px; line-height: 1.55; }
+.link-side-url { margin: 0; font-size: 12px; overflow-wrap: anywhere; color: var(--text-muted); }
+.link-side-url a:hover { text-decoration: underline; }
+.link-side .text-button { align-self: flex-start; }
+.link-side-projects { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.link-side-projects li { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13.5px; }
+.link-side-projects button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; }
+.link-side select { font-size: 13px; }
+.link-side .opp-actions { margin-top: 10px; }
+.project-links .section-heading .button { margin-left: auto; }
+@media (max-width: 900px) { .link-reader-layout { grid-template-columns: 1fr; } .link-frame, .link-frame-wrap { min-height: 60vh; } }
+@media (max-width: 640px) { .link-row { grid-template-columns: auto 20px minmax(0, 1fr); } .link-actions { grid-column: 3; } .link-reader-bar { flex-wrap: wrap; } .links-review .link-chips { display: none; } }
