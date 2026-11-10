@@ -16,7 +16,19 @@ type Drag =
   | { kind: "point"; id: string; index: number }
   | { kind: "project"; id: string; dx: number; dy: number }
   | { kind: "zone"; dx: number; dy: number }
-  | { kind: "zone-size" };
+  | { kind: "zone-size" }
+  | { kind: "pan"; sx: number; sy: number; cx: number; cy: number; moved: boolean };
+type View = { cx: number; cy: number; scale: number };
+const MIN_SCALE = 0.08; const MAX_SCALE = 8;
+const clampScale = (n: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, n));
+const fitFor = (mw: number, mh: number, w: number, h: number): View => ({ cx: mw / 2, cy: mh / 2, scale: clampScale(Math.min(w / mw, h / mh) * 0.97) });
+// Zooms about a point on screen, so whatever is under the pointer stays put.
+function zoomView(v: View, factor: number, clientX?: number, clientY?: number, rect?: DOMRect): View {
+  const scale = clampScale(v.scale * factor); const k = v.scale / scale;
+  if (!rect || clientX === undefined || clientY === undefined) return { ...v, scale };
+  const px = v.cx + (clientX - rect.left - rect.width / 2) / v.scale; const py = v.cy + (clientY - rect.top - rect.height / 2) / v.scale;
+  return { cx: px - (px - v.cx) * k, cy: py - (py - v.cy) * k, scale };
+}
 type Tab = "content" | "checks" | "map" | "history";
 
 const grid = (n: number, on: boolean, step = 5) => on ? Math.round(n / step) * step : Math.round(n * 10) / 10;
@@ -52,6 +64,41 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
   const [filter, setFilter] = useState("");
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [frame, setFrame] = useState({ w: 1200, h: 750 });
+  const [view, setView] = useState<View | null>(null);
+  const viewRef = useRef<View | null>(null);
+  const sizeRef = useRef({ w: 1200, h: 750, mw: initial.width, mh: initial.height });
+  useEffect(() => { viewRef.current = view; }, [view]);
+  useEffect(() => { sizeRef.current = { w: frame.w, h: frame.h, mw: map.width, mh: map.height }; }, [frame, map.width, map.height]);
+  const fitView = () => fitFor(map.width, map.height, frame.w, frame.h);
+  const current = view || fitView();
+  const vb = { w: frame.w / current.scale, h: frame.h / current.scale };
+  const viewBox = `${current.cx - vb.w / 2} ${current.cy - vb.h / 2} ${vb.w} ${vb.h}`;
+  const hs = Math.min(4, Math.max(0.5, 1 / current.scale));
+  const zoomAt = (factor: number, clientX?: number, clientY?: number) => setView(prev => zoomView(prev || fitView(), factor, clientX, clientY, frameRef.current?.getBoundingClientRect()));
+  useEffect(() => {
+    const el = frameRef.current; if (!el) return;
+    const resize = new ResizeObserver(entries => { const r = entries[0].contentRect; if (r.width > 0 && r.height > 0) setFrame({ w: r.width, h: r.height }); });
+    resize.observe(el);
+    // Pinch or Ctrl/⌘ + wheel zooms at the pointer; a plain wheel or two-finger swipe pans, as in Illustrator and Figma.
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const size = sizeRef.current;
+      setView(prev => {
+        const v = prev || fitFor(size.mw, size.mh, size.w, size.h);
+        if (event.ctrlKey || event.metaKey) return zoomView(v, Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.06 : Math.abs(event.deltaY) < 40 ? 0.01 : 0.002)), event.clientX, event.clientY, el.getBoundingClientRect());
+        const line = event.deltaMode === 1 ? 16 : 1;
+        const dx = (event.shiftKey ? event.deltaY : event.deltaX) * line; const dy = event.shiftKey ? 0 : event.deltaY * line;
+        return { ...v, cx: v.cx + dx / v.scale, cy: v.cy + dy / v.scale };
+      });
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => { resize.disconnect(); el.removeEventListener("wheel", wheel); };
+  }, [compare]);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; scale: number } | null>(null);
+  const spaceDown = useRef(false);
   const nameRef = useRef<HTMLTextAreaElement>(null);
 
   const issues = useMemo(() => checkMap(map), [map]);
@@ -104,13 +151,23 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       if (mod && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
       if ((event.key === "Delete" || event.key === "Backspace") && selection) { event.preventDefault(); removeSelection(); return; }
       if (event.key === "Escape") { setSelection(null); return; }
+      if (!mod && (event.key === "=" || event.key === "+")) { event.preventDefault(); zoomAt(1.25); return; }
+      if (!mod && (event.key === "-" || event.key === "_")) { event.preventDefault(); zoomAt(0.8); return; }
+      if (!mod && event.key === "0") { event.preventDefault(); setView(fitView()); return; }
+      if (!mod && event.key === "1") { event.preventDefault(); setView(v => ({ ...(v || fitView()), scale: 1 })); return; }
       const step = event.shiftKey ? 10 : 1;
       const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
       if (move && selection?.type === "item") { event.preventDefault(); updateItem(selection.id, item => ({ ...item, x: item.x + move[0], y: item.y + move[1] })); }
       if (move && selection?.type === "project") { event.preventDefault(); commit(c => ({ ...c, projects: c.projects.map(p => p.id === selection.id ? { ...p, x: p.x + move[0], y: p.y + move[1] } : p) })); }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const onSpace = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+      if (event.code !== "Space" || typing) return;
+      if (event.type === "keydown") event.preventDefault();
+      spaceDown.current = event.type === "keydown"; frameRef.current?.classList.toggle("research-map-panning", spaceDown.current);
+    };
+    window.addEventListener("keydown", onKey); window.addEventListener("keydown", onSpace); window.addEventListener("keyup", onSpace);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keydown", onSpace); window.removeEventListener("keyup", onSpace); };
   });
   useEffect(() => {
     if (!dirty) return;
@@ -126,8 +183,23 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
     const p = point.matrixTransform(svg.getScreenCTM()!.inverse());
     return [p.x, p.y];
   };
+  const startPan = (event: ReactPointerEvent) => {
+    const v = viewRef.current || fitView();
+    svgRef.current?.setPointerCapture(event.pointerId);
+    drag.current = { kind: "pan", sx: event.clientX, sy: event.clientY, cx: v.cx, cy: v.cy, moved: false };
+  };
+  const onBackgroundDown = (event: ReactPointerEvent) => {
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), scale: (viewRef.current || fitView()).scale }; drag.current = null; return;
+    }
+    startPan(event);
+  };
+
   const begin = (event: ReactPointerEvent, next: Drag, select: Selection) => {
     event.stopPropagation(); event.preventDefault();
+    if (event.button === 1 || spaceDown.current) { startPan(event); return; }
     svgRef.current?.setPointerCapture(event.pointerId);
     drag.current = next; setSelection(select);
     setPast(list => [...list.slice(-99), map]); setFuture([]);
@@ -142,7 +214,19 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
     }),
   });
   const onMove = (event: ReactPointerEvent) => {
+    if (pointers.current.has(event.pointerId)) pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch.current && pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const target = clampScale(pinch.current.scale * d / Math.max(1, pinch.current.d)); const v = viewRef.current || fitView();
+      zoomAt(target / v.scale, (a.x + b.x) / 2, (a.y + b.y) / 2); return;
+    }
     const d = drag.current; if (!d) return;
+    if (d.kind === "pan") {
+      const dx = event.clientX - d.sx; const dy = event.clientY - d.sy;
+      if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+      const v = viewRef.current || fitView();
+      setView({ ...v, cx: d.cx - dx / v.scale, cy: d.cy - dy / v.scale }); return;
+    }
     const [x, y] = toMap(event); const free = event.altKey || !snap;
     setDirty(true);
     setMap(current => {
@@ -175,7 +259,11 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       return current;
     });
   };
-  const onUp = () => { drag.current = null; };
+  const onUp = (event: ReactPointerEvent) => {
+    pointers.current.delete(event.pointerId); if (pointers.current.size < 2) pinch.current = null;
+    const d = drag.current; drag.current = null;
+    if (d?.kind === "pan" && !d.moved && event.target === svgRef.current) setSelection(null);
+  };
   const addPointAt = (strand: Strand, event: React.MouseEvent) => {
     const p = toMap(event); let best = { i: 1, d: Infinity };
     for (let i = 1; i < strand.points.length; i++) { const d = nearestOnPolyline([strand.points[i - 1], strand.points[i]], p).distance; if (d < best.d) best = { i, d }; }
@@ -293,11 +381,12 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
           </div>
           {(() => { const changes = diffMaps(compare.map, map); return changes.length ? <ul className="research-map-changes">{changes.map((c, i) => <li key={i}>{c}</li>)}</ul> : <p className="research-map-hint">No changes since this snapshot.</p>; })()}
         </div> :
-        <div className="research-map-frame">
-          <svg ref={svgRef} viewBox={`0 0 ${map.width} ${map.height}`} fontFamily="'Helvetica Neue', Helvetica, Inter, Arial, sans-serif" onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerDown={() => setSelection(null)} role="img" aria-label={`${map.title}, editable research map`}>
+        <div className="research-map-frame research-map-canvas" ref={frameRef}>
+          <svg ref={svgRef} viewBox={viewBox} width={frame.w} height={frame.h} fontFamily="'Helvetica Neue', Helvetica, Inter, Arial, sans-serif" onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerDown={onBackgroundDown} role="img" aria-label={`${map.title}, editable research map`}>
+            <rect x={-20000} y={-20000} width={40000} height={40000} fill="#dcdcd8" />
             <g dangerouslySetInnerHTML={{ __html: inner }} />
             <g className="research-map-hits">
-              {map.strands.map(strand => <path key={strand.id} d={`M${strand.points.map(p => p.join(",")).join(" L")}`} className={selection?.type === "strand" && selection.id === strand.id ? "research-map-strand-hit research-map-selected-strand" : "research-map-strand-hit"}
+              {map.strands.map(strand => <path key={strand.id} d={`M${strand.points.map(p => p.join(",")).join(" L")}`} className={selection?.type === "strand" && selection.id === strand.id ? "research-map-strand-hit research-map-selected-strand" : "research-map-strand-hit"} strokeWidth={18 * hs}
                 onPointerDown={e => { e.stopPropagation(); setSelection({ type: "strand", id: strand.id }); }} onDoubleClick={e => addPointAt(strand, e)}><title>{`${strandName(map, strand)}: double-click to add a bend`}</title></path>)}
               {map.items.filter(item => item.name.trim()).map(item => { const box = labelBox(item); return <rect key={item.id} x={box.x0 - 3} y={box.y0 - 3} width={box.x1 - box.x0 + 6} height={box.y1 - box.y0 + 6} rx={3}
                 className={selection?.type === "item" && selection.id === item.id ? "research-map-label-hit research-map-selected" : issueIds.has(item.id) && tab === "checks" ? "research-map-label-hit research-map-flagged" : "research-map-label-hit"}
@@ -308,18 +397,24 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
                 onPointerDown={e => { const [x, y] = toMap(e); begin(e, { kind: "zone", dx: x - z.x, dy: y - z.y }, { type: "zone", id: "zone" }); }}><title>Core zone: drag to move</title></rect>}
             </g>
             <g className="research-map-handles">
-              {selectedStrand && selectedStrand.points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={handleR} className={selection?.point === i ? "research-map-handle research-map-handle-active" : "research-map-handle"}
+              {selectedStrand && selectedStrand.points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={handleR * hs} className={selection?.point === i ? "research-map-handle research-map-handle-active" : "research-map-handle"}
                 onPointerDown={e => begin(e, { kind: "point", id: selectedStrand.id, index: i }, { type: "strand", id: selectedStrand.id, point: i })}><title>Drag this bend. Hold Alt to place it freely.</title></circle>)}
-              {selectedItem?.marker && selectedItem.marker.type !== "none" && <circle cx={selectedItem.marker.x} cy={selectedItem.marker.y} r={handleR + 3} className="research-map-handle research-map-handle-marker"
+              {selectedItem?.marker && selectedItem.marker.type !== "none" && <circle cx={selectedItem.marker.x} cy={selectedItem.marker.y} r={(handleR + 3) * hs} className="research-map-handle research-map-handle-marker"
                 onPointerDown={e => begin(e, { kind: "marker", id: selectedItem.id }, { type: "item", id: selectedItem.id })}><title>Drag the station</title></circle>}
-              {selectedItem?.feeds && <circle cx={selectedItem.feeds.at[0]} cy={selectedItem.feeds.at[1]} r={handleR - 2} className="research-map-handle research-map-handle-feed"
+              {selectedItem?.feeds && <circle cx={selectedItem.feeds.at[0]} cy={selectedItem.feeds.at[1]} r={(handleR - 2) * hs} className="research-map-handle research-map-handle-feed"
                 onPointerDown={e => begin(e, { kind: "feed", id: selectedItem.id }, { type: "item", id: selectedItem.id })}><title>Drag where this joins its strand</title></circle>}
-              {z && selection?.type === "zone" && <rect x={z.x + z.w - 9} y={z.y + z.h - 9} width={18} height={18} className="research-map-handle"
+              {z && selection?.type === "zone" && <rect x={z.x + z.w - 9 * hs} y={z.y + z.h - 9 * hs} width={18 * hs} height={18 * hs} className="research-map-handle"
                 onPointerDown={e => begin(e, { kind: "zone-size" }, { type: "zone", id: "zone" })}><title>Drag to resize the zone</title></rect>}
             </g>
           </svg>
+          <div className="research-map-zoom" onPointerDown={e => e.stopPropagation()}>
+            <button type="button" onClick={() => zoomAt(0.8)} aria-label="Zoom out" title="Zoom out (−)">−</button>
+            <button type="button" className="research-map-zoom-level" onClick={() => setView(v => ({ ...(v || fitView()), scale: 1 }))} title="Actual size (1)">{Math.round(current.scale * 100)}%</button>
+            <button type="button" onClick={() => zoomAt(1.25)} aria-label="Zoom in" title="Zoom in (+)">+</button>
+            <button type="button" onClick={() => setView(fitView())} title="Fit the whole map (0)">Fit</button>
+          </div>
         </div>}
-        <p className="research-map-hint">Drag labels, stations and project circles. Select a strand to drag its bends; double-click a strand to add a bend. Bends snap to 0°, 45° and 90° (hold Alt to place freely). Arrow keys nudge, Delete removes, Ctrl+Z undoes.</p>
+        <p className="research-map-hint">Zoom with pinch or Ctrl/⌘ + scroll; scroll or drag the background to pan (hold Space to pan from anywhere). Keys: + and − zoom, 0 fits, 1 is actual size. Drag labels, stations and project circles. Select a strand to drag its bends; double-click a strand to add a bend. Bends snap to 0°, 45° and 90° (hold Alt to place freely). Arrow keys nudge, Delete removes, Ctrl+Z undoes.</p>
       </div>
 
       <aside className="research-map-panel">
