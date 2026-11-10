@@ -32,6 +32,7 @@ export default async function LibraryItemPage({ params }: { params: Promise<{kin
     <div className="source-workspace"><section className="source-main">
       {image && url && <MediaLightbox items={[{...item,signedUrl:url,sortOrder:0}]} />}
       {kind === "media" && <div className="detail-actions">{url ? <a className="button" href={url} target="_blank" rel="noreferrer">Open original ↗</a> : <p role="status">The file could not be opened. Refresh to retry.</p>}</div>}
+      {kind === "media" && item.metadata?.origin === "research_map" && typeof item.metadata?.research_map_snapshot_id === "string" && <p className="source-text"><Link href={`/tenure/map?version=${item.metadata.research_map_snapshot_id}`}>Open this version in the Research map, to compare or restore it ↗</Link></p>}
       {kind === "media" && item.source_page && typeof item.metadata?.source_document_id === "string" && <p className="source-text"><Link href={`/library/items/media/${item.metadata.source_document_id}`}>View source PDF, page {item.source_page} ↗</Link></p>}
       <p className="source-text">{kind === "note" ? item.plain_text : item.caption}</p>
       {self && <ItemTags id={id} tags={self.tagIds.map((tagId, index) => ({ id: tagId, name: self.tags[index] }))} />}

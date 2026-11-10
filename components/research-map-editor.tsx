@@ -6,9 +6,9 @@ import {
   type Issue, type Item, type LogEntry, type MapStyle, type MarkerPaint, type MarkerType, type Pt, type ResearchMap, type Strand,
 } from "@/lib/research-map";
 import { seedMap } from "@/lib/research-map-seed";
-import { deleteResearchMapSnapshot, saveResearchMap, saveResearchMapSnapshot } from "@/app/(workspace)/tenure/map/actions";
+import { deleteResearchMapSnapshot, saveResearchMap, saveResearchMapSnapshot, saveResearchMapToLibrary } from "@/app/(workspace)/tenure/map/actions";
 
-type Snapshot = { id: string; name: string; createdAt: string; map: ResearchMap };
+type Snapshot = { id: string; name: string; createdAt: string; map: ResearchMap; mediaId?: string };
 type Selection = { type: "item" | "strand" | "project" | "zone" | "shape"; id: string; point?: number } | null;
 type Drag =
   | { kind: "label"; id: string; dx: number; dy: number }
@@ -59,20 +59,21 @@ function download(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: initialSnapshots, projects }: { initial: ResearchMap; isNew: boolean; log: LogEntry[]; snapshots: Snapshot[]; projects: { id: string; title: string }[] }) {
+export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: initialSnapshots, projects, openVersion }: { initial: ResearchMap; isNew: boolean; log: LogEntry[]; snapshots: Snapshot[]; projects: { id: string; title: string }[]; openVersion?: string }) {
   const [map, setMap] = useState(initial);
   const [past, setPast] = useState<ResearchMap[]>([]);
   const [future, setFuture] = useState<ResearchMap[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
-  const [tab, setTab] = useState<Tab>("content");
+  const [tab, setTab] = useState<Tab>(openVersion ? "history" : "content");
   const [snap, setSnap] = useState(true);
   const [dirty, setDirty] = useState(isNew);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ error?: boolean; text: string } | null>(null);
+  const [message, setMessage] = useState<{ error?: boolean; text: string; href?: string } | null>(null);
   const [log, setLog] = useState(initialLog);
   const [snapshots, setSnapshots] = useState(initialSnapshots);
   const [snapshotName, setSnapshotName] = useState("");
-  const [compare, setCompare] = useState<Snapshot | null>(null);
+  const [compare, setCompare] = useState<Snapshot | null>(() => initialSnapshots.find(s => s.id === openVersion) || null);
+  const [libraryBusy, setLibraryBusy] = useState(false);
   const [filter, setFilter] = useState("");
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
@@ -352,14 +353,31 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
 
   // ---------- export ----------
   const exportSvg = () => download(`research-map-${today()}.svg`, new Blob([renderMapSvg(map)], { type: "image/svg+xml" }));
-  const exportPng = () => {
+  const pngBlob = () => new Promise<Blob>((resolve, reject) => {
     const img = new Image(); const url = URL.createObjectURL(new Blob([renderMapSvg(map)], { type: "image/svg+xml" }));
     img.onload = () => {
       const canvas = document.createElement("canvas"); canvas.width = map.width * 2; canvas.height = map.height * 2;
       const ctx = canvas.getContext("2d")!; ctx.scale(2, 2); ctx.drawImage(img, 0, 0); URL.revokeObjectURL(url);
-      canvas.toBlob(blob => { if (blob) download(`research-map-${today()}.png`, blob); }, "image/png");
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("The map image could not be made.")), "image/png");
     };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("The map image could not be made.")); };
     img.src = url;
+  });
+  const exportPng = () => { pngBlob().then(blob => download(`research-map-${today()}.png`, blob)).catch(error => setMessage({ error: true, text: error.message })); };
+  // Saves this version to the Library as an image, with its data kept so it can be reopened or restored.
+  const saveToLibrary = async () => {
+    const name = window.prompt("Name this version for the Library", snapshotName.trim() || `${map.title}, ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`);
+    if (!name?.trim()) return;
+    setLibraryBusy(true); setMessage(null);
+    try {
+      const form = new FormData();
+      form.set("name", name.trim()); form.set("map", JSON.stringify(map)); form.set("width", String(map.width * 2)); form.set("height", String(map.height * 2));
+      form.set("image", new File([await pngBlob()], "research-map.png", { type: "image/png" }));
+      const { snapshot } = await saveResearchMapToLibrary(form);
+      setSnapshots(list => [snapshot, ...list]); setSnapshotName("");
+      setMessage({ text: `Saved “${snapshot.name}” to the Library.`, href: `/library/items/media/${snapshot.mediaId}` });
+    } catch (error) { setMessage({ error: true, text: error instanceof Error ? error.message : "Could not save to the Library. Please retry." }); }
+    finally { setLibraryBusy(false); }
   };
   const exportPdf = () => {
     const win = window.open("", "_blank"); if (!win) { setMessage({ error: true, text: "Allow pop-ups to print or save a PDF." }); return; }
@@ -373,7 +391,7 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
     catch (error) { setMessage({ error: true, text: error instanceof Error ? error.message : "Could not save the snapshot." }); }
   };
   const removeSnapshot = async (snap: Snapshot) => {
-    if (!window.confirm(`Delete the snapshot “${snap.name}”? This can't be undone.`)) return;
+    if (!window.confirm(`Delete the snapshot “${snap.name}”? This can't be undone.${snap.mediaId ? " Its image stays in the Library." : ""}`)) return;
     try { await deleteResearchMapSnapshot(snap.id); setSnapshots(list => list.filter(s => s.id !== snap.id)); if (compare?.id === snap.id) setCompare(null); }
     catch (error) { setMessage({ error: true, text: error instanceof Error ? error.message : "Could not delete the snapshot." }); }
   };
@@ -416,11 +434,12 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       <label className="research-map-toggle"><input type="checkbox" checked={snap} onChange={e => setSnap(e.target.checked)} /> Snap to 45°</label>
       <span className="research-map-spacer" />
       <button type="button" className={issues.length ? "button research-map-checks-button research-map-checks-open" : "button research-map-checks-button"} onClick={() => setTab("checks")}>{issues.length ? `${issues.length} to review${fixes ? ` · ${fixes} to fix` : ""}` : "All checks pass"}</button>
+      <button type="button" className="button" onClick={() => void saveToLibrary()} disabled={libraryBusy} title="Save this version to the Library as an image, with its data kept so you can reopen it">{libraryBusy ? "Saving to Library…" : "Save to Library"}</button>
       <button type="button" className="button" onClick={exportSvg}>SVG</button>
       <button type="button" className="button" onClick={exportPng}>PNG</button>
       <button type="button" className="button" onClick={exportPdf}>Print / PDF</button>
     </div>
-    {message && <p className={message.error ? "notice notice-error" : "research-map-message"} role={message.error ? "alert" : "status"}>{message.text}</p>}
+    {message && <p className={message.error ? "notice notice-error" : "research-map-message"} role={message.error ? "alert" : "status"}>{message.text}{message.href && <> <a href={message.href}>Open in the Library ↗</a></>}</p>}
 
     <div className="research-map-body">
       <div className="research-map-stage">
@@ -580,10 +599,11 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
 
         {tab === "history" && <div className="research-map-pane">
           <section className="research-map-form">
-            <h3>Snapshots</h3>
-            <p className="research-map-hint">Freeze the map at a milestone, such as a review, and compare later versions with it.</p>
+            <h3>Saved versions</h3>
+            <p className="research-map-hint">Freeze the map at a milestone, such as a review, and compare later versions with it. “Save to Library” also puts an image of it in your Library, where it can go on boards and in projects.</p>
             <div className="research-map-row"><input value={snapshotName} placeholder="e.g. Third-year review" onChange={e => setSnapshotName(e.target.value)} /><button type="button" className="button" onClick={() => void takeSnapshot()}>Save snapshot</button></div>
-            {snapshots.length ? <ul className="research-map-snapshots">{snapshots.map(s => <li key={s.id}><div><strong>{s.name}</strong><span>{dateLabel(s.createdAt)}</span></div>
+            <button type="button" className="button" onClick={() => void saveToLibrary()} disabled={libraryBusy}>{libraryBusy ? "Saving to Library…" : "Save to Library"}</button>
+            {snapshots.length ? <ul className="research-map-snapshots">{snapshots.map(s => <li key={s.id}><div><strong>{s.name}</strong><span>{dateLabel(s.createdAt)}{s.mediaId && <> · <a href={`/library/items/media/${s.mediaId}`}>In Library ↗</a></>}</span></div>
               <button type="button" className="text-button" onClick={() => setCompare(s)}>Compare</button>
               <button type="button" className="text-button" onClick={() => { if (window.confirm(`Replace the current map with “${s.name}”? You can undo this.`)) commit(structuredClone(s.map)); }}>Restore</button>
               <button type="button" className="text-button research-map-danger" onClick={() => void removeSnapshot(s)}>Delete</button></li>)}</ul> : <p className="research-map-hint">No snapshots yet.</p>}
