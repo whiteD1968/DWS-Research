@@ -1,15 +1,15 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  axes, checkMap, defaultStyle, diffMaps, fills, fontLabels, fonts, grounds, hatches, influenceDashes, kindLabels, kinds, labelBox, labelLines, markerLabels, markers, metricsFor,
+  axes, axisPlanes, checkMap, defaultStyle, markerBox, markerFillKind, markerFillLabels, markerFills, shapeBounds, shapesOf, type Shape, diffMaps, fills, fontLabels, fonts, grounds, hatches, influenceDashes, kindLabels, kinds, labelBox, labelLines, markerLabels, markers, metricsFor,
   nearestOnPolyline, newId, outlines, renderMapInner, renderMapSvg, routeLabels, routes, snapBetween, snapDirection, strandDashes, styleOf, stylePresets,
-  type Issue, type Item, type LogEntry, type MapStyle, type MarkerType, type Pt, type ResearchMap, type Strand,
+  type Issue, type Item, type LogEntry, type MapStyle, type MarkerPaint, type MarkerType, type Pt, type ResearchMap, type Strand,
 } from "@/lib/research-map";
 import { seedMap } from "@/lib/research-map-seed";
 import { deleteResearchMapSnapshot, saveResearchMap, saveResearchMapSnapshot } from "@/app/(workspace)/tenure/map/actions";
 
 type Snapshot = { id: string; name: string; createdAt: string; map: ResearchMap };
-type Selection = { type: "item" | "strand" | "project" | "zone"; id: string; point?: number } | null;
+type Selection = { type: "item" | "strand" | "project" | "zone" | "shape"; id: string; point?: number } | null;
 type Drag =
   | { kind: "label"; id: string; dx: number; dy: number }
   | { kind: "marker"; id: string }
@@ -18,7 +18,10 @@ type Drag =
   | { kind: "project"; id: string; dx: number; dy: number }
   | { kind: "zone"; dx: number; dy: number }
   | { kind: "zone-size" }
-  | { kind: "pan"; sx: number; sy: number; cx: number; cy: number; moved: boolean };
+  | { kind: "zone-move"; sx: number; sy: number; ox: number; oy: number }
+  | { kind: "shape"; id: string; sx: number; sy: number; orig: Pt[] }
+  | { kind: "shape-point"; id: string; index: number }
+  | { kind: "pan"; sx: number; sy: number; cx: number; cy: number; moved: boolean; pick?: Selection };
 type View = { cx: number; cy: number; scale: number };
 const MIN_SCALE = 0.08; const MAX_SCALE = 8;
 const clampScale = (n: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, n));
@@ -30,12 +33,20 @@ function zoomView(v: View, factor: number, clientX?: number, clientY?: number, r
   const px = v.cx + (clientX - rect.left - rect.width / 2) / v.scale; const py = v.cy + (clientY - rect.top - rect.height / 2) / v.scale;
   return { cx: px - (px - v.cx) * k, cy: py - (py - v.cy) * k, scale };
 }
-type Tab = "content" | "checks" | "map" | "style" | "history";
+type Tab = "content" | "checks" | "map" | "layers" | "style" | "history";
 
 const grid = (n: number, on: boolean, step = 5) => on ? Math.round(n / step) * step : Math.round(n * 10) / 10;
 const dateLabel = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 const today = () => new Date().toISOString().slice(0, 10);
 const oneLine = (name: string) => name.replace(/\n/g, " ") || "Untitled";
+// Edits shapes on a map whose planes may still be generated from the style: the first edit makes them real shapes.
+const withShapes = (map: ResearchMap, change: (shapes: Shape[]) => Shape[]): ResearchMap => ({ ...map, shapes: change(shapesOf(map)) });
+const shapeTemplates = {
+  rectangle: { name: "Rectangle", kind: "polygon", points: [[0, 0], [360, 0], [360, 220], [0, 220]] },
+  circle: { name: "Circle", kind: "ellipse", points: [[0, 0], [260, 260]] },
+  triangle: { name: "Triangle", kind: "polygon", points: [[180, 0], [360, 260], [0, 260]] },
+  plane: { name: "Skewed plane", kind: "polygon", points: [[120, 0], [600, 0], [480, 220], [0, 220]] },
+} as const;
 
 export function strandName(map: ResearchMap, strand: Strand) {
   const start = map.items.find(item => item.marker?.type === "start" && item.marker.strand === strand.id);
@@ -140,6 +151,13 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       commit(current => ({ ...current, strands: current.strands.filter(s => s.id !== selection.id) }));
     }
     if (selection.type === "zone") commit(current => ({ ...current, zone: null }));
+    if (selection.type === "shape") {
+      if (selection.point !== undefined) {
+        commit(current => withShapes(current, list => list.map(sh => sh.id === selection.id && sh.kind === "polygon" && sh.points.length > 3 ? { ...sh, points: sh.points.filter((_, i) => i !== selection.point) } : sh)));
+        setSelection({ type: "shape", id: selection.id }); return;
+      }
+      commit(current => withShapes(current, list => list.filter(sh => sh.id !== selection.id)));
+    }
     setSelection(null);
   }, [selection, commit]);
 
@@ -160,6 +178,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       const step = event.shiftKey ? 10 : 1;
       const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
       if (move && selection?.type === "item") { event.preventDefault(); updateItem(selection.id, item => ({ ...item, x: item.x + move[0], y: item.y + move[1] })); }
+      if (move && selection?.type === "shape") { event.preventDefault(); commit(c => withShapes(c, list => list.map(sh => sh.id === selection.id ? { ...sh, points: sh.points.map(p => [p[0] + move[0], p[1] + move[1]] as Pt) } : sh))); }
+      if (move && selection?.type === "zone") { event.preventDefault(); commit(c => ({ ...c, zone: c.zone && { ...c.zone, x: c.zone.x + move[0], y: c.zone.y + move[1] } })); }
       if (move && selection?.type === "project") { event.preventDefault(); commit(c => ({ ...c, projects: c.projects.map(p => p.id === selection.id ? { ...p, x: p.x + move[0], y: p.y + move[1] } : p) })); }
     };
     const onSpace = (event: KeyboardEvent) => {
@@ -185,18 +205,26 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
     const p = point.matrixTransform(svg.getScreenCTM()!.inverse());
     return [p.x, p.y];
   };
-  const startPan = (event: ReactPointerEvent) => {
+  const startPan = (event: ReactPointerEvent, pick?: Selection) => {
     const v = viewRef.current || fitView();
     svgRef.current?.setPointerCapture(event.pointerId);
-    drag.current = { kind: "pan", sx: event.clientX, sy: event.clientY, cx: v.cx, cy: v.cy, moved: false };
+    drag.current = { kind: "pan", sx: event.clientX, sy: event.clientY, cx: v.cx, cy: v.cy, moved: false, pick };
   };
-  const onBackgroundDown = (event: ReactPointerEvent) => {
+  // Large shapes and the core zone sit under everything: a click selects them, a drag still pans,
+  // and once selected, dragging moves them.
+  const onAreaDown = (event: ReactPointerEvent, pick: Selection, move: Drag) => {
+    event.stopPropagation();
+    const selected = selection?.type === pick?.type && selection?.id === pick?.id;
+    if (selected && event.button === 0 && !spaceDown.current && pointers.current.size === 0) { begin(event, move, pick); return; }
+    onBackgroundDown(event, pick);
+  };
+  const onBackgroundDown = (event: ReactPointerEvent, pick?: Selection) => {
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), scale: (viewRef.current || fitView()).scale }; drag.current = null; return;
     }
-    startPan(event);
+    startPan(event, pick);
   };
 
   const begin = (event: ReactPointerEvent, next: Drag, select: Selection) => {
@@ -235,6 +263,12 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       if (d.kind === "label") return { ...current, items: current.items.map(item => item.id === d.id ? { ...item, x: grid(x - d.dx, !free), y: grid(y - d.dy, !free) } : item) };
       if (d.kind === "project") return { ...current, projects: current.projects.map(p => p.id === d.id ? { ...p, x: grid(x - d.dx, !free), y: grid(y - d.dy, !free) } : p) };
       if (d.kind === "zone" && current.zone) return { ...current, zone: { ...current.zone, x: grid(x - d.dx, !free), y: grid(y - d.dy, !free) } };
+      if (d.kind === "zone-move" && current.zone) { const [sx, sy] = toMap({ clientX: d.sx, clientY: d.sy }); return { ...current, zone: { ...current.zone, x: grid(d.ox + x - sx, !free), y: grid(d.oy + y - sy, !free) } }; }
+      if (d.kind === "shape") {
+        const [sx, sy] = toMap({ clientX: d.sx, clientY: d.sy }); const dx = grid(x - sx, !free); const dy = grid(y - sy, !free);
+        return withShapes(current, list => list.map(sh => sh.id === d.id ? { ...sh, points: d.orig.map(p => [p[0] + dx, p[1] + dy] as Pt) } : sh));
+      }
+      if (d.kind === "shape-point") return withShapes(current, list => list.map(sh => sh.id === d.id ? { ...sh, points: sh.points.map((q, i) => i === d.index ? [grid(x, !free), grid(y, !free)] as Pt : q) } : sh));
       if (d.kind === "zone-size" && current.zone) return { ...current, zone: { ...current.zone, w: Math.max(80, grid(x - current.zone.x, !free)), h: Math.max(60, grid(y - current.zone.y, !free)) } };
       if (d.kind === "feed") return { ...current, items: current.items.map(item => {
         if (item.id !== d.id || !item.feeds) return item;
@@ -264,7 +298,7 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
   const onUp = (event: ReactPointerEvent) => {
     pointers.current.delete(event.pointerId); if (pointers.current.size < 2) pinch.current = null;
     const d = drag.current; drag.current = null;
-    if (d?.kind === "pan" && !d.moved && event.target === svgRef.current) setSelection(null);
+    if (d?.kind === "pan" && !d.moved) setSelection(d.pick ?? null);
   };
   const addPointAt = (strand: Strand, event: React.MouseEvent) => {
     const p = toMap(event); let best = { i: 1, d: Infinity };
@@ -308,6 +342,14 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
     setSelection({ type: "project", id }); setTab("content");
   };
 
+  const addShape = (key: keyof typeof shapeTemplates) => {
+    const t = shapeTemplates[key]; const id = newId("shape", shapesOf(map).map(sh => sh.id));
+    const v = viewRef.current || fitView(); const ox = Math.round(v.cx - 180); const oy = Math.round(v.cy - 120);
+    const shape: Shape = { id, name: t.name, kind: t.kind, points: t.points.map(p => [p[0] + ox, p[1] + oy] as Pt), fill: "#F2A890", opacity: 0.35, hatch: "none", stroke: styleOf(map).ink, strokeWidth: 1.5, outline: "none" };
+    commit(c => withShapes(c, list => [...list, shape])); setSelection({ type: "shape", id }); setTab("content");
+  };
+  const addAxisPlanes = () => commit(c => withShapes(c, list => { const taken = new Set(list.map(sh => sh.id)); return [...axisPlanes(c).map(sh => taken.has(sh.id) ? { ...sh, id: newId(`${sh.id}-`, [...taken]) } : sh), ...list]; }));
+
   // ---------- export ----------
   const exportSvg = () => download(`research-map-${today()}.svg`, new Blob([renderMapSvg(map)], { type: "image/svg+xml" }));
   const exportPng = () => {
@@ -347,6 +389,10 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
   const selectedItem = selection?.type === "item" ? map.items.find(i => i.id === selection.id) : undefined;
   const selectedStrand = selection?.type === "strand" ? map.strands.find(s => s.id === selection.id) : undefined;
   const selectedProject = selection?.type === "project" ? map.projects.find(p => p.id === selection.id) : undefined;
+  const shapes = shapesOf(map);
+  const selectedShape = selection?.type === "shape" ? shapes.find(sh => sh.id === selection.id) : undefined;
+  const style = styleOf(map);
+  const updateShape = (id: string, change: Partial<Shape>) => commit(c => withShapes(c, list => list.map(sh => sh.id === id ? { ...sh, ...change } : sh)));
   const issueIds = useMemo(() => new Set(issues.flatMap(i => [i.item, i.strand, i.project].filter(Boolean) as string[])), [issues]);
 
   // ---------- render ----------
@@ -364,6 +410,9 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
       <button type="button" className="button" onClick={addStation}>+ Station</button>
       <button type="button" className="button" onClick={addStrand}>+ Strand</button>
       <button type="button" className="button" onClick={addProject}>+ Project</button>
+      <select className="button research-map-add-shape" value="" aria-label="Add a shape" onChange={e => { if (e.target.value) addShape(e.target.value as keyof typeof shapeTemplates); }}>
+        <option value="">+ Shape</option>{Object.entries(shapeTemplates).map(([k, t]) => <option key={k} value={k}>{t.name}</option>)}
+      </select>
       <label className="research-map-toggle"><input type="checkbox" checked={snap} onChange={e => setSnap(e.target.checked)} /> Snap to 45°</label>
       <span className="research-map-spacer" />
       <button type="button" className={issues.length ? "button research-map-checks-button research-map-checks-open" : "button research-map-checks-button"} onClick={() => setTab("checks")}>{issues.length ? `${issues.length} to review${fixes ? ` · ${fixes} to fix` : ""}` : "All checks pass"}</button>
@@ -388,11 +437,21 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
             <rect x={-20000} y={-20000} width={40000} height={40000} fill="#dcdcd8" />
             <g dangerouslySetInnerHTML={{ __html: inner }} />
             <g className="research-map-hits">
+              {z && <rect x={z.x} y={z.y} width={z.w} height={z.h} className={selection?.type === "zone" ? "research-map-area-hit research-map-area-selected" : "research-map-area-hit"}
+                onPointerDown={e => onAreaDown(e, { type: "zone", id: "zone" }, { kind: "zone-move", sx: e.clientX, sy: e.clientY, ox: z.x, oy: z.y })}><title>Core zone: click to select, then drag to move</title></rect>}
+              {shapes.filter(sh => !sh.hidden).map(sh => { const b = shapeBounds(sh); const cls = selection?.type === "shape" && selection.id === sh.id ? "research-map-area-hit research-map-area-selected" : "research-map-area-hit";
+                const down = (e: ReactPointerEvent) => onAreaDown(e, { type: "shape", id: sh.id }, { kind: "shape", id: sh.id, sx: e.clientX, sy: e.clientY, orig: sh.points });
+                return sh.kind === "ellipse"
+                  ? <ellipse key={sh.id} cx={(b.x0 + b.x1) / 2} cy={(b.y0 + b.y1) / 2} rx={(b.x1 - b.x0) / 2} ry={(b.y1 - b.y0) / 2} className={cls} strokeWidth={1.5 * hs} onPointerDown={down}><title>{sh.name || "Shape"}</title></ellipse>
+                  : <polygon key={sh.id} points={sh.points.map(p => p.join(",")).join(" ")} className={cls} strokeWidth={1.5 * hs} onPointerDown={down}><title>{sh.name || "Shape"}</title></polygon>; })}
               {map.strands.map(strand => <path key={strand.id} d={`M${strand.points.map(p => p.join(",")).join(" L")}`} className={selection?.type === "strand" && selection.id === strand.id ? "research-map-strand-hit research-map-selected-strand" : "research-map-strand-hit"} strokeWidth={18 * hs}
                 onPointerDown={e => { e.stopPropagation(); setSelection({ type: "strand", id: strand.id }); }} onDoubleClick={e => addPointAt(strand, e)}><title>{`${strandName(map, strand)}: double-click to add a bend`}</title></path>)}
               {map.items.filter(item => item.name.trim()).map(item => { const box = labelBox(item, metrics); return <rect key={item.id} x={box.x0 - 3} y={box.y0 - 3} width={box.x1 - box.x0 + 6} height={box.y1 - box.y0 + 6} rx={3}
                 className={selection?.type === "item" && selection.id === item.id ? "research-map-label-hit research-map-selected" : issueIds.has(item.id) && tab === "checks" ? "research-map-label-hit research-map-flagged" : "research-map-label-hit"}
                 onPointerDown={e => { const [x, y] = toMap(e); begin(e, { kind: "label", id: item.id, dx: x - item.x, dy: y - item.y }, { type: "item", id: item.id }); }}><title>{oneLine(item.name)}</title></rect>; })}
+              {map.items.filter(item => item.marker && item.marker.type !== "none").map(item => { const b = markerBox(item.marker!, style); return <rect key={`m-${item.id}`} x={b.x0} y={b.y0} width={b.x1 - b.x0} height={b.y1 - b.y0} rx={b.r}
+                className={selection?.type === "item" && selection.id === item.id ? "research-map-marker-hit research-map-selected" : "research-map-marker-hit"}
+                onPointerDown={e => begin(e, { kind: "marker", id: item.id }, { type: "item", id: item.id })}><title>{`${markerLabels[item.marker!.type]}: ${oneLine(item.name)}`}</title></rect>; })}
               {map.projects.map(p => <circle key={p.id} cx={p.x} cy={p.y} r={19} className={selection?.type === "project" && selection.id === p.id ? "research-map-project-hit research-map-selected" : "research-map-project-hit"}
                 onPointerDown={e => { const [x, y] = toMap(e); begin(e, { kind: "project", id: p.id, dx: x - p.x, dy: y - p.y }, { type: "project", id: p.id }); }}><title>{`${p.code}${p.name ? `: ${p.name}` : " (placeholder)"}`}</title></circle>)}
               {z && <rect x={z.x + z.w - 220} y={z.y + 6} width={210} height={28} className={selection?.type === "zone" ? "research-map-label-hit research-map-selected" : "research-map-label-hit"}
@@ -405,6 +464,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
                 onPointerDown={e => begin(e, { kind: "marker", id: selectedItem.id }, { type: "item", id: selectedItem.id })}><title>Drag the station</title></circle>}
               {selectedItem?.feeds && <circle cx={selectedItem.feeds.at[0]} cy={selectedItem.feeds.at[1]} r={(handleR - 2) * hs} className="research-map-handle research-map-handle-feed"
                 onPointerDown={e => begin(e, { kind: "feed", id: selectedItem.id }, { type: "item", id: selectedItem.id })}><title>Drag where this joins its strand</title></circle>}
+              {selectedShape && selectedShape.points.map((p, i) => <rect key={i} x={p[0] - 7 * hs} y={p[1] - 7 * hs} width={14 * hs} height={14 * hs} className={selection?.point === i ? "research-map-handle research-map-handle-active" : "research-map-handle"}
+                onPointerDown={e => begin(e, { kind: "shape-point", id: selectedShape.id, index: i }, { type: "shape", id: selectedShape.id, point: i })}><title>{selectedShape.kind === "ellipse" ? "Drag to resize" : "Drag this corner"}</title></rect>)}
               {z && selection?.type === "zone" && <rect x={z.x + z.w - 9 * hs} y={z.y + z.h - 9 * hs} width={18 * hs} height={18 * hs} className="research-map-handle"
                 onPointerDown={e => begin(e, { kind: "zone-size" }, { type: "zone", id: "zone" })}><title>Drag to resize the zone</title></rect>}
             </g>
@@ -416,17 +477,23 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
             <button type="button" onClick={() => setView(fitView())} title="Fit the whole map (0)">Fit</button>
           </div>
         </div>}
-        <p className="research-map-hint">Zoom with pinch or Ctrl/⌘ + scroll; scroll or drag the background to pan (hold Space to pan from anywhere). Keys: + and − zoom, 0 fits, 1 is actual size. Drag labels, stations and project circles. Select a strand to drag its bends; double-click a strand to add a bend. Bends snap to 0°, 45° and 90° (hold Alt to place freely). Arrow keys nudge, Delete removes, Ctrl+Z undoes.</p>
+        <p className="research-map-hint">Zoom with pinch or Ctrl/⌘ + scroll; scroll or drag the background to pan (hold Space to pan from anywhere). Keys: + and − zoom, 0 fits, 1 is actual size. Click a station, shape or the core zone to select it, then drag to move it; drag the square handles to reshape. Drag labels and project circles. Select a strand to drag its bends; double-click a strand to add a bend. Bends snap to 0°, 45° and 90° (hold Alt to place freely). Arrow keys nudge, Delete removes, Ctrl+Z undoes.</p>
       </div>
 
       <aside className="research-map-panel">
         <div className="research-map-tabs" role="tablist">
-          {(["content", "checks", "map", "style", "history"] as Tab[]).map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "research-map-tab research-map-tab-active" : "research-map-tab"} onClick={() => setTab(t)}>
-            {{ content: "Content", checks: `Checks${issues.length ? ` (${issues.length})` : ""}`, map: "Map", style: "Style", history: "History" }[t]}</button>)}
+          {(["content", "checks", "map", "layers", "style", "history"] as Tab[]).map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "research-map-tab research-map-tab-active" : "research-map-tab"} onClick={() => setTab(t)}>
+            {{ content: "Content", checks: `Checks${issues.length ? ` (${issues.length})` : ""}`, map: "Map", layers: "Layers", style: "Style", history: "History" }[t]}</button>)}
         </div>
 
         {tab === "content" && <div className="research-map-pane">
           {selectedItem && <ItemForm key={selectedItem.id} item={selectedItem} map={map} nameRef={nameRef} onChange={change => updateItem(selectedItem.id, change)} onDelete={removeSelection} onClose={() => setSelection(null)} issues={issues.filter(i => i.item === selectedItem.id)} />}
+          {selectedItem?.marker && selectedItem.marker.type !== "none" && <MarkerPaintForm item={selectedItem} map={map} onChange={paint => updateItem(selectedItem.id, current => { const marker = { ...current.marker! }; if (paint) marker.paint = paint; else delete marker.paint; return { ...current, marker }; })} />}
+          {selectedShape && <ShapeForm key={selectedShape.id} shape={selectedShape} onChange={change => updateShape(selectedShape.id, change)} onClose={() => setSelection(null)}
+            onDuplicate={() => { const id = newId("shape", shapes.map(sh => sh.id)); commit(c => withShapes(c, list => [...list, { ...selectedShape, id, name: `${selectedShape.name} copy`, points: selectedShape.points.map(p => [p[0] + 30, p[1] + 30] as Pt) }])); setSelection({ type: "shape", id }); }}
+            onDelete={() => { commit(c => withShapes(c, list => list.filter(sh => sh.id !== selectedShape.id))); setSelection(null); }}
+            onRemovePoint={selection?.point !== undefined && selectedShape.kind === "polygon" && selectedShape.points.length > 3 ? removeSelection : undefined}
+            onAddPoint={selectedShape.kind === "polygon" ? () => updateShape(selectedShape.id, { points: (() => { const pts = selectedShape.points; const i = selection?.point ?? pts.length - 1; const a = pts[i]; const b = pts[(i + 1) % pts.length]; const mid: Pt = [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2)]; return [...pts.slice(0, i + 1), mid, ...pts.slice(i + 1)]; })() }) : undefined} />}
           {selectedStrand && <div className="research-map-form">
             <div className="research-map-form-head"><span className="research-map-swatch" style={{ background: map.axes[selectedStrand.axis].color }} /><strong>{strandName(map, selectedStrand)}</strong><button type="button" className="text-button" onClick={() => setSelection(null)}>Done</button></div>
             <label>Axis<select value={selectedStrand.axis} onChange={e => commit(c => ({ ...c, strands: c.strands.map(s => s.id === selectedStrand.id ? { ...s, axis: e.target.value as Strand["axis"] } : s) }))}>{axes.map(a => <option key={a} value={a}>{map.axes[a].label}</option>)}</select></label>
@@ -446,7 +513,11 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
           </div>}
           {selection?.type === "zone" && z && <div className="research-map-form">
             <div className="research-map-form-head"><strong>Core zone</strong><button type="button" className="text-button" onClick={() => setSelection(null)}>Done</button></div>
-            <p className="research-map-hint">Drag its title to move it, and the square handle at its corner to resize. Its title and size are also under Map.</p>
+            <p className="research-map-hint">Drag it to move it (arrow keys nudge), and drag the square handle at its corner to resize it.</p>
+            <label>Title<input value={z.title} onChange={e => commit(c => ({ ...c, zone: c.zone && { ...c.zone, title: e.target.value } }))} /></label>
+            <AppearanceFields fill={style.zoneFill} opacity={style.zoneOpacity} hatch={style.zoneHatch} outline={style.zoneOutline}
+              onChange={change => commit(c => ({ ...c, style: { ...styleOf(c), ...(change.fill !== undefined ? { zoneFill: change.fill } : {}), ...(change.opacity !== undefined ? { zoneOpacity: change.opacity } : {}), ...(change.hatch ? { zoneHatch: change.hatch } : {}), ...(change.outline ? { zoneOutline: change.outline } : {}) } }))} />
+            <button type="button" className="text-button research-map-danger" onClick={removeSelection}>Delete the core zone</button>
           </div>}
 
           {!selection && <>
@@ -483,6 +554,26 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
           </> : <button type="button" className="button" onClick={() => commit(c => ({ ...c, zone: { x: 1050, y: 555, w: 615, h: 190, title: "Core contribution" } }))}>Add a core zone</button>}
           <h3>Start over</h3>
           <button type="button" className="text-button research-map-danger" onClick={() => { if (window.confirm("Replace this map with the November 2026 redraw? You can undo this until you leave the page.")) commit(structuredClone(seedMap)); }}>Reset to the November 2026 redraw</button>
+        </div>}
+
+        {tab === "layers" && <div className="research-map-pane research-map-form research-map-layers">
+          <h3>Shapes</h3>
+          <p className="research-map-hint">Listed top to bottom in drawing order. Shapes “over lines” are drawn above the strands.</p>
+          {shapes.length ? <ul>{[...shapes].reverse().map(sh => { const i = shapes.indexOf(sh); return <li key={sh.id} className={selectedShape?.id === sh.id ? "research-map-layer research-map-layer-active" : "research-map-layer"}>
+            <button type="button" className="research-map-eye" aria-label={sh.hidden ? "Show" : "Hide"} title={sh.hidden ? "Show" : "Hide"} onClick={() => updateShape(sh.id, { hidden: !sh.hidden })}>{sh.hidden ? "○" : "●"}</button>
+            <span className="research-map-swatch" style={{ background: sh.fill, opacity: sh.hidden ? 0.3 : 1 }} />
+            <button type="button" className="research-map-layer-name" onClick={() => { setSelection({ type: "shape", id: sh.id }); setTab("content"); }}>{sh.name || "Untitled"}{sh.front ? " · over lines" : ""}</button>
+            <button type="button" aria-label="Move up" title="Move up" disabled={i === shapes.length - 1} onClick={() => commit(c => withShapes(c, list => { const next = [...list]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; return next; }))}>↑</button>
+            <button type="button" aria-label="Move down" title="Move down" disabled={i === 0} onClick={() => commit(c => withShapes(c, list => { const next = [...list]; [next[i], next[i - 1]] = [next[i - 1], next[i]]; return next; }))}>↓</button>
+            <button type="button" className="research-map-danger" aria-label="Delete" title="Delete" onClick={() => { commit(c => withShapes(c, list => list.filter(x => x.id !== sh.id))); if (selectedShape?.id === sh.id) setSelection(null); }}>✕</button>
+          </li>; })}</ul> : <p className="research-map-hint">No shapes yet.</p>}
+          <div className="research-map-row research-map-wrap">{Object.entries(shapeTemplates).map(([k, t]) => <button key={k} type="button" className="button" onClick={() => addShape(k as keyof typeof shapeTemplates)}>+ {t.name}</button>)}<button type="button" className="button" onClick={addAxisPlanes}>+ Axis planes</button></div>
+          <h3>Drawing layers</h3>
+          <label className="research-map-check"><input type="checkbox" checked={!!map.zone} onChange={e => commit(c => ({ ...c, zone: e.target.checked ? { x: 1050, y: 555, w: 615, h: 190, title: "Core contribution" } : null }))} />Core zone</label>
+          <label className="research-map-check"><input type="checkbox" checked={style.construction} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), construction: e.target.checked } }))} />Construction lines, scale and registration marks</label>
+          <label className="research-map-check"><input type="checkbox" checked={style.bands > 0} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), bands: e.target.checked ? 0.025 : 0 } }))} />Column shading</label>
+          <label className="research-map-check"><input type="checkbox" checked={style.ground !== "plain"} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), ground: e.target.checked ? "ledger" : "plain" } }))} />Ruled ground (ledger lines or grid)</label>
+          <p className="research-map-hint">Click a shape, station or the core zone on the canvas to select it. Delete removes the selection.</p>
         </div>}
 
         {tab === "style" && <StylePane map={map} commit={commit} />}
@@ -568,6 +659,15 @@ const styleNames = {
   zoneOutline: { solid: "Solid", dashed: "Dashed", none: "None" },
 } as const;
 
+const isPlane = (shape: Shape) => shape.id.startsWith("plane-");
+// Turns the generated axis planes on or off, keeping any other shapes as they are.
+function setPlanes(map: ResearchMap, on: boolean): ResearchMap {
+  const next = { ...map, style: { ...styleOf(map), planes: on } };
+  if (!map.shapes) return next;
+  const others = map.shapes.filter(sh => !isPlane(sh));
+  return { ...next, shapes: on ? (map.shapes.some(isPlane) ? map.shapes : [...axisPlanes(map), ...others]) : others };
+}
+
 // Every graphic setting for the whole map, plus presets to start from.
 function StylePane({ map, commit }: { map: ResearchMap; commit: (change: (current: ResearchMap) => ResearchMap) => void }) {
   const style = styleOf(map);
@@ -578,7 +678,8 @@ function StylePane({ map, commit }: { map: ResearchMap; commit: (change: (curren
   const saved = map.stylePresets || [];
   const savedChoice = preset.startsWith("saved:") ? saved[Number(preset.slice(6))] : null;
   const apply = (withColors: boolean) => commit(c => {
-    const next: ResearchMap = { ...c, style: { ...(savedChoice ? savedChoice.style : chosen?.style || defaultStyle) } };
+    const picked = { ...(savedChoice ? savedChoice.style : chosen?.style || defaultStyle) };
+    const next: ResearchMap = c.shapes ? setPlanes({ ...c, style: picked }, picked.planes) : { ...c, style: picked };
     if (withColors && chosen?.colors) { const colors = chosen.colors; next.axes = { material: { ...c.axes.material, color: colors.material }, structure: { ...c.axes.structure, color: colors.structure }, computation: { ...c.axes.computation, color: colors.computation } }; }
     return next;
   });
@@ -606,7 +707,7 @@ function StylePane({ map, commit }: { map: ResearchMap; commit: (change: (curren
     {color("background", "Paper")}
     {color("rule", "Rules and column lines")}
     {range("bands", "Column shading", 0, 0.12, 0.005)}
-    {toggle("planes", "Translucent axis planes")}
+    <label className="research-map-check"><input type="checkbox" checked={shapesOf(map).some(isPlane)} onChange={e => commit(c => setPlanes(c, e.target.checked))} />Translucent axis planes (edit each one under Layers)</label>
     {toggle("construction", "Construction lines, scale and registration marks")}
 
     <h3>Strands</h3>
@@ -639,5 +740,52 @@ function StylePane({ map, commit }: { map: ResearchMap; commit: (change: (curren
     {select("zoneOutline", outlines, "Outline")}
 
     <button type="button" className="text-button" onClick={() => commit(c => { const next = { ...c }; delete next.style; return next; })}>Back to the default style</button>
+  </div>;
+}
+
+type Appearance = { fill: string; opacity: number; hatch: Shape["hatch"]; outline: Shape["outline"] };
+function AppearanceFields({ fill, opacity, hatch, outline, onChange }: Appearance & { onChange: (change: Partial<Appearance>) => void }) {
+  return <>
+    <label className="research-map-color">Fill<input type="color" value={fill} onChange={e => onChange({ fill: e.target.value })} /></label>
+    <label className="research-map-range">Fill strength<span><input type="range" min={0} max={1} step={0.01} value={opacity} onChange={e => onChange({ opacity: Number(e.target.value) })} /><output>{Math.round(opacity * 100)}%</output></span></label>
+    <label>Pattern<select value={hatch} onChange={e => onChange({ hatch: e.target.value as Shape["hatch"] })}>{hatches.map(h => <option key={h} value={h}>{styleNames.zoneHatch[h]}</option>)}</select></label>
+    <label>Outline<select value={outline} onChange={e => onChange({ outline: e.target.value as Shape["outline"] })}>{outlines.map(o => <option key={o} value={o}>{styleNames.zoneOutline[o]}</option>)}</select></label>
+  </>;
+}
+
+function ShapeForm({ shape, onChange, onClose, onDuplicate, onDelete, onAddPoint, onRemovePoint }: { shape: Shape; onChange: (change: Partial<Shape>) => void; onClose: () => void; onDuplicate: () => void; onDelete: () => void; onAddPoint?: () => void; onRemovePoint?: () => void }) {
+  return <div className="research-map-form">
+    <div className="research-map-form-head"><span className="research-map-swatch" style={{ background: shape.fill }} /><strong>{shape.name || "Shape"}</strong><button type="button" className="text-button" onClick={onClose}>Done</button></div>
+    <label>Name<input value={shape.name} maxLength={60} onChange={e => onChange({ name: e.target.value })} /></label>
+    <AppearanceFields fill={shape.fill} opacity={shape.opacity} hatch={shape.hatch} outline={shape.outline} onChange={onChange} />
+    {shape.outline !== "none" && <>
+      <label className="research-map-color">Outline color<input type="color" value={shape.stroke} onChange={e => onChange({ stroke: e.target.value })} /></label>
+      <label className="research-map-range">Outline weight<span><input type="range" min={0.2} max={8} step={0.1} value={shape.strokeWidth} onChange={e => onChange({ strokeWidth: Number(e.target.value) })} /><output>{shape.strokeWidth}</output></span></label>
+    </>}
+    <label>Layer<select value={shape.front ? "front" : "back"} onChange={e => onChange({ front: e.target.value === "front" || undefined })}><option value="back">Behind the strands</option><option value="front">Over the strands</option></select></label>
+    <label className="research-map-check"><input type="checkbox" checked={!!shape.hidden} onChange={e => onChange({ hidden: e.target.checked || undefined })} />Hidden</label>
+    <p className="research-map-hint">{shape.kind === "ellipse" ? "Drag the square handles to resize it, or drag the shape to move it." : "Drag the square handles to reshape it, or drag the shape to move it. Select a corner to add a point after it or remove it."}</p>
+    <div className="research-map-row research-map-wrap">
+      {onAddPoint && <button type="button" className="button" onClick={onAddPoint}>Add a corner</button>}
+      {onRemovePoint && <button type="button" className="button" onClick={onRemovePoint}>Remove corner</button>}
+      <button type="button" className="button" onClick={onDuplicate}>Duplicate</button>
+    </div>
+    <button type="button" className="text-button research-map-danger" onClick={onDelete}>Delete shape</button>
+  </div>;
+}
+
+// Overrides for one station; anything left alone follows the Style tab.
+function MarkerPaintForm({ item, map, onChange }: { item: Item; map: ResearchMap; onChange: (paint: MarkerPaint | undefined) => void }) {
+  const paint = item.marker?.paint || {}; const style = styleOf(map);
+  const set = (change: Partial<MarkerPaint>) => { const next: MarkerPaint = { ...paint, ...change }; (Object.keys(next) as (keyof MarkerPaint)[]).forEach(k => { if (next[k] === undefined || next[k] === "") delete next[k]; }); onChange(Object.keys(next).length ? next : undefined); };
+  const kind = markerFillKind(paint.fill);
+  return <div className="research-map-form">
+    <h3>Station appearance</h3>
+    <label>Fill<select value={kind} onChange={e => { const v = e.target.value as typeof kind; set({ fill: v === "color" ? (paint.fill && kind === "color" ? paint.fill : "#F2A890") : v || undefined }); }}>{markerFills.map(f => <option key={f} value={f}>{markerFillLabels[f]}</option>)}</select></label>
+    {kind === "color" && <label className="research-map-color">Fill color<input type="color" value={paint.fill} onChange={e => set({ fill: e.target.value })} /></label>}
+    <label className="research-map-color">Outline and stripe color<span className="research-map-row"><input type="color" value={paint.stroke || style.ink} onChange={e => set({ stroke: e.target.value })} />{paint.stroke && <button type="button" className="text-button" onClick={() => set({ stroke: undefined })}>Default</button>}</span></label>
+    <label className="research-map-range">Size<span><input type="range" min={0.4} max={3} step={0.05} value={paint.scale ?? 1} onChange={e => set({ scale: Number(e.target.value) === 1 ? undefined : Number(e.target.value) })} /><output>{(paint.scale ?? 1).toFixed(2)}×</output></span></label>
+    <label className="research-map-range">Outline weight<span><input type="range" min={0.2} max={3} step={0.05} value={paint.weight ?? 1} onChange={e => set({ weight: Number(e.target.value) === 1 ? undefined : Number(e.target.value) })} /><output>{(paint.weight ?? 1).toFixed(2)}×</output></span></label>
+    {item.marker?.paint && <button type="button" className="text-button" onClick={() => onChange(undefined)}>Reset to the map style</button>}
   </div>;
 }

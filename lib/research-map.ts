@@ -20,7 +20,17 @@ export const routeLabels: Record<Route, string> = { under: "Under the label, the
 
 export type Pt = [number, number];
 export interface Strand { id: string; axis: Axis; points: Pt[] }
-export interface Marker { type: MarkerType; x: number; y: number; y2?: number; strand?: string }
+// Per-station overrides; anything left out follows the map style.
+export interface MarkerPaint { fill?: string; stroke?: string; scale?: number; weight?: number }
+export interface Marker { type: MarkerType; x: number; y: number; y2?: number; strand?: string; paint?: MarkerPaint }
+// Free shapes drawn on the map, such as translucent planes behind the strands or circles over them.
+export const shapeKinds = ["polygon", "ellipse"] as const;
+export interface Shape {
+  id: string; name: string; kind: (typeof shapeKinds)[number]; points: Pt[];
+  fill: string; opacity: number; hatch: (typeof hatches)[number];
+  stroke: string; strokeWidth: number; outline: (typeof outlines)[number];
+  front?: boolean; hidden?: boolean;
+}
 export interface Feed { strand: string; at: Pt; route: Route }
 export interface Item {
   id: string; name: string; kind: Kind; main: boolean;
@@ -38,6 +48,7 @@ export interface ResearchMap {
   strands: Strand[]; items: Item[]; projects: Project[];
   caption: string;
   style?: MapStyle;
+  shapes?: Shape[];
   stylePresets?: { name: string; style: MapStyle }[];
 }
 
@@ -233,17 +244,36 @@ export function strandColor(map: ResearchMap, strandId?: string) {
 
 const interchangePaint = (style: MapStyle) => style.interchangeFill === "stripes" ? "url(#rm-stripes)" : style.interchangeFill === "black" ? style.ink : "#fff";
 
-export function markerSvg(type: MarkerType, x: number, y: number, color: string, y2?: number, style: MapStyle = defaultStyle) {
+export const markerFills = ["", "white", "stripes", "color", "none"] as const;
+export const markerFillLabels: Record<(typeof markerFills)[number], string> = { "": "Follow the map style", white: "White", stripes: "Hazard stripes", color: "Solid color", none: "No fill" };
+// Which of markerFills a stored fill value is: "", "white", "stripes", "none", or a hex color.
+export const markerFillKind = (fill?: string): (typeof markerFills)[number] => !fill ? "" : fill === "white" || fill === "stripes" || fill === "none" ? fill : "color";
+
+export function markerSvg(type: MarkerType, x: number, y: number, color: string, y2?: number, style: MapStyle = defaultStyle, paint: MarkerPaint = {}, key = "") {
   const span = y2 !== undefined && Math.abs(y2 - y) > 1;
   const top = span ? Math.min(y, y2!) : y; const bottom = span ? Math.max(y, y2!) : y;
-  const k = style.stationScale; const w = style.stationStroke; const ink = style.ink;
-  if (type === "start") return `<circle cx="${x}" cy="${y}" r="${9 * k}" fill="${color}"/><circle cx="${x}" cy="${y}" r="${4 * k}" fill="#fff"/>`;
-  if (type === "stop") return `<circle cx="${x}" cy="${y}" r="${8 * k}" fill="#fff" stroke="${color}" stroke-width="${3 * w}"/>`;
-  if (type === "interchange") return `<rect x="${x - 15 * k}" y="${top - 15 * k}" width="${30 * k}" height="${bottom - top + 30 * k}" rx="${15 * k}" fill="${interchangePaint(style)}" stroke="${ink}" stroke-width="${3.5 * w}"/>`;
-  if (type === "outcome") return span
-    ? `<rect x="${x - 15 * k}" y="${top - 13 * k}" width="${30 * k}" height="${bottom - top + 26 * k}" rx="${15 * k}" fill="#fff" stroke="${color}" stroke-width="${5 * w}"/>`
-    : `<circle cx="${x}" cy="${y}" r="${10 * k}" fill="#fff" stroke="${color}" stroke-width="${5 * w}"/>`;
+  const k = style.stationScale * (paint.scale ?? 1); const w = style.stationStroke * (paint.weight ?? 1);
+  const ink = paint.stroke || style.ink; const line = paint.stroke || color;
+  // A custom outline color gets its own stripe pattern so the stripes match it.
+  const stripes = paint.stroke && key ? `rm-stripes-${key}` : "rm-stripes";
+  const defs = stripes !== "rm-stripes" ? `<defs><pattern id="${stripes}" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#fff"/><rect width="7" height="14" fill="${paint.stroke}"/></pattern></defs>` : "";
+  const fill = (fallback: string) => !paint.fill ? fallback : paint.fill === "white" ? "#fff" : paint.fill === "stripes" ? `url(#${stripes})` : paint.fill === "none" ? "none" : paint.fill;
+  if (type === "start") return `<circle cx="${x}" cy="${y}" r="${9 * k}" fill="${paint.stroke || color}"/><circle cx="${x}" cy="${y}" r="${4 * k}" fill="${fill("#fff")}"/>`;
+  if (type === "stop") return defs + `<circle cx="${x}" cy="${y}" r="${8 * k}" fill="${fill("#fff")}" stroke="${line}" stroke-width="${3 * w}"/>`;
+  if (type === "interchange") return defs + `<rect x="${x - 15 * k}" y="${top - 15 * k}" width="${30 * k}" height="${bottom - top + 30 * k}" rx="${15 * k}" fill="${fill(interchangePaint(style))}" stroke="${ink}" stroke-width="${3.5 * w}"/>`;
+  if (type === "outcome") return defs + (span
+    ? `<rect x="${x - 15 * k}" y="${top - 13 * k}" width="${30 * k}" height="${bottom - top + 26 * k}" rx="${15 * k}" fill="${fill("#fff")}" stroke="${line}" stroke-width="${5 * w}"/>`
+    : `<circle cx="${x}" cy="${y}" r="${10 * k}" fill="${fill("#fff")}" stroke="${line}" stroke-width="${5 * w}"/>`);
   return "";
+}
+
+// The area a station covers, for selecting it on the canvas.
+export function markerBox(marker: Marker, style: MapStyle = defaultStyle) {
+  const k = style.stationScale * (marker.paint?.scale ?? 1) + 0.15;
+  const span = marker.y2 !== undefined && Math.abs(marker.y2 - marker.y) > 1;
+  const top = span ? Math.min(marker.y, marker.y2!) : marker.y; const bottom = span ? Math.max(marker.y, marker.y2!) : marker.y;
+  const r = (marker.type === "interchange" || (marker.type === "outcome" && span) ? 15 : marker.type === "outcome" ? 11 : 9) * k;
+  return { x0: marker.x - r, y0: top - r, x1: marker.x + r, y1: bottom + r, r };
 }
 
 export function projectSvg(project: Pick<Project, "x" | "y" | "code" | "name">, ink = INK) {
@@ -281,16 +311,34 @@ function groundSvg(map: ResearchMap, style: MapStyle) {
   return out.join("");
 }
 
-// Translucent planes behind each axis, like overlaid sheets of trace.
-function planesSvg(map: ResearchMap) {
-  return axes.map((axis, i) => {
+// Translucent planes behind each axis, like overlaid sheets of trace. They become ordinary shapes,
+// so each can be recolored, reshaped, hidden or deleted.
+export function axisPlanes(map: ResearchMap): Shape[] {
+  return axes.flatMap((axis, i) => {
     const pts = map.strands.filter(s => s.axis === axis).flatMap(s => s.points);
-    if (!pts.length) return "";
+    if (!pts.length) return [];
     const x0 = Math.min(...pts.map(p => p[0])) - 30; const x1 = Math.max(...pts.map(p => p[0])) + 30;
     const y0 = Math.min(...pts.map(p => p[1])) - 40; const y1 = Math.max(...pts.map(p => p[1])) + 40;
     const skew = (i - 1) * 60;
-    return `<polygon points="${x0 + 80 + skew},${y0} ${x1},${y0 + skew / 2} ${x1 - 80 - skew},${y1} ${x0},${y1 - skew / 2}" fill="${map.axes[axis].color}" fill-opacity="0.09"/>`;
-  }).join("");
+    const points: Pt[] = [[x0 + 80 + skew, y0], [x1, y0 + skew / 2], [x1 - 80 - skew, y1], [x0, y1 - skew / 2]];
+    return [{ id: `plane-${axis}`, name: `${map.axes[axis].label} plane`, kind: "polygon" as const, points: points.map(p => [Math.round(p[0]), Math.round(p[1])] as Pt), fill: map.axes[axis].color, opacity: 0.09, hatch: "none" as const, stroke: map.axes[axis].color, strokeWidth: 1, outline: "none" as const }];
+  });
+}
+// Shapes as drawn: stored shapes when there are any, otherwise the generated planes if the style asks for them.
+export function shapesOf(map: ResearchMap): Shape[] { return map.shapes ?? (styleOf(map).planes ? axisPlanes(map) : []); }
+export function shapeBounds(shape: Shape) {
+  const xs = shape.points.map(p => p[0]); const ys = shape.points.map(p => p[1]);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+export function shapeGeometry(shape: Shape) {
+  if (shape.kind === "ellipse") { const b = shapeBounds(shape); return `<ellipse cx="${(b.x0 + b.x1) / 2}" cy="${(b.y0 + b.y1) / 2}" rx="${Math.max(1, (b.x1 - b.x0) / 2)}" ry="${Math.max(1, (b.y1 - b.y0) / 2)}"`; }
+  return `<polygon points="${shape.points.map(p => p.join(",")).join(" ")}"`;
+}
+export function shapeSvg(shape: Shape) {
+  if (shape.hidden || shape.points.length < 2) return "";
+  const g = shapeGeometry(shape);
+  const stroke = shape.outline === "none" ? "" : ` stroke="${shape.stroke}" stroke-width="${shape.strokeWidth}"${shape.outline === "dashed" ? ` stroke-dasharray="${shape.strokeWidth * 5} ${shape.strokeWidth * 4}"` : ""}`;
+  return `${g} fill="${shape.fill}" fill-opacity="${shape.opacity}"${stroke}/>` + (shape.hatch !== "none" ? `${g} fill="url(#rm-zone-${shape.hatch})"/>` : "");
 }
 
 // Construction layer: hairlines carried past each strand's ends, a measured scale, and registration marks.
@@ -319,7 +367,8 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
   add(`<g font-family="${esc(fontStacks[style.font])}">`);
   add(patternDefs(style));
   add(groundSvg(map, style));
-  if (style.planes) add(planesSvg(map));
+  const shapes = shapesOf(map);
+  for (const shape of shapes) if (!shape.front) add(shapeSvg(shape));
   map.columns.forEach((col, i) => {
     if (i % 2 === 1 && style.bands > 0) add(`<rect x="${col.x0}" y="${MAP_TOP}" width="${col.x1 - col.x0}" height="${MAP_BOTTOM - MAP_TOP}" fill="#000" fill-opacity="${style.bands}"/>`);
     add(textSvg(col.x0 + 20, 200, `${String(i + 1).padStart(2, "0")}  ${col.title.toUpperCase()}`, { size: 15, weight: 700, fill: "#9a9a96", spacing: 2.5 }));
@@ -357,7 +406,8 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
   const sd = dashAttr(strandDash(style));
   if (style.casing) for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${style.background}" stroke-width="${style.strandWidth + 5}" stroke-linecap="round" stroke-linejoin="round"/>`);
   for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${map.axes[strand.axis].color}" stroke-width="${style.strandWidth}" stroke-linecap="${sd ? "butt" : "round"}" stroke-linejoin="round"${sd}/>`);
-  for (const item of map.items) if (item.marker && item.marker.type !== "none") add(markerSvg(item.marker.type, item.marker.x, item.marker.y, strandColor(map, item.marker.strand), item.marker.y2, style));
+  for (const shape of shapes) if (shape.front) add(shapeSvg(shape));
+  for (const item of map.items) if (item.marker && item.marker.type !== "none") add(markerSvg(item.marker.type, item.marker.x, item.marker.y, strandColor(map, item.marker.strand), item.marker.y2, style, item.marker.paint, item.id));
   for (const item of map.items) if (item.name.trim()) add(labelSvg(item, t, ink));
   for (const project of map.projects) add(projectSvg(project, ink));
   if (options.legend !== false) add(legendSvg(map));
@@ -562,6 +612,25 @@ const pick = <T extends string>(list: readonly T[], v: unknown, fallback: T) => 
 const hex = (c: unknown, fallback: string) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : fallback;
 const clamp = (v: unknown, lo: number, hi: number, fallback: number) => typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
+function parsePaint(value: unknown): MarkerPaint | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const r = value as Record<string, unknown>; const paint: MarkerPaint = {};
+  if (r.fill === "white" || r.fill === "stripes" || r.fill === "none") paint.fill = r.fill; else if (hex(r.fill, "")) paint.fill = hex(r.fill, "");
+  if (hex(r.stroke, "")) paint.stroke = hex(r.stroke, "");
+  if (typeof r.scale === "number") paint.scale = clamp(r.scale, 0.3, 4, 1);
+  if (typeof r.weight === "number") paint.weight = clamp(r.weight, 0.2, 4, 1);
+  return Object.keys(paint).length ? paint : undefined;
+}
+function parseShapes(value: unknown): Shape[] {
+  return (Array.isArray(value) ? value : []).slice(0, 80).flatMap(v => {
+    const r = (v || {}) as Record<string, unknown>; const sid = id(r.id); if (!sid) return [];
+    const points = Array.isArray(r.points) ? r.points.slice(0, 60).map(pt).filter((p): p is Pt => !!p) : [];
+    if (points.length < 2) return [];
+    return [{ id: sid, name: str(r.name, 60), kind: pick(shapeKinds, r.kind, "polygon"), points, fill: hex(r.fill, "#F2A890"), opacity: clamp(r.opacity, 0, 1, 0.3), hatch: pick(hatches, r.hatch, "none"),
+      stroke: hex(r.stroke, "#141414"), strokeWidth: clamp(r.strokeWidth, 0.2, 12, 1), outline: pick(outlines, r.outline, "none"), ...(r.front === true ? { front: true } : {}), ...(r.hidden === true ? { hidden: true } : {}) }];
+  });
+}
+
 // Any missing or out-of-range setting falls back to the default look.
 export function parseStyle(value: unknown): MapStyle {
   const r = (value && typeof value === "object" ? value : {}) as Record<string, unknown>; const d = defaultStyle;
@@ -593,7 +662,10 @@ export function parseMap(value: unknown): ResearchMap | null {
     const r = s as Record<string, unknown>; const iid = id(r.id); if (!iid) return [];
     const item: Item = { id: iid, name: str(r.name, 120), kind: pick(kinds, r.kind, "concept"), main: r.main === true, x: num(r.x), y: num(r.y), anchor: pick(["start", "middle", "end"] as const, r.anchor, "start") };
     const m = r.marker as Record<string, unknown> | undefined;
-    if (m && typeof m === "object") item.marker = { type: pick(markers, m.type, "none"), x: num(m.x), y: num(m.y), ...(typeof m.y2 === "number" ? { y2: num(m.y2) } : {}), ...(id(m.strand) ? { strand: id(m.strand)! } : {}) };
+    if (m && typeof m === "object") {
+      item.marker = { type: pick(markers, m.type, "none"), x: num(m.x), y: num(m.y), ...(typeof m.y2 === "number" ? { y2: num(m.y2) } : {}), ...(id(m.strand) ? { strand: id(m.strand)! } : {}) };
+      const paint = parsePaint(m.paint); if (paint) item.marker.paint = paint;
+    }
     const f = r.feeds as Record<string, unknown> | undefined;
     if (f && typeof f === "object" && id(f.strand) && pt(f.at)) item.feeds = { strand: id(f.strand)!, at: pt(f.at)!, route: pick(routes, f.route, "under") };
     if (id(r.from)) item.from = id(r.from)!;
@@ -613,6 +685,7 @@ export function parseMap(value: unknown): ResearchMap | null {
     columns, zone: z && typeof z === "object" ? { x: num(z.x), y: num(z.y), w: Math.max(40, num(z.w, 200)), h: Math.max(40, num(z.h, 120)), title: str(z.title, 40) } : null,
     strands, items, projects, caption: str(v.caption, 1200),
     ...(v.style && typeof v.style === "object" ? { style: parseStyle(v.style) } : {}),
+    ...(Array.isArray(v.shapes) ? { shapes: parseShapes(v.shapes) } : {}),
     ...(Array.isArray(v.stylePresets) ? { stylePresets: v.stylePresets.slice(0, 20).flatMap(p => { const r = p as Record<string, unknown>; const n = str(r?.name, 40); return n ? [{ name: n, style: parseStyle(r.style) }] : []; }) } : {}),
   };
 }
@@ -658,6 +731,11 @@ export function diffMaps(before: ResearchMap, after: ResearchMap) {
   if (JSON.stringify(before.axes) !== JSON.stringify(after.axes)) changes.push("Changed the axes");
   if (JSON.stringify(before.zone) !== JSON.stringify(after.zone)) changes.push("Moved the core zone");
   if (JSON.stringify(styleOf(before)) !== JSON.stringify(styleOf(after))) changes.push("Changed the style");
+  const oldShapes = new Map(shapesOf(before).map(sh => [sh.id, sh])); const newShapes = shapesOf(after);
+  for (const shape of newShapes) { const prev = oldShapes.get(shape.id); if (!prev) changes.push(`Added the shape “${shape.name || "Untitled"}”`); else if (JSON.stringify(prev) !== JSON.stringify(shape)) changes.push(`Edited the shape “${shape.name || "Untitled"}”`); }
+  for (const shape of oldShapes.values()) if (!newShapes.some(sh => sh.id === shape.id)) changes.push(`Removed the shape “${shape.name || "Untitled"}”`);
+  const restyled = after.items.filter(item => { const prev = old.get(item.id); return prev && JSON.stringify(prev.marker?.paint || null) !== JSON.stringify(item.marker?.paint || null); });
+  for (const item of restyled) changes.push(`Restyled the station ${name(item)}`);
   if (JSON.stringify(before.stylePresets || []) !== JSON.stringify(after.stylePresets || [])) changes.push("Updated the saved styles");
   const moved = after.items.filter(item => { const prev = old.get(item.id); return prev && (prev.x !== item.x || prev.y !== item.y); }).length;
   if (moved) changes.push(`Moved ${moved} label${moved === 1 ? "" : "s"}`);

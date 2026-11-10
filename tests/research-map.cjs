@@ -140,3 +140,24 @@ test('styles survive a save, bad values fall back, and presets draw their patter
   assert.ok(rm.diffMaps(clone(), back).includes('Changed the style'));
   for (const preset of rm.stylePresets) { const m = clone(); m.style = preset.style; assert.deepEqual(messages(m).filter(t => !/placeholder/.test(t)), [], preset.key); }
 });
+
+test('shapes and per-station paint survive a save and draw as set', () => {
+  const map = clone();
+  map.style = { ...rm.defaultStyle, planes: true };
+  assert.equal(rm.shapesOf(map).length, 3);
+  map.shapes = rm.shapesOf(map).map((sh, i) => i === 0 ? { ...sh, fill: '#112233', hatch: 'chevrons' } : i === 1 ? { ...sh, hidden: true } : sh);
+  map.shapes.push({ id: 'shape1', name: 'Circle', kind: 'ellipse', points: [[100, 300], [300, 500]], fill: '#F2A890', opacity: 0.4, hatch: 'none', stroke: '#141414', strokeWidth: 2, outline: 'dashed', front: true });
+  const inter = map.items.find(item => item.marker?.type === 'interchange');
+  inter.marker.paint = { fill: 'stripes', stroke: '#aa0000', scale: 1.5, bogus: 1 };
+  const back = rm.parseMap(JSON.parse(JSON.stringify(map)));
+  assert.equal(back.shapes.length, 4);
+  assert.deepEqual(back.items.find(i => i.id === inter.id).marker.paint, { fill: 'stripes', stroke: '#aa0000', scale: 1.5 });
+  const svg = rm.renderMapSvg(back);
+  assert.ok(svg.includes('fill="#112233"') && svg.includes('url(#rm-zone-chevrons)') && svg.includes('<ellipse cx="200" cy="400"'));
+  assert.ok(svg.includes(`rm-stripes-${inter.id}`));
+  assert.equal(svg.includes(`fill="${map.shapes[1].fill}" fill-opacity="0.09"`), false, 'hidden plane is not drawn');
+  const before = rm.parseMap(JSON.parse(JSON.stringify(map))); back.shapes = back.shapes.slice(1);
+  assert.ok(rm.diffMaps(before, back).some(c => /^Removed the shape/.test(c)));
+  assert.deepEqual(rm.parseMap({ ...clone(), shapes: [] }).shapes, []);
+  assert.equal(rm.renderMapSvg({ ...clone(), style: { ...rm.defaultStyle, planes: true }, shapes: [] }).includes('fill-opacity="0.09"'), false, 'an empty shape list means the planes were deleted');
+});

@@ -2743,3 +2743,19 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .research-map-color input[type="color"] { width: 38px; height: 28px; padding: 2px; }
 .research-map-form label.research-map-check { flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; color: var(--text); text-align: left; }
 .research-map-check input[type="checkbox"] { flex: 0 0 auto; width: auto; margin: 0; }
+.research-map-area-hit { fill: transparent; stroke: transparent; pointer-events: visiblePainted; }
+.research-map-area-hit:hover { stroke: rgba(208, 139, 0, .55); stroke-dasharray: 6 4; }
+.research-map-area-selected { stroke: #d08b00; stroke-dasharray: none; cursor: move; }
+.research-map-marker-hit { fill: transparent; stroke: transparent; cursor: move; }
+.research-map-marker-hit:hover { stroke: rgba(0, 0, 0, .3); stroke-dasharray: 3 2; }
+.research-map-add-shape { width: auto; padding-right: 26px; }
+.research-map-wrap { flex-wrap: wrap; }
+.research-map-wrap > * { flex: 0 0 auto; }
+.research-map-layers ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.research-map-layer { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; }
+.research-map-layer-active { background: var(--surface-muted); }
+.research-map-layer button { border: 0; background: none; padding: 3px 5px; border-radius: 4px; font-size: 13px; color: var(--text); cursor: pointer; }
+.research-map-layer button:hover:not(:disabled) { background: var(--surface-muted); }
+.research-map-layer button:disabled { opacity: .3; cursor: default; }
+.research-map-layer .research-map-layer-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.research-map-eye { width: 24px; color: var(--text-muted) !important; }
