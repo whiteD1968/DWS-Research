@@ -1,8 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  axes, checkMap, diffMaps, kindLabels, kinds, labelBox, labelLines, markerLabels, markers, nearestOnPolyline, newId, renderMapInner, renderMapSvg,
-  routeLabels, routes, snapBetween, snapDirection, type Issue, type Item, type LogEntry, type MarkerType, type Pt, type ResearchMap, type Strand,
+  axes, checkMap, defaultStyle, diffMaps, fills, fontLabels, fonts, grounds, hatches, influenceDashes, kindLabels, kinds, labelBox, labelLines, markerLabels, markers, metricsFor,
+  nearestOnPolyline, newId, outlines, renderMapInner, renderMapSvg, routeLabels, routes, snapBetween, snapDirection, strandDashes, styleOf, stylePresets,
+  type Issue, type Item, type LogEntry, type MapStyle, type MarkerType, type Pt, type ResearchMap, type Strand,
 } from "@/lib/research-map";
 import { seedMap } from "@/lib/research-map-seed";
 import { deleteResearchMapSnapshot, saveResearchMap, saveResearchMapSnapshot } from "@/app/(workspace)/tenure/map/actions";
@@ -29,7 +30,7 @@ function zoomView(v: View, factor: number, clientX?: number, clientY?: number, r
   const px = v.cx + (clientX - rect.left - rect.width / 2) / v.scale; const py = v.cy + (clientY - rect.top - rect.height / 2) / v.scale;
   return { cx: px - (px - v.cx) * k, cy: py - (py - v.cy) * k, scale };
 }
-type Tab = "content" | "checks" | "map" | "history";
+type Tab = "content" | "checks" | "map" | "style" | "history";
 
 const grid = (n: number, on: boolean, step = 5) => on ? Math.round(n / step) * step : Math.round(n * 10) / 10;
 const dateLabel = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -102,6 +103,7 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
   const nameRef = useRef<HTMLTextAreaElement>(null);
 
   const issues = useMemo(() => checkMap(map), [map]);
+  const metrics = useMemo(() => metricsFor(styleOf(map)), [map]);
   const inner = useMemo(() => renderMapInner(map), [map]);
   const fixes = issues.filter(issue => issue.level === "fix").length;
 
@@ -388,7 +390,7 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
             <g className="research-map-hits">
               {map.strands.map(strand => <path key={strand.id} d={`M${strand.points.map(p => p.join(",")).join(" L")}`} className={selection?.type === "strand" && selection.id === strand.id ? "research-map-strand-hit research-map-selected-strand" : "research-map-strand-hit"} strokeWidth={18 * hs}
                 onPointerDown={e => { e.stopPropagation(); setSelection({ type: "strand", id: strand.id }); }} onDoubleClick={e => addPointAt(strand, e)}><title>{`${strandName(map, strand)}: double-click to add a bend`}</title></path>)}
-              {map.items.filter(item => item.name.trim()).map(item => { const box = labelBox(item); return <rect key={item.id} x={box.x0 - 3} y={box.y0 - 3} width={box.x1 - box.x0 + 6} height={box.y1 - box.y0 + 6} rx={3}
+              {map.items.filter(item => item.name.trim()).map(item => { const box = labelBox(item, metrics); return <rect key={item.id} x={box.x0 - 3} y={box.y0 - 3} width={box.x1 - box.x0 + 6} height={box.y1 - box.y0 + 6} rx={3}
                 className={selection?.type === "item" && selection.id === item.id ? "research-map-label-hit research-map-selected" : issueIds.has(item.id) && tab === "checks" ? "research-map-label-hit research-map-flagged" : "research-map-label-hit"}
                 onPointerDown={e => { const [x, y] = toMap(e); begin(e, { kind: "label", id: item.id, dx: x - item.x, dy: y - item.y }, { type: "item", id: item.id }); }}><title>{oneLine(item.name)}</title></rect>; })}
               {map.projects.map(p => <circle key={p.id} cx={p.x} cy={p.y} r={19} className={selection?.type === "project" && selection.id === p.id ? "research-map-project-hit research-map-selected" : "research-map-project-hit"}
@@ -419,8 +421,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
 
       <aside className="research-map-panel">
         <div className="research-map-tabs" role="tablist">
-          {(["content", "checks", "map", "history"] as Tab[]).map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "research-map-tab research-map-tab-active" : "research-map-tab"} onClick={() => setTab(t)}>
-            {{ content: "Content", checks: `Checks${issues.length ? ` (${issues.length})` : ""}`, map: "Map", history: "History" }[t]}</button>)}
+          {(["content", "checks", "map", "style", "history"] as Tab[]).map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "research-map-tab research-map-tab-active" : "research-map-tab"} onClick={() => setTab(t)}>
+            {{ content: "Content", checks: `Checks${issues.length ? ` (${issues.length})` : ""}`, map: "Map", style: "Style", history: "History" }[t]}</button>)}
         </div>
 
         {tab === "content" && <div className="research-map-pane">
@@ -482,6 +484,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
           <h3>Start over</h3>
           <button type="button" className="text-button research-map-danger" onClick={() => { if (window.confirm("Replace this map with the November 2026 redraw? You can undo this until you leave the page.")) commit(structuredClone(seedMap)); }}>Reset to the November 2026 redraw</button>
         </div>}
+
+        {tab === "style" && <StylePane map={map} commit={commit} />}
 
         {tab === "history" && <div className="research-map-pane">
           <section className="research-map-form">
@@ -552,5 +556,88 @@ function ContentList({ map, filter, issueIds, onSelect }: { map: ResearchMap; fi
     {groups.map(group => { const items = group.items.filter(i => match(i.name)); return items.length ? <section key={group.title}><h3>{group.title} <span>{items.length}</span></h3><ul>{items.map(item => { const strand = strandOf(item); return <li key={item.id}><button type="button" onClick={() => onSelect({ type: "item", id: item.id })}>
       <span className="research-map-swatch" style={{ background: strand ? map.axes[strand.axis].color : "#1d1d1f" }} /><span className={`research-map-kind research-map-kind-${item.kind}`}>{oneLine(item.name)}</span>{dot(item.id)}</button></li>; })}</ul></section> : null; })}
     <section><h3>Projects <span>{map.projects.length}</span></h3><ul>{map.projects.filter(p => match(`${p.code} ${p.name}`)).map(p => <li key={p.id}><button type="button" onClick={() => onSelect({ type: "project", id: p.id })}><span className="research-map-code">{p.code}</span>{p.name || <em>Placeholder</em>}{dot(p.id)}</button></li>)}</ul></section>
+  </div>;
+}
+
+const styleNames = {
+  ground: { plain: "Plain", ledger: "Ledger sheet", grid: "Drafting grid" },
+  strandDash: { solid: "Solid", dash: "Dashed", long: "Long dash" },
+  influenceDash: { dash: "Dashed", dot: "Dotted", solid: "Solid" },
+  interchangeFill: { white: "White", stripes: "Hazard stripes", black: "Solid ink" },
+  zoneHatch: { none: "None", stripes: "Hazard stripes", chevrons: "Chevrons" },
+  zoneOutline: { solid: "Solid", dashed: "Dashed", none: "None" },
+} as const;
+
+// Every graphic setting for the whole map, plus presets to start from.
+function StylePane({ map, commit }: { map: ResearchMap; commit: (change: (current: ResearchMap) => ResearchMap) => void }) {
+  const style = styleOf(map);
+  const [preset, setPreset] = useState(stylePresets[0].key);
+  const [presetName, setPresetName] = useState("");
+  const set = (change: Partial<MapStyle>) => commit(c => ({ ...c, style: { ...styleOf(c), ...change } }));
+  const chosen = stylePresets.find(p => p.key === preset) || null;
+  const saved = map.stylePresets || [];
+  const savedChoice = preset.startsWith("saved:") ? saved[Number(preset.slice(6))] : null;
+  const apply = (withColors: boolean) => commit(c => {
+    const next: ResearchMap = { ...c, style: { ...(savedChoice ? savedChoice.style : chosen?.style || defaultStyle) } };
+    if (withColors && chosen?.colors) { const colors = chosen.colors; next.axes = { material: { ...c.axes.material, color: colors.material }, structure: { ...c.axes.structure, color: colors.structure }, computation: { ...c.axes.computation, color: colors.computation } }; }
+    return next;
+  });
+  const select = <K extends keyof typeof styleNames>(key: K, list: readonly string[], label: string) => <label>{label}<select value={style[key] as string} onChange={e => set({ [key]: e.target.value } as Partial<MapStyle>)}>{list.map(v => <option key={v} value={v}>{(styleNames[key] as Record<string, string>)[v]}</option>)}</select></label>;
+  const range = (key: keyof MapStyle, label: string, min: number, max: number, step: number, unit = "") => <label className="research-map-range">{label}<span><input type="range" min={min} max={max} step={step} value={style[key] as number} onChange={e => set({ [key]: Number(e.target.value) } as Partial<MapStyle>)} /><output>{Math.round((style[key] as number) * 100) / 100}{unit}</output></span></label>;
+  const color = (key: keyof MapStyle, label: string) => <label className="research-map-color">{label}<input type="color" value={style[key] as string} onChange={e => set({ [key]: e.target.value } as Partial<MapStyle>)} /></label>;
+  const toggle = (key: keyof MapStyle, label: string) => <label className="research-map-check"><input type="checkbox" checked={style[key] as boolean} onChange={e => set({ [key]: e.target.checked } as Partial<MapStyle>)} />{label}</label>;
+
+  return <div className="research-map-pane research-map-form research-map-style">
+    <h3>Presets</h3>
+    <select value={preset} onChange={e => setPreset(e.target.value)} aria-label="Style preset">
+      <optgroup label="Built in">{stylePresets.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}</optgroup>
+      {saved.length > 0 && <optgroup label="Saved on this map">{saved.map((p, i) => <option key={i} value={`saved:${i}`}>{p.name}</option>)}</optgroup>}
+    </select>
+    {chosen && !savedChoice && <p className="research-map-hint">{chosen.note}</p>}
+    <div className="research-map-row">
+      <button type="button" className="button" onClick={() => apply(false)}>Apply style</button>
+      {chosen?.colors && !savedChoice && <button type="button" className="button" onClick={() => apply(true)}>Apply style + colors</button>}
+      {savedChoice && <button type="button" className="text-button research-map-danger" onClick={() => { const i = Number(preset.slice(6)); setPreset(stylePresets[0].key); commit(c => ({ ...c, stylePresets: (c.stylePresets || []).filter((_, n) => n !== i) })); }}>Delete</button>}
+    </div>
+    <div className="research-map-row"><input value={presetName} maxLength={40} placeholder="Name this style" onChange={e => setPresetName(e.target.value)} /><button type="button" className="button" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); commit(c => ({ ...c, stylePresets: [...(c.stylePresets || []).filter(p => p.name !== name), { name, style: { ...styleOf(c) } }].slice(-20) })); setPresetName(""); }}>Save current</button></div>
+
+    <h3>Ground</h3>
+    {select("ground", grounds, "Sheet")}
+    {color("background", "Paper")}
+    {color("rule", "Rules and column lines")}
+    {range("bands", "Column shading", 0, 0.12, 0.005)}
+    {toggle("planes", "Translucent axis planes")}
+    {toggle("construction", "Construction lines, scale and registration marks")}
+
+    <h3>Strands</h3>
+    {range("strandWidth", "Line weight", 1, 14, 0.5)}
+    {range("corner", "Corner radius", 0, 60, 1)}
+    {select("strandDash", strandDashes, "Line")}
+    {toggle("casing", "Paper casing around lines")}
+
+    <h3>Influence lines</h3>
+    {range("influenceWidth", "Line weight", 0.3, 4, 0.1)}
+    {select("influenceDash", influenceDashes, "Line")}
+    {range("influenceOpacity", "Strength", 0.1, 1, 0.05)}
+    {toggle("influenceInk", "Draw in ink instead of the axis color")}
+
+    <h3>Stations</h3>
+    {range("stationScale", "Size", 0.4, 2, 0.05, "×")}
+    {range("stationStroke", "Outline weight", 0.3, 3, 0.1, "×")}
+    {select("interchangeFill", fills, "Interchanges")}
+
+    <h3>Type</h3>
+    <label>Font<select value={style.font} onChange={e => set({ font: e.target.value as MapStyle["font"] })}>{fonts.map(f => <option key={f} value={f}>{fontLabels[f]}</option>)}</select></label>
+    {range("textScale", "Size", 0.7, 1.4, 0.02, "×")}
+    {color("ink", "Ink")}
+    <p className="research-map-hint">Checks measure labels in the chosen font and size, so overlaps show up under Checks.</p>
+
+    <h3>Core zone</h3>
+    {color("zoneFill", "Fill")}
+    {range("zoneOpacity", "Fill strength", 0, 1, 0.05)}
+    {select("zoneHatch", hatches, "Pattern")}
+    {select("zoneOutline", outlines, "Outline")}
+
+    <button type="button" className="text-button" onClick={() => commit(c => { const next = { ...c }; delete next.style; return next; })}>Back to the default style</button>
   </div>;
 }

@@ -123,3 +123,20 @@ test('a dragged bend keeps both of its segments at transit angles', () => {
   assert.ok(rm.segmentAngleOk([0, 0], p) && rm.segmentAngleOk(p, [300, 100]), String(p));
   assert.deepEqual(p, [200, 0]);
 });
+
+test('styles survive a save, bad values fall back, and presets draw their patterns', () => {
+  const map = clone();
+  assert.equal(rm.renderMapSvg(map).includes('url(#rm-zone-stripes)'), false);
+  const ledger = rm.stylePresets.find(p => p.key === 'ledger');
+  map.style = ledger.style;
+  map.stylePresets = [{ name: 'Review', style: ledger.style }];
+  const back = rm.parseMap(JSON.parse(JSON.stringify(map)));
+  assert.deepEqual(back.style, ledger.style);
+  assert.equal(back.stylePresets[0].name, 'Review');
+  const svg = rm.renderMapSvg(back);
+  assert.ok(svg.includes('url(#rm-zone-stripes)') && svg.includes('url(#rm-stripes)') && svg.includes(ledger.style.background));
+  const bad = rm.parseStyle({ strandWidth: 900, font: 'comic', ink: 'red', construction: 'yes' });
+  assert.equal(bad.strandWidth, 16); assert.equal(bad.font, 'helvetica'); assert.equal(bad.ink, rm.defaultStyle.ink); assert.equal(bad.construction, false);
+  assert.ok(rm.diffMaps(clone(), back).includes('Changed the style'));
+  for (const preset of rm.stylePresets) { const m = clone(); m.style = preset.style; assert.deepEqual(messages(m).filter(t => !/placeholder/.test(t)), [], preset.key); }
+});
