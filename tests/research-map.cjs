@@ -153,7 +153,7 @@ test('shapes and per-station paint survive a save and draw as set', () => {
   assert.equal(back.shapes.length, 4);
   assert.deepEqual(back.items.find(i => i.id === inter.id).marker.paint, { fill: 'stripes', stroke: '#aa0000', scale: 1.5 });
   const svg = rm.renderMapSvg(back);
-  assert.ok(svg.includes('fill="#112233"') && svg.includes('url(#rm-zone-chevrons)') && svg.includes('<ellipse cx="200" cy="400"'));
+  assert.ok(svg.includes('fill="#112233"') && svg.includes('url(#rm-pat-plane-material)') && svg.includes('<ellipse cx="200" cy="400"'));
   assert.ok(svg.includes(`rm-stripes-${inter.id}`));
   assert.equal(svg.includes(`fill="${map.shapes[1].fill}" fill-opacity="0.09"`), false, 'hidden plane is not drawn');
   const before = rm.parseMap(JSON.parse(JSON.stringify(map))); back.shapes = back.shapes.slice(1);
@@ -181,4 +181,25 @@ test('categories can be added, and text, legend words and single colors are kept
   assert.ok(changes.includes('Added the category “Ecology”') && changes.includes('Recolored a strand') && changes.includes('Edited the legend wording'), changes.join('; '));
   const stray = rm.parseMap({ ...clone(), strands: [{ id: 's1', axis: 'gone', points: [[0, 0], [10, 0]] }] });
   assert.equal(stray.strands[0].axis, 'material');
+});
+
+test('annotation shapes, colored patterns, shadows and the new grounds draw and survive a save', () => {
+  const map = clone();
+  map.style = rm.stylePresets.find(p => p.key === 'plan').style;
+  const base = { fill: '#E7B4D6', opacity: 0.8, hatch: 'none', stroke: '#141414', strokeWidth: 2, outline: 'solid' };
+  map.shapes = [
+    { ...base, id: 'slab', name: 'Slab', kind: 'polygon', points: [[0, 0], [100, 0], [100, 80]], hatch: 'heavy', hatchColor: '#222222', hatchOpacity: 0.8, shadow: true },
+    { ...base, id: 'arrow', name: 'Arrow', kind: 'line', points: [[0, 0], [100, 50], [200, 0]], outline: 'dashed', curve: true, start: 'dot', end: 'arrow', front: true },
+    { ...base, id: 'num', name: '001', kind: 'text', points: [[10, 10], [20, 160]], text: '001', outlined: true, weight: 900, front: true },
+  ];
+  const back = rm.parseMap(JSON.parse(JSON.stringify(map)));
+  assert.deepEqual(back.shapes.map(s => s.kind), ['polygon', 'line', 'text']);
+  assert.equal(back.shapes[1].end, 'arrow'); assert.equal(back.shapes[2].outlined, true);
+  const svg = rm.renderMapSvg(back);
+  assert.ok(svg.includes('id="rm-pat-slab"') && svg.includes('fill="#222222"') && svg.includes('translate(9 9)'), 'colored pattern and shadow');
+  assert.ok(/<path d="M0,0 C/.test(svg), 'curved line');
+  assert.ok(svg.includes('font-size="150"') && svg.includes('>001</text>'), 'big number');
+  assert.ok(svg.includes('stroke-linecap="round"/>'), 'dot ground');
+  const dashed = rm.renderMapSvg({ ...back, style: { ...back.style, ground: 'dashed' } });
+  assert.ok(dashed.includes('stroke-dasharray="8 6"'));
 });

@@ -26,12 +26,20 @@ export interface Strand { id: string; axis: Axis; points: Pt[]; color?: string }
 export interface MarkerPaint { fill?: string; stroke?: string; scale?: number; weight?: number }
 export interface Marker { type: MarkerType; x: number; y: number; y2?: number; strand?: string; paint?: MarkerPaint }
 // Free shapes drawn on the map, such as translucent planes behind the strands or circles over them.
-export const shapeKinds = ["polygon", "ellipse"] as const;
+export const shapeKinds = ["polygon", "ellipse", "line", "text"] as const;
+// Line ends for leaders, arrows and dimensions.
+export const lineEnds = ["none", "arrow", "circle", "dot", "tick", "bar"] as const;
+export type LineEnd = (typeof lineEnds)[number];
 export interface Shape {
   id: string; name: string; kind: (typeof shapeKinds)[number]; points: Pt[];
   fill: string; opacity: number; hatch: (typeof hatches)[number];
   stroke: string; strokeWidth: number; outline: (typeof outlines)[number];
   front?: boolean; hidden?: boolean;
+  hatchColor?: string; hatchOpacity?: number; shadow?: boolean;
+  // Lines: ends and whether the line curves through its points.
+  start?: LineEnd; end?: LineEnd; curve?: boolean;
+  // Text: the words, drawn to fill the shape's box; outlined lettering if wanted.
+  text?: string; outlined?: boolean; weight?: number;
 }
 export interface Feed { strand: string; at: Pt; route: Route }
 // Text overrides; anything left out follows the map style.
@@ -69,11 +77,11 @@ export interface ResearchMap {
 
 // ---------- graphic style ----------
 // One style governs the whole drawing, so every line and label stays in the same language.
-export const grounds = ["plain", "ledger", "grid"] as const;
+export const grounds = ["plain", "ledger", "grid", "dots", "dashed"] as const;
 export const strandDashes = ["solid", "dash", "long"] as const;
 export const influenceDashes = ["dash", "dot", "solid"] as const;
 export const fills = ["white", "stripes", "black"] as const;
-export const hatches = ["none", "stripes", "chevrons"] as const;
+export const hatches = ["none", "stripes", "lines", "heavy", "chevrons", "grid", "dots", "cross"] as const;
 export const outlines = ["solid", "dashed", "none"] as const;
 export const fonts = ["helvetica", "inter", "condensed", "mono"] as const;
 export const fontLabels: Record<(typeof fonts)[number], string> = { helvetica: "Helvetica", inter: "Inter", condensed: "Condensed sans", mono: "Monospace (drafting)" };
@@ -110,6 +118,12 @@ export const stylePresets: { key: string; name: string; note: string; style: Map
     style: { ground: "ledger", background: "#E3ECDD", rule: "#B7CCB0", bands: 0, strandWidth: 5, corner: 18, strandDash: "solid", casing: true, influenceWidth: 0.8, influenceDash: "solid", influenceOpacity: 0.75, influenceInk: false, stationScale: 1, stationStroke: 1.1, interchangeFill: "stripes", font: "condensed", textScale: 1, ink: "#141414", zoneFill: "#F2A890", zoneOpacity: 0.45, zoneHatch: "stripes", zoneOutline: "none", construction: true, planes: true } },
   { key: "blueprint", name: "Drafting grid", note: "Monospace lettering on a fine grid, with construction lines and white interchanges.", colors: { material: "#C8502A", structure: "#1F3F73", computation: "#6A3B8C" },
     style: { ...defaultStyle, ground: "grid", background: "#F4F3EE", rule: "#D9D6CC", bands: 0.02, strandWidth: 4, corner: 12, font: "mono", textScale: 0.92, construction: true, zoneHatch: "chevrons", zoneFill: "#F3C46A", zoneOpacity: 0.35, zoneOutline: "dashed" } },
+  { key: "plan", name: "Plan collage", note: "After the pink plan collage: white sheet on a fine grid with a dot field, pink and black heavy hatching, thin black lines and dashed edges.", colors: { material: "#C46FA9", structure: "#141414", computation: "#8A8A8A" },
+    style: { ...defaultStyle, ground: "dots", background: "#FBFBFA", rule: "#D8D8D6", bands: 0, strandWidth: 3.5, corner: 40, casing: true, influenceWidth: 0.9, influenceDash: "solid", influenceOpacity: 0.7, influenceInk: true, stationScale: 0.95, stationStroke: 0.9, interchangeFill: "stripes", font: "helvetica", ink: "#141414", zoneFill: "#E7B4D6", zoneOpacity: 0.6, zoneHatch: "heavy", zoneOutline: "dashed", construction: false, planes: false } },
+  { key: "collimator", name: "Collimator sheet", note: "After Cantley's “2:34” sheet: salmon field, mint graph-paper plates, orange construction lines, condensed bold lettering.", colors: { material: "#E0662E", structure: "#1C1C1C", computation: "#4E9C7E" },
+    style: { ...defaultStyle, ground: "plain", background: "#ECEBE6", rule: "#C9C7BF", bands: 0, strandWidth: 5, corner: 10, casing: true, influenceWidth: 0.8, influenceDash: "solid", influenceOpacity: 0.65, stationStroke: 1.2, interchangeFill: "black", font: "condensed", ink: "#161616", zoneFill: "#D9776F", zoneOpacity: 0.6, zoneHatch: "grid", zoneOutline: "none", construction: true, planes: false } },
+  { key: "sheet", name: "Drafting sheet", note: "After the dashed-grid drafting sheet: dashed grid with a measured scale, hairline strands, small monospace notes.", colors: { material: "#555555", structure: "#1E1E1E", computation: "#1F5FA8" },
+    style: { ...defaultStyle, ground: "dashed", background: "#FFFFFF", rule: "#BDBDBD", bands: 0, strandWidth: 2.5, corner: 0, casing: false, influenceWidth: 0.7, influenceDash: "dash", influenceOpacity: 0.6, influenceInk: true, stationScale: 0.8, stationStroke: 0.7, interchangeFill: "white", font: "mono", textScale: 0.9, ink: "#222222", zoneFill: "#DDE6F2", zoneOpacity: 0.5, zoneHatch: "lines", zoneOutline: "dashed", construction: false, planes: false } },
 ];
 export function styleOf(map: Pick<ResearchMap, "style">): MapStyle { return map.style || defaultStyle; }
 
@@ -326,12 +340,24 @@ const strandDash = (style: MapStyle) => style.strandDash === "dash" ? `${style.s
 const influenceDash = (style: MapStyle) => style.influenceDash === "dash" ? "7 5" : style.influenceDash === "dot" ? `0.1 ${Math.max(3, style.influenceWidth * 3.5)}` : "";
 const dashAttr = (d: string, round = false) => d ? ` stroke-dasharray="${d}"${round ? ' stroke-linecap="round"' : ""}` : "";
 
+// A fill pattern drawn in any color, for shapes and the core zone.
+export function hatchPattern(id: string, hatch: (typeof hatches)[number], color: string, opacity = 0.16) {
+  const o = `fill-opacity="${opacity}"`; const so = `stroke-opacity="${opacity}"`;
+  if (hatch === "stripes") return `<pattern id="${id}" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="9" height="26" fill="${color}" ${o}/></pattern>`;
+  if (hatch === "lines") return `<pattern id="${id}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="1.4" height="8" fill="${color}" ${o}/></pattern>`;
+  if (hatch === "heavy") return `<pattern id="${id}" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="8" height="18" fill="${color}" ${o}/></pattern>`;
+  if (hatch === "chevrons") return `<pattern id="${id}" width="44" height="30" patternUnits="userSpaceOnUse"><path d="M0,0 L22,15 L0,30 M22,0 L44,15 L22,30" fill="none" stroke="${color}" ${so} stroke-width="9"/></pattern>`;
+  if (hatch === "grid") return `<pattern id="${id}" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12,0H0V12" fill="none" stroke="${color}" ${so} stroke-width="0.9"/></pattern>`;
+  if (hatch === "dots") return `<pattern id="${id}" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="6" cy="6" r="1.6" fill="${color}" ${o}/></pattern>`;
+  if (hatch === "cross") return `<pattern id="${id}" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0,5H10M5,0V10" stroke="${color}" ${so} stroke-width="1.1"/></pattern>`;
+  return "";
+}
+
 // Hatches used by the core zone and interchanges.
 function patternDefs(style: MapStyle) {
   const ink = style.ink;
   return `<defs><pattern id="rm-stripes" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#fff"/><rect width="7" height="14" fill="${ink}"/></pattern>` +
-    `<pattern id="rm-zone-stripes" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="9" height="26" fill="${ink}" fill-opacity="0.16"/></pattern>` +
-    `<pattern id="rm-zone-chevrons" width="44" height="30" patternUnits="userSpaceOnUse"><path d="M0,0 L22,15 L0,30 M22,0 L44,15 L22,30" fill="none" stroke="${ink}" stroke-opacity="0.18" stroke-width="9"/></pattern></defs>`;
+    hatches.filter(h => h !== "none").map(h => hatchPattern(`rm-zone-${h}`, h, ink, h === "chevrons" ? 0.18 : 0.16)).join("") + `</defs>`;
 }
 
 // The ground: plain, a ledger sheet (fine horizontal rules with heavier ones every fifth), or a drafting grid.
@@ -347,6 +373,22 @@ function groundSvg(map: ResearchMap, style: MapStyle) {
     for (let x = 0, i = 0; x <= W; x += 20, i++) (i % 5 === 0 ? bold : fine).push(`M${x},0V${H}`);
     for (let y = 0, i = 0; y <= H; y += 20, i++) (i % 5 === 0 ? bold : fine).push(`M0,${y}H${W}`);
     out.push(`<path d="${fine.join("")}" stroke="${style.rule}" stroke-width="0.5"/>`, `<path d="${bold.join("")}" stroke="${style.rule}" stroke-width="1"/>`);
+  } else if (style.ground === "dots") {
+    // A dot grid with fine guide lines every 120, like a plotted site grid.
+    const lines: string[] = []; const dots: string[] = [];
+    for (let x = 0; x <= W; x += 120) lines.push(`M${x},0V${H}`);
+    for (let y = 0; y <= H; y += 120) lines.push(`M0,${y}H${W}`);
+    for (let x = 40; x < W; x += 40) for (let y = 40; y < H; y += 40) dots.push(`M${x},${y}h0.01`);
+    out.push(`<path d="${lines.join("")}" stroke="${style.rule}" stroke-width="0.8"/>`, `<path d="${dots.join("")}" stroke="${style.rule}" stroke-width="3" stroke-linecap="round"/>`);
+  } else if (style.ground === "dashed") {
+    // A dashed drafting grid with a measured scale down the left edge.
+    const lines: string[] = [];
+    for (let x = 0; x <= W; x += 150) lines.push(`M${x},0V${H}`);
+    for (let y = 0; y <= H; y += 150) lines.push(`M0,${y}H${W}`);
+    out.push(`<path d="${lines.join("")}" stroke="${style.rule}" stroke-width="1" stroke-dasharray="8 6"/>`);
+    const ticks: string[] = []; for (let y = 0; y <= H; y += 15) ticks.push(`M14,${y}h${y % 150 === 0 ? 16 : y % 75 === 0 ? 10 : 5}`);
+    out.push(`<line x1="14" y1="0" x2="14" y2="${H}" stroke="${style.ink}" stroke-width="1.2"/><path d="${ticks.join("")}" stroke="${style.ink}" stroke-width="0.8"/>`);
+    for (let y = 150, n = 1; y < H; y += 150, n++) out.push(textSvg(34, y + 4, String(n), { size: 11, weight: 700, fill: style.ink }));
   }
   return out.join("");
 }
@@ -370,15 +412,53 @@ export function shapeBounds(shape: Shape) {
   const xs = shape.points.map(p => p[0]); const ys = shape.points.map(p => p[1]);
   return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
 }
+// A smooth curve through the points (Catmull-Rom), for curved arrows and leaders.
+function curvePath(pts: Pt[]) {
+  if (pts.length < 3) return `M${pts.map(p => p.join(",")).join(" L")}`;
+  let d = `M${pts[0].join(",")}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i]; const p1 = pts[i]; const p2 = pts[i + 1]; const p3 = pts[i + 2] || p2;
+    d += ` C${r1(p1[0] + (p2[0] - p0[0]) / 6)},${r1(p1[1] + (p2[1] - p0[1]) / 6)} ${r1(p2[0] - (p3[0] - p1[0]) / 6)},${r1(p2[1] - (p3[1] - p1[1]) / 6)} ${p2.join(",")}`;
+  }
+  return d;
+}
+// A line end drawn at p, facing away from q.
+function lineEndSvg(kind: LineEnd | undefined, p: Pt, q: Pt, color: string, w: number) {
+  if (!kind || kind === "none") return "";
+  const a = Math.atan2(p[1] - q[1], p[0] - q[0]); const c = Math.cos(a); const s = Math.sin(a); const k = Math.max(1, w);
+  if (kind === "arrow") { const L = 9 + k * 5; const W2 = 4 + k * 2.4; return `<path d="M${r1(p[0] + c * L * 0.25)},${r1(p[1] + s * L * 0.25)} L${r1(p[0] - c * L - s * W2)},${r1(p[1] - s * L + c * W2)} L${r1(p[0] - c * L + s * W2)},${r1(p[1] - s * L - c * W2)} Z" fill="${color}"/>`; }
+  if (kind === "circle") return `<circle cx="${p[0]}" cy="${p[1]}" r="${4 + k}" fill="#fff" stroke="${color}" stroke-width="${Math.max(1, w * 0.8)}"/>`;
+  if (kind === "dot") return `<circle cx="${p[0]}" cy="${p[1]}" r="${3 + k}" fill="${color}"/>`;
+  const L = kind === "bar" ? 10 + k * 3 : 7 + k * 2;
+  return `<line x1="${r1(p[0] - s * L)}" y1="${r1(p[1] + c * L)}" x2="${r1(p[0] + s * L)}" y2="${r1(p[1] - c * L)}" stroke="${color}" stroke-width="${kind === "bar" ? Math.max(2, w * 1.6) : Math.max(1, w)}"/>`;
+}
 export function shapeGeometry(shape: Shape) {
   if (shape.kind === "ellipse") { const b = shapeBounds(shape); return `<ellipse cx="${(b.x0 + b.x1) / 2}" cy="${(b.y0 + b.y1) / 2}" rx="${Math.max(1, (b.x1 - b.x0) / 2)}" ry="${Math.max(1, (b.y1 - b.y0) / 2)}"`; }
   return `<polygon points="${shape.points.map(p => p.join(",")).join(" ")}"`;
 }
-export function shapeSvg(shape: Shape) {
+export function shapeSvg(shape: Shape, ink = INK) {
   if (shape.hidden || shape.points.length < 2) return "";
+  const dash = shape.outline === "dashed" ? ` stroke-dasharray="${r1(shape.strokeWidth * 5 + 2)} ${r1(shape.strokeWidth * 4 + 2)}"` : "";
+  if (shape.kind === "line") {
+    const pts = shape.points; const n = pts.length;
+    const d = shape.curve ? curvePath(pts) : `M${pts.map(p => p.join(",")).join(" L")}`;
+    const color = shape.stroke; const w = shape.strokeWidth;
+    return `<g>${shape.shadow ? `<path d="${d}" transform="translate(6 6)" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="${w}"/>` : ""}<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round"${dash}/>` +
+      lineEndSvg(shape.start, pts[0], pts[1], color, w) + lineEndSvg(shape.end, pts[n - 1], pts[n - 2], color, w) + `</g>`;
+  }
+  if (shape.kind === "text") {
+    const b = shapeBounds(shape); const size = Math.max(6, b.y1 - b.y0);
+    const paint = shape.outlined ? `fill="none" stroke="${shape.stroke}" stroke-width="${Math.max(1, shape.strokeWidth)}"` : `fill="${shape.fill}" fill-opacity="${Math.max(0.05, shape.opacity)}"`;
+    const shadow = shape.shadow ? `<text x="${b.x0 + size * 0.05}" y="${b.y1 - size * 0.14 + size * 0.05}" font-size="${size}" font-weight="${shape.weight ?? 800}" fill="#000" fill-opacity="0.3">${esc(shape.text || "")}</text>` : "";
+    return `<g>${shadow}<text x="${b.x0}" y="${b.y1 - size * 0.14}" font-size="${size}" font-weight="${shape.weight ?? 800}" ${paint}>${esc(shape.text || "")}</text></g>`;
+  }
   const g = shapeGeometry(shape);
-  const stroke = shape.outline === "none" ? "" : ` stroke="${shape.stroke}" stroke-width="${shape.strokeWidth}"${shape.outline === "dashed" ? ` stroke-dasharray="${shape.strokeWidth * 5} ${shape.strokeWidth * 4}"` : ""}`;
-  return `${g} fill="${shape.fill}" fill-opacity="${shape.opacity}"${stroke}/>` + (shape.hatch !== "none" ? `${g} fill="url(#rm-zone-${shape.hatch})"/>` : "");
+  const stroke = shape.outline === "none" ? "" : ` stroke="${shape.stroke}" stroke-width="${shape.strokeWidth}"${dash}`;
+  const patternId = `rm-pat-${shape.id}`;
+  const pattern = shape.hatch !== "none" ? `<defs>${hatchPattern(patternId, shape.hatch, shape.hatchColor || ink, shape.hatchOpacity ?? (shape.hatch === "chevrons" ? 0.18 : 0.16))}</defs>` : "";
+  // A drop shadow: a dark copy offset down and to the right, as in hand-cut collage.
+  const shadow = shape.shadow ? `${g} transform="translate(9 9)" fill="#1a1a1a" fill-opacity="0.55"/>` : "";
+  return pattern + shadow + `${g} fill="${shape.fill}" fill-opacity="${shape.opacity}"${stroke}/>` + (pattern ? `${g} fill="url(#${patternId})"/>` : "");
 }
 
 // Construction layer: hairlines carried past each strand's ends, a measured scale, and registration marks.
@@ -408,7 +488,7 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
   add(patternDefs(style));
   add(groundSvg(map, style));
   const shapes = shapesOf(map);
-  for (const shape of shapes) if (!shape.front) add(shapeSvg(shape));
+  for (const shape of shapes) if (!shape.front) add(shapeSvg(shape, ink));
   map.columns.forEach((col, i) => {
     if (i % 2 === 1 && style.bands > 0) add(`<rect x="${col.x0}" y="${MAP_TOP}" width="${col.x1 - col.x0}" height="${MAP_BOTTOM - MAP_TOP}" fill="#000" fill-opacity="${style.bands}"/>`);
     add(roleText(map, "columnTitle", col.x0 + 20, 200, `${String(i + 1).padStart(2, "0")}  ${col.title.toUpperCase()}`, { size: 15, weight: 700, spacing: 2.5 }));
@@ -447,7 +527,7 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
   const sd = dashAttr(strandDash(style));
   if (style.casing) for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${style.background}" stroke-width="${style.strandWidth + 5}" stroke-linecap="round" stroke-linejoin="round"/>`);
   for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${strandInk(map, strand)}" stroke-width="${style.strandWidth}" stroke-linecap="${sd ? "butt" : "round"}" stroke-linejoin="round"${sd}/>`);
-  for (const shape of shapes) if (shape.front) add(shapeSvg(shape));
+  for (const shape of shapes) if (shape.front) add(shapeSvg(shape, ink));
   for (const item of map.items) if (item.marker && item.marker.type !== "none") add(markerSvg(item.marker.type, item.marker.x, item.marker.y, strandColor(map, item.marker.strand), item.marker.y2, style, item.marker.paint, item.id));
   const kindPaint = Object.fromEntries(kinds.map(k => [k, map.text?.[k] || {}])) as Record<Kind, TextPaint>;
   for (const item of map.items) if (item.name.trim()) add(labelSvg(item, t, ink, kindPaint[item.kind]));
@@ -682,7 +762,10 @@ function parseShapes(value: unknown): Shape[] {
     const points = Array.isArray(r.points) ? r.points.slice(0, 60).map(pt).filter((p): p is Pt => !!p) : [];
     if (points.length < 2) return [];
     return [{ id: sid, name: str(r.name, 60), kind: pick(shapeKinds, r.kind, "polygon"), points, fill: hex(r.fill, "#F2A890"), opacity: clamp(r.opacity, 0, 1, 0.3), hatch: pick(hatches, r.hatch, "none"),
-      stroke: hex(r.stroke, "#141414"), strokeWidth: clamp(r.strokeWidth, 0.2, 12, 1), outline: pick(outlines, r.outline, "none"), ...(r.front === true ? { front: true } : {}), ...(r.hidden === true ? { hidden: true } : {}) }];
+      stroke: hex(r.stroke, "#141414"), strokeWidth: clamp(r.strokeWidth, 0.2, 12, 1), outline: pick(outlines, r.outline, "none"), ...(r.front === true ? { front: true } : {}), ...(r.hidden === true ? { hidden: true } : {}),
+      ...(hex(r.hatchColor, "") ? { hatchColor: hex(r.hatchColor, "") } : {}), ...(typeof r.hatchOpacity === "number" ? { hatchOpacity: clamp(r.hatchOpacity, 0, 1, 0.16) } : {}), ...(r.shadow === true ? { shadow: true } : {}),
+      ...(lineEnds.includes(r.start as LineEnd) && r.start !== "none" ? { start: r.start as LineEnd } : {}), ...(lineEnds.includes(r.end as LineEnd) && r.end !== "none" ? { end: r.end as LineEnd } : {}), ...(r.curve === true ? { curve: true } : {}),
+      ...(typeof r.text === "string" ? { text: str(r.text, 80) } : {}), ...(r.outlined === true ? { outlined: true } : {}), ...(typeof r.weight === "number" ? { weight: Math.round(clamp(r.weight, 100, 900, 800) / 100) * 100 } : {}) }];
   });
 }
 

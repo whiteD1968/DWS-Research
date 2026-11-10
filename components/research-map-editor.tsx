@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  axisIds, axisPlanes, legendWords, MAP_BOTTOM, metricsOf, rolePaint, strandInk, textDefaults, textExtent, textRoleLabels, textRoles, type LegendWord, type TextPaint, type TextRole, checkMap, defaultStyle, markerBox, markerFillKind, markerFillLabels, markerFills, shapeBounds, shapesOf, type Shape, diffMaps, fills, fontLabels, fonts, grounds, hatches, influenceDashes, kindLabels, kinds, labelBox, labelLines, markerLabels, markers,
+  axisIds, axisPlanes, lineEnds, legendWords, MAP_BOTTOM, metricsOf, rolePaint, strandInk, textDefaults, textExtent, textRoleLabels, textRoles, type LegendWord, type TextPaint, type TextRole, checkMap, defaultStyle, markerBox, markerFillKind, markerFillLabels, markerFills, shapeBounds, shapesOf, type Shape, diffMaps, fills, fontLabels, fonts, grounds, hatches, influenceDashes, kindLabels, kinds, labelBox, labelLines, markerLabels, markers,
   nearestOnPolyline, newId, outlines, renderMapInner, renderMapSvg, routeLabels, routes, snapBetween, snapDirection, strandDashes, styleOf, stylePresets,
   type Issue, type Item, type LogEntry, type MapStyle, type MarkerPaint, type MarkerType, type Pt, type ResearchMap, type Strand,
 } from "@/lib/research-map";
@@ -38,15 +38,25 @@ type Tab = "content" | "checks" | "map" | "layers" | "style" | "history";
 const grid = (n: number, on: boolean, step = 5) => on ? Math.round(n / step) * step : Math.round(n * 10) / 10;
 const dateLabel = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 const today = () => new Date().toISOString().slice(0, 10);
+const lineEndLabels: Record<(typeof lineEnds)[number], string> = { none: "None", arrow: "Arrow", circle: "Open circle", dot: "Dot", tick: "Tick", bar: "Heavy bar" };
+const defaultMetricsLike = { scale: 1, wide: 1.1 };
 const oneLine = (name: string) => name.replace(/\n/g, " ") || "Untitled";
 // Edits shapes on a map whose planes may still be generated from the style: the first edit makes them real shapes.
 const withShapes = (map: ResearchMap, change: (shapes: Shape[]) => Shape[]): ResearchMap => ({ ...map, shapes: change(shapesOf(map)) });
-const shapeTemplates = {
+type ShapeTemplate = { name: string; kind: Shape["kind"]; points: [number, number][]; extra?: Partial<Shape> };
+const shapeTemplates: Record<string, ShapeTemplate> = {
   rectangle: { name: "Rectangle", kind: "polygon", points: [[0, 0], [360, 0], [360, 220], [0, 220]] },
   circle: { name: "Circle", kind: "ellipse", points: [[0, 0], [260, 260]] },
   triangle: { name: "Triangle", kind: "polygon", points: [[180, 0], [360, 260], [0, 260]] },
   plane: { name: "Skewed plane", kind: "polygon", points: [[120, 0], [600, 0], [480, 220], [0, 220]] },
-} as const;
+  slab: { name: "Hatched slab", kind: "polygon", points: [[0, 0], [300, 0], [300, 180], [0, 180]], extra: { fill: "#E7B4D6", opacity: 0.85, hatch: "heavy", hatchColor: "#141414", hatchOpacity: 0.85, outline: "solid", strokeWidth: 1.5 } },
+  graph: { name: "Graph-paper plate", kind: "polygon", points: [[0, 0], [320, 0], [320, 240], [0, 240]], extra: { fill: "#CFEBDD", opacity: 0.9, hatch: "grid", hatchColor: "#4E8F72", hatchOpacity: 0.55, shadow: true } },
+  leader: { name: "Leader", kind: "line", points: [[0, 0], [160, 0], [300, -110]], extra: { strokeWidth: 1, outline: "solid", end: "circle", front: true } },
+  arrow: { name: "Dashed arrow", kind: "line", points: [[0, 120], [160, 0], [360, 60]], extra: { strokeWidth: 2.5, outline: "dashed", curve: true, end: "arrow", start: "dot", front: true } },
+  dimension: { name: "Dimension", kind: "line", points: [[0, 0], [360, 0]], extra: { strokeWidth: 2.5, outline: "solid", start: "bar", end: "bar", front: true } },
+  number: { name: "Big number", kind: "text", points: [[0, 0], [10, 150]], extra: { text: "001", fill: "#C77DB0", opacity: 1, weight: 900, front: true } },
+  stencil: { name: "Stencil label", kind: "text", points: [[0, 0], [10, 26]], extra: { text: "HOLD THE LINE", fill: "#141414", opacity: 1, weight: 900, front: true } },
+};
 
 export function strandName(map: ResearchMap, strand: Strand) {
   const start = map.items.find(item => item.marker?.type === "start" && item.marker.strand === strand.id);
@@ -154,7 +164,7 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
     if (selection.type === "zone") commit(current => ({ ...current, zone: null }));
     if (selection.type === "shape") {
       if (selection.point !== undefined) {
-        commit(current => withShapes(current, list => list.map(sh => sh.id === selection.id && sh.kind === "polygon" && sh.points.length > 3 ? { ...sh, points: sh.points.filter((_, i) => i !== selection.point) } : sh)));
+        commit(current => withShapes(current, list => list.map(sh => sh.id === selection.id && ((sh.kind === "polygon" && sh.points.length > 3) || (sh.kind === "line" && sh.points.length > 2)) ? { ...sh, points: sh.points.filter((_, i) => i !== selection.point) } : sh)));
         setSelection({ type: "shape", id: selection.id }); return;
       }
       commit(current => withShapes(current, list => list.filter(sh => sh.id !== selection.id)));
@@ -346,7 +356,7 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
   const addShape = (key: keyof typeof shapeTemplates) => {
     const t = shapeTemplates[key]; const id = newId("shape", shapesOf(map).map(sh => sh.id));
     const v = viewRef.current || fitView(); const ox = Math.round(v.cx - 180); const oy = Math.round(v.cy - 120);
-    const shape: Shape = { id, name: t.name, kind: t.kind, points: t.points.map(p => [p[0] + ox, p[1] + oy] as Pt), fill: "#F2A890", opacity: 0.35, hatch: "none", stroke: styleOf(map).ink, strokeWidth: 1.5, outline: "none" };
+    const shape: Shape = { id, name: t.name, kind: t.kind, points: t.points.map(p => [p[0] + ox, p[1] + oy] as Pt), fill: "#F2A890", opacity: 0.35, hatch: "none", stroke: styleOf(map).ink, strokeWidth: 1.5, outline: "none", ...t.extra };
     commit(c => withShapes(c, list => [...list, shape])); setSelection({ type: "shape", id }); setTab("content");
   };
   const addAxisPlanes = () => commit(c => withShapes(c, list => { const taken = new Set(list.map(sh => sh.id)); return [...axisPlanes(c).map(sh => taken.has(sh.id) ? { ...sh, id: newId(`${sh.id}-`, [...taken]) } : sh), ...list]; }));
@@ -474,6 +484,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
                 onPointerDown={e => onAreaDown(e, { type: "zone", id: "zone" }, { kind: "zone-move", sx: e.clientX, sy: e.clientY, ox: z.x, oy: z.y })}><title>Core zone: click to select, then drag to move</title></rect>}
               {shapes.filter(sh => !sh.hidden).map(sh => { const b = shapeBounds(sh); const cls = selection?.type === "shape" && selection.id === sh.id ? "research-map-area-hit research-map-area-selected" : "research-map-area-hit";
                 const down = (e: ReactPointerEvent) => onAreaDown(e, { type: "shape", id: sh.id }, { kind: "shape", id: sh.id, sx: e.clientX, sy: e.clientY, orig: sh.points });
+                if (sh.kind === "line") return <path key={sh.id} d={`M${sh.points.map(p => p.join(",")).join(" L")}`} className={`${cls} research-map-line-hit`} strokeWidth={14 * hs} onPointerDown={down}><title>{sh.name || "Line"}</title></path>;
+                if (sh.kind === "text") return <rect key={sh.id} x={b.x0} y={b.y0} width={Math.max(20, textExtent(sh.text || "", b.y1 - b.y0, defaultMetricsLike, false) * 1.15)} height={b.y1 - b.y0} className={cls} strokeWidth={1.5 * hs} onPointerDown={down}><title>{sh.name || "Text"}</title></rect>;
                 return sh.kind === "ellipse"
                   ? <ellipse key={sh.id} cx={(b.x0 + b.x1) / 2} cy={(b.y0 + b.y1) / 2} rx={(b.x1 - b.x0) / 2} ry={(b.y1 - b.y0) / 2} className={cls} strokeWidth={1.5 * hs} onPointerDown={down}><title>{sh.name || "Shape"}</title></ellipse>
                   : <polygon key={sh.id} points={sh.points.map(p => p.join(",")).join(" ")} className={cls} strokeWidth={1.5 * hs} onPointerDown={down}><title>{sh.name || "Shape"}</title></polygon>; })}
@@ -528,8 +540,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
           {selectedShape && <ShapeForm key={selectedShape.id} shape={selectedShape} onChange={change => updateShape(selectedShape.id, change)} onClose={() => setSelection(null)}
             onDuplicate={() => { const id = newId("shape", shapes.map(sh => sh.id)); commit(c => withShapes(c, list => [...list, { ...selectedShape, id, name: `${selectedShape.name} copy`, points: selectedShape.points.map(p => [p[0] + 30, p[1] + 30] as Pt) }])); setSelection({ type: "shape", id }); }}
             onDelete={() => { commit(c => withShapes(c, list => list.filter(sh => sh.id !== selectedShape.id))); setSelection(null); }}
-            onRemovePoint={selection?.point !== undefined && selectedShape.kind === "polygon" && selectedShape.points.length > 3 ? removeSelection : undefined}
-            onAddPoint={selectedShape.kind === "polygon" ? () => updateShape(selectedShape.id, { points: (() => { const pts = selectedShape.points; const i = selection?.point ?? pts.length - 1; const a = pts[i]; const b = pts[(i + 1) % pts.length]; const mid: Pt = [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2)]; return [...pts.slice(0, i + 1), mid, ...pts.slice(i + 1)]; })() }) : undefined} />}
+            onRemovePoint={selection?.point !== undefined && ((selectedShape.kind === "polygon" && selectedShape.points.length > 3) || (selectedShape.kind === "line" && selectedShape.points.length > 2)) ? removeSelection : undefined}
+            onAddPoint={selectedShape.kind === "polygon" || selectedShape.kind === "line" ? () => updateShape(selectedShape.id, { points: (() => { const pts = selectedShape.points; const i = Math.min(selection?.point ?? pts.length - 2, selectedShape.kind === "line" ? pts.length - 2 : pts.length - 1); const a = pts[i]; const b = pts[(i + 1) % pts.length]; const mid: Pt = [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2)]; return [...pts.slice(0, i + 1), mid, ...pts.slice(i + 1)]; })() }) : undefined} />}
           {selectedStrand && <div className="research-map-form">
             <div className="research-map-form-head"><span className="research-map-swatch" style={{ background: map.axes[selectedStrand.axis].color }} /><strong>{strandName(map, selectedStrand)}</strong><button type="button" className="text-button" onClick={() => setSelection(null)}>Done</button></div>
             <label>Category<select value={selectedStrand.axis} onChange={e => commit(c => ({ ...c, strands: c.strands.map(s => s.id === selectedStrand.id ? { ...s, axis: e.target.value as Strand["axis"] } : s) }))}>{axisIds(map).map(a => <option key={a} value={a}>{map.axes[a].label}</option>)}</select></label>
@@ -702,11 +714,11 @@ function ContentList({ map, filter, issueIds, onSelect }: { map: ResearchMap; fi
 }
 
 const styleNames = {
-  ground: { plain: "Plain", ledger: "Ledger sheet", grid: "Drafting grid" },
+  ground: { plain: "Plain", ledger: "Ledger sheet", grid: "Drafting grid", dots: "Dot grid", dashed: "Dashed grid with scale" },
   strandDash: { solid: "Solid", dash: "Dashed", long: "Long dash" },
   influenceDash: { dash: "Dashed", dot: "Dotted", solid: "Solid" },
   interchangeFill: { white: "White", stripes: "Hazard stripes", black: "Solid ink" },
-  zoneHatch: { none: "None", stripes: "Hazard stripes", chevrons: "Chevrons" },
+  zoneHatch: { none: "None", stripes: "Hazard stripes", lines: "Fine lines", heavy: "Heavy stripes", chevrons: "Chevrons", grid: "Graph grid", dots: "Dots", cross: "Crosshatch" },
   zoneOutline: { solid: "Solid", dashed: "Dashed", none: "None" },
 } as const;
 
@@ -808,17 +820,45 @@ function ShapeForm({ shape, onChange, onClose, onDuplicate, onDelete, onAddPoint
   return <div className="research-map-form">
     <div className="research-map-form-head"><span className="research-map-swatch" style={{ background: shape.fill }} /><strong>{shape.name || "Shape"}</strong><button type="button" className="text-button" onClick={onClose}>Done</button></div>
     <label>Name<input value={shape.name} maxLength={60} onChange={e => onChange({ name: e.target.value })} /></label>
+    {shape.kind === "text" && <>
+      <label>Text<input value={shape.text || ""} maxLength={80} onChange={e => onChange({ text: e.target.value })} /></label>
+      <label className="research-map-color">Color<input type="color" value={shape.outlined ? shape.stroke : shape.fill} onChange={e => onChange(shape.outlined ? { stroke: e.target.value } : { fill: e.target.value })} /></label>
+      <label className="research-map-range">Strength<span><input type="range" min={0.05} max={1} step={0.05} value={shape.opacity} onChange={e => onChange({ opacity: Number(e.target.value) })} /><output>{Math.round(shape.opacity * 100)}%</output></span></label>
+      <div className="research-map-row">
+        <label>Weight<select value={shape.weight ?? 800} onChange={e => onChange({ weight: Number(e.target.value) })}>{[300, 400, 600, 800, 900].map(w => <option key={w} value={w}>{({ 300: "Light", 400: "Regular", 600: "Semibold", 800: "Bold", 900: "Black" } as Record<number, string>)[w]}</option>)}</select></label>
+        <label>Letters<select value={shape.outlined ? "outline" : "solid"} onChange={e => onChange({ outlined: e.target.value === "outline" || undefined })}><option value="solid">Solid</option><option value="outline">Outlined</option></select></label>
+      </div>
+      {shape.outlined && <label className="research-map-range">Outline weight<span><input type="range" min={0.5} max={8} step={0.1} value={shape.strokeWidth} onChange={e => onChange({ strokeWidth: Number(e.target.value) })} /><output>{shape.strokeWidth}</output></span></label>}
+      <p className="research-map-hint">Drag the lower handle up or down to change the size.</p>
+    </>}
+    {shape.kind === "line" && <>
+      <label className="research-map-color">Line color<input type="color" value={shape.stroke} onChange={e => onChange({ stroke: e.target.value })} /></label>
+      <label className="research-map-range">Line weight<span><input type="range" min={0.3} max={10} step={0.1} value={shape.strokeWidth} onChange={e => onChange({ strokeWidth: Number(e.target.value) })} /><output>{shape.strokeWidth}</output></span></label>
+      <label>Line<select value={shape.outline === "dashed" ? "dashed" : "solid"} onChange={e => onChange({ outline: e.target.value as Shape["outline"] })}><option value="solid">Solid</option><option value="dashed">Dashed</option></select></label>
+      <div className="research-map-row">
+        <label>Start<select value={shape.start || "none"} onChange={e => onChange({ start: e.target.value === "none" ? undefined : e.target.value as Shape["start"] })}>{lineEnds.map(k => <option key={k} value={k}>{lineEndLabels[k]}</option>)}</select></label>
+        <label>End<select value={shape.end || "none"} onChange={e => onChange({ end: e.target.value === "none" ? undefined : e.target.value as Shape["end"] })}>{lineEnds.map(k => <option key={k} value={k}>{lineEndLabels[k]}</option>)}</select></label>
+      </div>
+      <label className="research-map-check"><input type="checkbox" checked={!!shape.curve} onChange={e => onChange({ curve: e.target.checked || undefined })} />Curve smoothly through its points</label>
+    </>}
+    {(shape.kind === "polygon" || shape.kind === "ellipse") && <>
     <AppearanceFields fill={shape.fill} opacity={shape.opacity} hatch={shape.hatch} outline={shape.outline} onChange={onChange} />
-    {shape.outline !== "none" && <>
+    {shape.hatch !== "none" && <>
+      <label className="research-map-color">Pattern color<input type="color" value={shape.hatchColor || "#141414"} onChange={e => onChange({ hatchColor: e.target.value })} /></label>
+      <label className="research-map-range">Pattern strength<span><input type="range" min={0.05} max={1} step={0.05} value={shape.hatchOpacity ?? 0.16} onChange={e => onChange({ hatchOpacity: Number(e.target.value) })} /><output>{Math.round((shape.hatchOpacity ?? 0.16) * 100)}%</output></span></label>
+    </>}
+    </>}
+    {shape.kind !== "line" && shape.kind !== "text" && shape.outline !== "none" && <>
       <label className="research-map-color">Outline color<input type="color" value={shape.stroke} onChange={e => onChange({ stroke: e.target.value })} /></label>
       <label className="research-map-range">Outline weight<span><input type="range" min={0.2} max={8} step={0.1} value={shape.strokeWidth} onChange={e => onChange({ strokeWidth: Number(e.target.value) })} /><output>{shape.strokeWidth}</output></span></label>
     </>}
+    <label className="research-map-check"><input type="checkbox" checked={!!shape.shadow} onChange={e => onChange({ shadow: e.target.checked || undefined })} />Drop shadow</label>
     <label>Layer<select value={shape.front ? "front" : "back"} onChange={e => onChange({ front: e.target.value === "front" || undefined })}><option value="back">Behind the strands</option><option value="front">Over the strands</option></select></label>
     <label className="research-map-check"><input type="checkbox" checked={!!shape.hidden} onChange={e => onChange({ hidden: e.target.checked || undefined })} />Hidden</label>
-    <p className="research-map-hint">{shape.kind === "ellipse" ? "Drag the square handles to resize it, or drag the shape to move it." : "Drag the square handles to reshape it, or drag the shape to move it. Select a corner to add a point after it or remove it."}</p>
+    <p className="research-map-hint">{shape.kind === "ellipse" ? "Drag the square handles to resize it, or drag the shape to move it." : shape.kind === "text" ? "Drag it to move it." : "Drag the square handles to reshape it, or drag it to move it. Select a point to add one after it or remove it."}</p>
     <div className="research-map-row research-map-wrap">
-      {onAddPoint && <button type="button" className="button" onClick={onAddPoint}>Add a corner</button>}
-      {onRemovePoint && <button type="button" className="button" onClick={onRemovePoint}>Remove corner</button>}
+      {onAddPoint && <button type="button" className="button" onClick={onAddPoint}>Add a point</button>}
+      {onRemovePoint && <button type="button" className="button" onClick={onRemovePoint}>Remove point</button>}
       <button type="button" className="button" onClick={onDuplicate}>Duplicate</button>
     </div>
     <button type="button" className="text-button research-map-danger" onClick={onDelete}>Delete shape</button>

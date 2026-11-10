@@ -2769,3 +2769,6 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .research-map-text-row .research-map-text-role { flex: 1; font-size: 12.5px; color: var(--text); }
 .research-map-text-row input[type="number"] { flex: 0 0 64px; }
 .research-map-text-row button { flex: 0 0 auto; }
+.research-map-area-hit.research-map-line-hit { fill: none; pointer-events: stroke; stroke: transparent; }
+.research-map-area-hit.research-map-line-hit:hover { stroke: rgba(208, 139, 0, .25); stroke-dasharray: none; }
+.research-map-area-hit.research-map-line-hit.research-map-area-selected { stroke: rgba(208, 139, 0, .3); }
