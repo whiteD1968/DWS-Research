@@ -2759,3 +2759,13 @@ body { font-family: var(--font-sans), Helvetica, Arial, sans-serif; }
 .research-map-layer button:disabled { opacity: .3; cursor: default; }
 .research-map-layer .research-map-layer-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .research-map-eye { width: 24px; color: var(--text-muted) !important; }
+.research-map-text-hit { fill: transparent; stroke: transparent; cursor: text; }
+.research-map-text-hit:hover { stroke: rgba(0, 0, 0, .25); stroke-dasharray: 4 3; }
+.research-map-hint-inline { color: var(--text-muted); font-size: 12px; }
+.research-map-category .research-map-count { flex: 0 0 auto; min-width: 20px; text-align: center; font-size: 12px; color: var(--text-muted); }
+.research-map-category button { flex: 0 0 auto; }
+.research-map-text-row { gap: 6px; }
+.research-map-text-row input[type="color"] { flex: 0 0 32px; height: 28px; }
+.research-map-text-row .research-map-text-role { flex: 1; font-size: 12.5px; color: var(--text); }
+.research-map-text-row input[type="number"] { flex: 0 0 64px; }
+.research-map-text-row button { flex: 0 0 auto; }

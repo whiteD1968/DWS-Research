@@ -161,3 +161,24 @@ test('shapes and per-station paint survive a save and draw as set', () => {
   assert.deepEqual(rm.parseMap({ ...clone(), shapes: [] }).shapes, []);
   assert.equal(rm.renderMapSvg({ ...clone(), style: { ...rm.defaultStyle, planes: true }, shapes: [] }).includes('fill-opacity="0.09"'), false, 'an empty shape list means the planes were deleted');
 });
+
+test('categories can be added, and text, legend words and single colors are kept and drawn', () => {
+  const map = clone();
+  map.axes = { ...map.axes, ecology: { label: 'Ecology', color: '#3e8e5a' } };
+  map.strands[0].axis = 'ecology';
+  map.strands[1].color = '#123456';
+  map.text = { title: { color: '#aa0000', scale: 1.5 }, person: { color: '#00aa00' }, bogus: { color: '#000000' } };
+  map.words = { read: 'READING THE MAP' };
+  map.items[0].paint = { color: '#0000aa', bold: false };
+  map.projects[0].color = '#ff00ff';
+  const back = rm.parseMap(JSON.parse(JSON.stringify(map)));
+  assert.deepEqual(Object.keys(back.axes), ['material', 'structure', 'computation', 'ecology']);
+  assert.equal(back.strands[0].axis, 'ecology'); assert.equal(back.strands[1].color, '#123456');
+  assert.deepEqual(Object.keys(back.text), ['title', 'person']);
+  const svg = rm.renderMapSvg(back);
+  for (const s of ['#3e8e5a', '#123456', 'fill="#aa0000"', 'font-size="45"', '#00aa00', 'READING THE MAP', 'fill="#0000aa"', 'fill="#ff00ff"', '>Ecology<']) assert.ok(svg.includes(s), s);
+  const changes = rm.diffMaps(clone(), back);
+  assert.ok(changes.includes('Added the category “Ecology”') && changes.includes('Recolored a strand') && changes.includes('Edited the legend wording'), changes.join('; '));
+  const stray = rm.parseMap({ ...clone(), strands: [{ id: 's1', axis: 'gone', points: [[0, 0], [10, 0]] }] });
+  assert.equal(stray.strands[0].axis, 'material');
+});

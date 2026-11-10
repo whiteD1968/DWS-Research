@@ -6,8 +6,10 @@
 export const researchMapParent = "research_map";
 export const researchMapSnapshotParent = "research_map_snapshot";
 
+// The three starting categories; a map can rename them and add more.
 export const axes = ["material", "structure", "computation"] as const;
-export type Axis = (typeof axes)[number];
+export type Axis = string;
+export const axisIds = (map: Pick<ResearchMap, "axes">) => Object.keys(map.axes);
 export const kinds = ["concept", "technique", "person", "output"] as const;
 export type Kind = (typeof kinds)[number];
 export const kindLabels: Record<Kind, string> = { concept: "Concept or precedent", technique: "Technique or tool", person: "Person or group", output: "Output" };
@@ -19,7 +21,7 @@ export type Route = (typeof routes)[number];
 export const routeLabels: Record<Route, string> = { under: "Under the label, then 45°", end: "From the label's end", start: "From the label's start", level: "Level, then 45° at the strand" };
 
 export type Pt = [number, number];
-export interface Strand { id: string; axis: Axis; points: Pt[] }
+export interface Strand { id: string; axis: Axis; points: Pt[]; color?: string }
 // Per-station overrides; anything left out follows the map style.
 export interface MarkerPaint { fill?: string; stroke?: string; scale?: number; weight?: number }
 export interface Marker { type: MarkerType; x: number; y: number; y2?: number; strand?: string; paint?: MarkerPaint }
@@ -32,12 +34,23 @@ export interface Shape {
   front?: boolean; hidden?: boolean;
 }
 export interface Feed { strand: string; at: Pt; route: Route }
+// Text overrides; anything left out follows the map style.
+export interface TextPaint { color?: string; scale?: number; bold?: boolean; italic?: boolean }
 export interface Item {
   id: string; name: string; kind: Kind; main: boolean;
   x: number; y: number; anchor: "start" | "middle" | "end";
-  marker?: Marker; feeds?: Feed; from?: string;
+  marker?: Marker; feeds?: Feed; from?: string; paint?: TextPaint;
 }
-export interface Project { id: string; code: string; name: string; projectId?: string; x: number; y: number; note?: string }
+// Every other piece of text on the map, each with its own color and size.
+export const textRoles = ["title", "axesLine", "subtitle", "columnTitle", "columnNote", "zoneTitle", "legendHead", "legend", "caption", "concept", "technique", "person", "output", "project"] as const;
+export type TextRole = (typeof textRoles)[number];
+export const textRoleLabels: Record<TextRole, string> = { title: "Map title", axesLine: "Category line under the title", subtitle: "Subtitle", columnTitle: "Column titles", columnNote: "Column notes", zoneTitle: "Core zone title", legendHead: "Legend headings", legend: "Legend text", caption: "How-to-read text", concept: "Concepts and precedents", technique: "Techniques and tools", person: "People and groups", output: "Outputs", project: "Project codes" };
+// Default colors; an empty one means the style's ink.
+export const textDefaults: Record<TextRole, string> = { title: "", axesLine: "", subtitle: "#6b6b6b", columnTitle: "#9a9a96", columnNote: "#9a9a96", zoneTitle: "", legendHead: "", legend: "", caption: "#333333", concept: "#3a3a3a", technique: "#3a3a3a", person: "#6b6b6b", output: "#3a3a3a", project: "" };
+// Wording in the legend that isn't stored elsewhere.
+export const legendWords = { read: "HOW TO READ THIS", axes: "AXES", stations: "STATIONS", type: "TYPE", projects: "MY PROJECTS", influence: "Influence feeding a strand", start: markerLabels.start, stop: markerLabels.stop, interchange: markerLabels.interchange, outcome: markerLabels.outcome, concept: kindLabels.concept, technique: kindLabels.technique, person: kindLabels.person, output: kindLabels.output, placeholder: "Project station still to name" } as const;
+export type LegendWord = keyof typeof legendWords;
+export interface Project { id: string; code: string; name: string; projectId?: string; x: number; y: number; note?: string; color?: string }
 export interface Column { title: string; subtitle: string; x0: number; x1: number }
 export interface ResearchMap {
   version: 1; width: number; height: number;
@@ -49,6 +62,8 @@ export interface ResearchMap {
   caption: string;
   style?: MapStyle;
   shapes?: Shape[];
+  text?: Partial<Record<TextRole, TextPaint>>;
+  words?: Partial<Record<LegendWord, string>>;
   stylePresets?: { name: string; style: MapStyle }[];
 }
 
@@ -98,10 +113,18 @@ export const stylePresets: { key: string; name: string; note: string; style: Map
 ];
 export function styleOf(map: Pick<ResearchMap, "style">): MapStyle { return map.style || defaultStyle; }
 
-export interface Metrics { scale: number; wide: number }
+export interface Metrics { scale: number; wide: number; kinds?: Partial<Record<Kind, number>> }
 export const defaultMetrics: Metrics = { scale: 1, wide: 1 };
-export function metricsFor(style: MapStyle): Metrics {
-  return { scale: style.textScale, wide: style.font === "condensed" ? 0.94 : style.font === "mono" ? 1.18 : style.font === "inter" ? 1.04 : 1 };
+export function metricsFor(style: MapStyle, text?: ResearchMap["text"]): Metrics {
+  const kinds = text ? Object.fromEntries(kindsList.flatMap(k => text[k]?.scale ? [[k, text[k]!.scale!]] : [])) : {};
+  return { scale: style.textScale, wide: style.font === "condensed" ? 0.94 : style.font === "mono" ? 1.18 : style.font === "inter" ? 1.04 : 1, ...(Object.keys(kinds).length ? { kinds } : {}) };
+}
+const kindsList = ["concept", "technique", "person", "output"] as const;
+export const metricsOf = (map: Pick<ResearchMap, "style" | "text">) => metricsFor(styleOf(map), map.text);
+// A text role's paint, with its default color and the style's ink filled in.
+export function rolePaint(map: Pick<ResearchMap, "style" | "text">, role: TextRole) {
+  const p = map.text?.[role] || {}; const ink = styleOf(map).ink;
+  return { color: p.color || textDefaults[role] || ink, scale: p.scale ?? 1, bold: p.bold, italic: p.italic };
 }
 
 export const INK = "#1d1d1f";
@@ -116,14 +139,14 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 // ---------- geometry ----------
 
-export function labelSize(item: Pick<Item, "main" | "kind">, t: Metrics = defaultMetrics) {
+export function labelSize(item: Pick<Item, "main" | "kind"> & { paint?: TextPaint }, t: Metrics = defaultMetrics) {
   const size = item.main ? 21 : 14;
-  return (item.kind === "technique" ? size - (item.main ? 2 : 2.5) : item.kind === "person" ? size - 1 : size) * t.scale;
+  return (item.kind === "technique" ? size - (item.main ? 2 : 2.5) : item.kind === "person" ? size - 1 : size) * t.scale * (t.kinds?.[item.kind] ?? 1) * (item.paint?.scale ?? 1);
 }
 export function labelLines(name: string) { return name.split("\n").map(line => line.trim()).filter(Boolean); }
 
 // Estimated text width; the drawing is generated without a browser, so this stays deliberately generous.
-export function labelWidth(item: Pick<Item, "name" | "main" | "kind">, t: Metrics = defaultMetrics) {
+export function labelWidth(item: Pick<Item, "name" | "main" | "kind"> & { paint?: TextPaint }, t: Metrics = defaultMetrics) {
   const size = labelSize(item, t) * t.wide;
   const per = item.kind === "technique" ? (item.main ? 0.74 : 0.7) : item.kind === "person" ? 0.5 : item.main ? 0.56 : 0.53;
   return Math.max(...labelLines(item.name || " ").map(line => line.length), 1) * size * per;
@@ -220,26 +243,43 @@ export function branchPath(item: Item, parent: Item, t: Metrics = defaultMetrics
 
 // ---------- drawing ----------
 
+// Text with a role's paint applied: color, size, bold and italic.
+function roleText(map: ResearchMap, role: TextRole, x: number, y: number, s: string, o: { size: number; weight?: number; anchor?: string; italic?: boolean; spacing?: number; caps?: boolean; fill?: string }) {
+  const p = rolePaint(map, role); const set = map.text?.[role];
+  return textSvg(x, y, s, { ...o, size: o.size * p.scale, fill: set?.color ? set.color : o.fill ?? p.color, weight: set?.bold === undefined ? o.weight : set.bold ? 800 : 400, italic: set?.italic === undefined ? o.italic : set.italic });
+}
+// Approximate width of a run of text, for selecting it on the canvas.
+export function textExtent(s: string, size: number, t: Metrics = defaultMetrics, caps = false) {
+  return Math.max(...labelLines(s || " ").map(l => l.length), 1) * size * t.wide * (caps ? 0.68 : 0.55);
+}
 function textSvg(x: number, y: number, s: string, o: { size: number; weight?: number; fill?: string; anchor?: string; italic?: boolean; spacing?: number; caps?: boolean }) {
   const lines = labelLines(s); const step = o.size * 1.2;
   const body = lines.map((line, i) => `<tspan x="${x}" dy="${i ? step : 0}">${esc(o.caps ? line.toUpperCase() : line)}</tspan>`).join("");
   return `<text x="${x}" y="${y}" font-size="${o.size}" font-weight="${o.weight ?? 400}" fill="${o.fill ?? INK}" text-anchor="${o.anchor ?? "start"}"${o.italic ? ' font-style="italic"' : ""}${o.spacing ? ` letter-spacing="${o.spacing}"` : ""}>${body}</text>`;
 }
 
-export function labelSvg(item: Pick<Item, "name" | "kind" | "main" | "x" | "y" | "anchor">, t: Metrics = defaultMetrics, ink = INK) {
-  const size = labelSize(item, t); const weight = item.main ? 700 : 400; const fill = item.main ? ink : "#3a3a3a";
-  if (item.kind === "technique") return textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor, spacing: item.main ? 1.6 : 1.2, caps: true });
-  if (item.kind === "person") return textSvg(item.x, item.y, item.name, { size, weight, fill: MUTED, anchor: item.anchor, italic: true });
+// role: the map's paint for this kind of label; item.paint overrides it for one label.
+export function labelSvg(item: Pick<Item, "name" | "kind" | "main" | "x" | "y" | "anchor"> & { paint?: TextPaint }, t: Metrics = defaultMetrics, ink = INK, role: TextPaint = {}) {
+  const size = labelSize(item, t); const own = item.paint || {};
+  const bold = own.bold ?? role.bold; const italic = own.italic ?? role.italic;
+  const weight = bold === undefined ? (item.main ? 700 : 400) : bold ? 700 : 400;
+  const base = item.kind === "person" ? MUTED : item.main ? ink : "#3a3a3a";
+  const fill = own.color || role.color || base;
+  if (item.kind === "technique") return textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor, spacing: item.main ? 1.6 : 1.2, caps: true, italic });
+  if (item.kind === "person") return textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor, italic: italic ?? true });
   if (item.kind === "output") {
     const box = labelBox(item as Item, t);
-    return `<rect x="${r1(box.x0)}" y="${r1(box.y0)}" width="${r1(box.x1 - box.x0)}" height="${r1(box.y1 - box.y0)}" fill="#fff" fill-opacity="0.55" stroke="${ink}" stroke-width="${item.main ? 1.6 : 1}"/>` + textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor });
+    return `<rect x="${r1(box.x0)}" y="${r1(box.y0)}" width="${r1(box.x1 - box.x0)}" height="${r1(box.y1 - box.y0)}" fill="#fff" fill-opacity="0.55" stroke="${own.color || ink}" stroke-width="${item.main ? 1.6 : 1}"/>` + textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor, italic });
   }
-  return textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor });
+  return textSvg(item.x, item.y, item.name, { size, weight, fill, anchor: item.anchor, italic });
 }
 
 export function strandColor(map: ResearchMap, strandId?: string) {
   const strand = map.strands.find(s => s.id === strandId);
-  return strand ? map.axes[strand.axis].color : styleOf(map).ink;
+  return strand ? strandInk(map, strand) : styleOf(map).ink;
+}
+export function strandInk(map: Pick<ResearchMap, "axes" | "style">, strand: Strand) {
+  return strand.color || map.axes[strand.axis]?.color || styleOf(map).ink;
 }
 
 const interchangePaint = (style: MapStyle) => style.interchangeFill === "stripes" ? "url(#rm-stripes)" : style.interchangeFill === "black" ? style.ink : "#fff";
@@ -276,10 +316,10 @@ export function markerBox(marker: Marker, style: MapStyle = defaultStyle) {
   return { x0: marker.x - r, y0: top - r, x1: marker.x + r, y1: bottom + r, r };
 }
 
-export function projectSvg(project: Pick<Project, "x" | "y" | "code" | "name">, ink = INK) {
+export function projectSvg(project: Pick<Project, "x" | "y" | "code" | "name" | "color">, ink = INK, text: { color?: string; scale?: number } = {}) {
   const named = !!project.name.trim();
-  return `<g><circle cx="${project.x}" cy="${project.y}" r="17" fill="${named ? "#F6D78B" : "#fff"}" stroke="${ink}" stroke-width="2"${named ? "" : ' stroke-dasharray="4 3"'}/>` +
-    `<text x="${project.x}" y="${project.y + 5}" font-size="14" font-weight="800" fill="${ink}" text-anchor="middle">${esc(project.code)}</text></g>`;
+  return `<g><circle cx="${project.x}" cy="${project.y}" r="17" fill="${project.color || (named ? "#F6D78B" : "#fff")}" stroke="${ink}" stroke-width="2"${named ? "" : ' stroke-dasharray="4 3"'}/>` +
+    `<text x="${project.x}" y="${project.y + 5}" font-size="${14 * (text.scale ?? 1)}" font-weight="800" fill="${text.color || ink}" text-anchor="middle">${esc(project.code)}</text></g>`;
 }
 
 const strandDash = (style: MapStyle) => style.strandDash === "dash" ? `${style.strandWidth * 3} ${style.strandWidth * 1.6}` : style.strandDash === "long" ? `${style.strandWidth * 6} ${style.strandWidth * 1.8}` : "";
@@ -314,7 +354,7 @@ function groundSvg(map: ResearchMap, style: MapStyle) {
 // Translucent planes behind each axis, like overlaid sheets of trace. They become ordinary shapes,
 // so each can be recolored, reshaped, hidden or deleted.
 export function axisPlanes(map: ResearchMap): Shape[] {
-  return axes.flatMap((axis, i) => {
+  return axisIds(map).flatMap((axis, i) => {
     const pts = map.strands.filter(s => s.axis === axis).flatMap(s => s.points);
     if (!pts.length) return [];
     const x0 = Math.min(...pts.map(p => p[0])) - 30; const x1 = Math.max(...pts.map(p => p[0])) + 30;
@@ -361,7 +401,7 @@ function constructionSvg(map: ResearchMap, style: MapStyle) {
 }
 
 export function renderMapInner(map: ResearchMap, options: { legend?: boolean } = {}) {
-  const style = styleOf(map); const t = metricsFor(style); const ink = style.ink;
+  const style = styleOf(map); const t = metricsOf(map); const ink = style.ink;
   const out: string[] = [];
   const add = (s: string) => out.push(s);
   add(`<g font-family="${esc(fontStacks[style.font])}">`);
@@ -371,8 +411,8 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
   for (const shape of shapes) if (!shape.front) add(shapeSvg(shape));
   map.columns.forEach((col, i) => {
     if (i % 2 === 1 && style.bands > 0) add(`<rect x="${col.x0}" y="${MAP_TOP}" width="${col.x1 - col.x0}" height="${MAP_BOTTOM - MAP_TOP}" fill="#000" fill-opacity="${style.bands}"/>`);
-    add(textSvg(col.x0 + 20, 200, `${String(i + 1).padStart(2, "0")}  ${col.title.toUpperCase()}`, { size: 15, weight: 700, fill: "#9a9a96", spacing: 2.5 }));
-    if (col.subtitle) add(textSvg(col.x0 + 20, 222, col.subtitle, { size: 13, fill: "#9a9a96", italic: true }));
+    add(roleText(map, "columnTitle", col.x0 + 20, 200, `${String(i + 1).padStart(2, "0")}  ${col.title.toUpperCase()}`, { size: 15, weight: 700, spacing: 2.5 }));
+    if (col.subtitle) add(roleText(map, "columnNote", col.x0 + 20, 222, col.subtitle, { size: 13, italic: true }));
     if (i > 0 && style.ground !== "ledger") add(`<line x1="${col.x0}" y1="${MAP_TOP}" x2="${col.x0}" y2="${MAP_BOTTOM}" stroke="${style.rule}" stroke-width="1"/>`);
   });
   if (style.construction) add(constructionSvg(map, style));
@@ -380,16 +420,17 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
     const x0 = map.columns[0].x0 + 20; const x1 = map.columns[map.columns.length - 1].x1 - 20;
     add(`<line x1="${x0}" y1="245" x2="${x1}" y2="245" stroke="${style.rule}" stroke-width="1"/><path d="M${x1 - 10},240 L${x1},245 L${x1 - 10},250" fill="none" stroke="#b5b5b0" stroke-width="1.2"/>`);
   }
-  add(textSvg(60, 70, map.title.toUpperCase(), { size: 30, weight: 800, spacing: 1, fill: ink }));
-  add(`<text x="60" y="104" font-size="19" font-weight="600" fill="${ink}">${axes.map(axis => `<tspan fill="${map.axes[axis].color}">${esc(map.axes[axis].label)}</tspan>`).join("  ×  ")}</text>`);
-  if (map.subtitle) add(textSvg(60, 132, map.subtitle, { size: 14, fill: MUTED, italic: true }));
+  add(roleText(map, "title", 60, 70, map.title.toUpperCase(), { size: 30, weight: 800, spacing: 1 }));
+  const al = rolePaint(map, "axesLine");
+  add(`<text x="60" y="104" font-size="${19 * al.scale}" font-weight="${al.bold === false ? 400 : 600}" fill="${al.color}"${al.italic ? ' font-style="italic"' : ""}>${axisIds(map).map(axis => `<tspan fill="${map.axes[axis].color}">${esc(map.axes[axis].label)}</tspan>`).join("  ×  ")}</text>`);
+  if (map.subtitle) add(roleText(map, "subtitle", 60, 132, map.subtitle, { size: 14, italic: true }));
 
   if (map.zone) {
     const z = map.zone;
     const stroke = style.zoneOutline === "none" ? "" : ` stroke="${style.zoneOutline === "dashed" ? ink : "#D9A633"}" stroke-width="1.5"${style.zoneOutline === "dashed" ? ' stroke-dasharray="8 6"' : ""}`;
     add(`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="${style.corner > 20 ? 22 : 4}" fill="${style.zoneFill}" fill-opacity="${style.zoneOpacity}"${stroke}/>`);
     if (style.zoneHatch !== "none") add(`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="${style.corner > 20 ? 22 : 4}" fill="url(#rm-zone-${style.zoneHatch})"/>`);
-    add(textSvg(z.x + z.w - 18, z.y + 26, z.title.toUpperCase(), { size: 13, weight: 800, fill: style.zoneHatch === "none" ? "#9a6c07" : ink, anchor: "end", spacing: 2.2 }));
+    add(roleText(map, "zoneTitle", z.x + z.w - 18, z.y + 26, z.title.toUpperCase(), { size: 13, weight: 800, fill: style.zoneHatch === "none" ? "#9a6c07" : ink, anchor: "end", spacing: 2.2 }));
   }
 
   const byId = new Map(map.items.map(item => [item.id, item]));
@@ -405,11 +446,13 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
   }
   const sd = dashAttr(strandDash(style));
   if (style.casing) for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${style.background}" stroke-width="${style.strandWidth + 5}" stroke-linecap="round" stroke-linejoin="round"/>`);
-  for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${map.axes[strand.axis].color}" stroke-width="${style.strandWidth}" stroke-linecap="${sd ? "butt" : "round"}" stroke-linejoin="round"${sd}/>`);
+  for (const strand of map.strands) add(`<path d="${roundedPath(strand.points, style.corner)}" fill="none" stroke="${strandInk(map, strand)}" stroke-width="${style.strandWidth}" stroke-linecap="${sd ? "butt" : "round"}" stroke-linejoin="round"${sd}/>`);
   for (const shape of shapes) if (shape.front) add(shapeSvg(shape));
   for (const item of map.items) if (item.marker && item.marker.type !== "none") add(markerSvg(item.marker.type, item.marker.x, item.marker.y, strandColor(map, item.marker.strand), item.marker.y2, style, item.marker.paint, item.id));
-  for (const item of map.items) if (item.name.trim()) add(labelSvg(item, t, ink));
-  for (const project of map.projects) add(projectSvg(project, ink));
+  const kindPaint = Object.fromEntries(kinds.map(k => [k, map.text?.[k] || {}])) as Record<Kind, TextPaint>;
+  for (const item of map.items) if (item.name.trim()) add(labelSvg(item, t, ink, kindPaint[item.kind]));
+  const pp = map.text?.project || {};
+  for (const project of map.projects) add(projectSvg(project, ink, pp));
   if (options.legend !== false) add(legendSvg(map));
   add("</g>");
   return out.join("\n");
@@ -417,56 +460,59 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
 
 // The legend lists only what the map uses, and draws it in the map's own style, so it can't drift out of date.
 export function legendSvg(map: ResearchMap) {
-  const style = styleOf(map); const ink = style.ink; const t = metricsFor(style);
+  const style = styleOf(map); const ink = style.ink; const t = metricsOf(map);
   const out: string[] = []; const add = (s: string) => out.push(s);
+  const w = (key: LegendWord) => map.words?.[key] ?? legendWords[key];
+  const head = (x: number, y: number, key: LegendWord) => roleText(map, "legendHead", x, y, w(key), { size: 14, weight: 800, spacing: 2 });
+  const body = (x: number, y: number, text: string, o: { weight?: number; italic?: boolean } = {}) => roleText(map, "legend", x, y, text, { size: 15, ...o });
   const LY = MAP_BOTTOM + 30;
   add(`<line x1="60" y1="${LY - 14}" x2="${map.width - 60}" y2="${LY - 14}" stroke="${style.rule}"/>`);
-  add(textSvg(60, LY + 16, "HOW TO READ THIS", { size: 14, weight: 800, spacing: 2, fill: ink }));
-  wrap(map.caption, captionChars(t)).slice(0, 7).forEach((line, i) => add(textSvg(60, LY + 44 + i * 21, line, { size: 15, fill: "#333" })));
+  add(head(60, LY + 16, "read"));
+  wrap(map.caption, captionChars(t)).slice(0, 7).forEach((line, i) => add(roleText(map, "caption", 60, LY + 44 + i * 21, line, { size: 15 })));
 
   let lx = 760;
-  add(textSvg(lx, LY + 16, "AXES", { size: 14, weight: 800, spacing: 2, fill: ink }));
-  const used = axes.filter(axis => map.strands.some(s => s.axis === axis));
+  add(head(lx, LY + 16, "axes"));
+  const used = axisIds(map).filter(axis => map.strands.some(s => s.axis === axis)).slice(0, 6);
   const sd = dashAttr(strandDash(style));
   used.forEach((axis, i) => {
     const y = LY + 46 + i * 30;
     add(`<line x1="${lx}" y1="${y}" x2="${lx + 60}" y2="${y}" stroke="${map.axes[axis].color}" stroke-width="${style.strandWidth}" stroke-linecap="${sd ? "butt" : "round"}"${sd}/>`);
-    add(textSvg(lx + 75, y + 5, map.axes[axis].label.replace(/ (Systems|Logics?|& AI)$/i, "") || axis, { size: 15, weight: 600, fill: ink }));
+    add(body(lx + 75, y + 5, map.axes[axis].label.replace(/ (Systems|Logics?|& AI)$/i, "") || axis, { weight: 600 }));
   });
   if (map.items.some(item => item.feeds)) {
     const y = LY + 46 + used.length * 30;
     add(`<line x1="${lx}" y1="${y}" x2="${lx + 60}" y2="${y}" stroke="${ink}" stroke-opacity="${style.influenceOpacity}" stroke-width="${style.influenceWidth}"${dashAttr(influenceDash(style), style.influenceDash === "dot")}/>`);
-    add(textSvg(lx + 75, y + 5, "Influence feeding a strand", { size: 15, fill: ink }));
+    add(body(lx + 75, y + 5, w("influence")));
   }
 
   lx = 1110;
-  add(textSvg(lx, LY + 16, "STATIONS", { size: 14, weight: 800, spacing: 2, fill: ink }));
+  add(head(lx, LY + 16, "stations"));
   const usedMarkers = markers.filter(type => type !== "none" && map.items.some(item => item.marker?.type === type));
   usedMarkers.forEach((type, i) => {
     const y = LY + 46 + i * 34;
     add(type === "interchange" ? `<rect x="${lx}" y="${y - 14}" width="24" height="28" rx="12" fill="${interchangePaint(style)}" stroke="${ink}" stroke-width="3"/>` : markerSvg(type, lx + 12, y, ink, undefined, { ...style, stationScale: Math.min(style.stationScale, 1.1) }));
-    add(textSvg(lx + 40, y + 5, markerLabels[type], { size: 15, fill: ink }));
+    add(body(lx + 40, y + 5, w(type as LegendWord)));
   });
 
   lx = 1500;
-  add(textSvg(lx, LY + 16, "TYPE", { size: 14, weight: 800, spacing: 2, fill: ink }));
+  add(head(lx, LY + 16, "type"));
   kinds.filter(kind => map.items.some(item => item.kind === kind)).forEach((kind, i) => {
-    add(labelSvg({ name: kindLabels[kind], kind, main: false, x: lx + (kind === "output" ? 6 : 0), y: LY + 51 + i * 30, anchor: "start" }, metricsFor(style), ink));
+    add(labelSvg({ name: w(kind), kind, main: false, x: lx + (kind === "output" ? 6 : 0), y: LY + 51 + i * 30, anchor: "start" }, { ...t, kinds: undefined }, ink, { ...(map.text?.[kind] || {}), scale: undefined }));
   });
 
   if (map.projects.length) {
     lx = 1890;
-    add(textSvg(lx, LY + 16, "MY PROJECTS", { size: 14, weight: 800, spacing: 2, fill: ink }));
+    add(head(lx, LY + 16, "projects"));
     const open = map.projects.filter(p => !p.name.trim()).length;
     const named = map.projects.filter(p => p.name.trim());
     if (named.length) {
-      named.slice(0, 5).forEach((p, i) => { add(projectSvg({ x: lx + 17, y: LY + 48 + i * 34, code: p.code, name: p.name }, ink)); add(textSvg(lx + 45, LY + 53 + i * 34, p.name, { size: 15, weight: 600, fill: ink })); });
-      if (named.length > 5) add(textSvg(lx + 45, LY + 53 + 5 * 34, `+ ${named.length - 5} more`, { size: 14, fill: MUTED, italic: true }));
+      named.slice(0, 5).forEach((p, i) => { add(projectSvg({ x: lx + 17, y: LY + 48 + i * 34, code: p.code, name: p.name, color: p.color }, ink, { color: map.text?.project?.color })); add(body(lx + 45, LY + 53 + i * 34, p.name, { weight: 600 })); });
+      if (named.length > 5) add(body(lx + 45, LY + 53 + 5 * 34, `+ ${named.length - 5} more`, { italic: true }));
     }
     if (open) {
       const y = LY + 48 + Math.min(named.length, 5) * 34 + (named.length > 5 ? 34 : 0);
       add(projectSvg({ x: lx + 17, y, code: "P", name: "" }, ink));
-      add(textSvg(lx + 45, y + 5, `Project station still to name (${open})`, { size: 15, weight: 600, fill: ink }));
+      add(body(lx + 45, y + 5, `${w("placeholder")} (${open})`, { weight: 600 }));
     }
   }
   return out.join("\n");
@@ -534,7 +580,7 @@ export function checkMap(map: ResearchMap): Issue[] {
   const strandIds = new Set(map.strands.map(s => s.id));
   const label = (item: Item) => `“${item.name.replace(/\n/g, " ") || "Untitled"}”`;
   const named = map.items.filter(item => item.name.trim());
-  const t = metricsFor(styleOf(map));
+  const t = metricsOf(map);
 
   for (const item of map.items) {
     if (!item.name.trim()) issues.push({ level: "fix", message: "An item has no name.", item: item.id });
@@ -612,6 +658,15 @@ const pick = <T extends string>(list: readonly T[], v: unknown, fallback: T) => 
 const hex = (c: unknown, fallback: string) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : fallback;
 const clamp = (v: unknown, lo: number, hi: number, fallback: number) => typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
+function parseTextPaint(value: unknown): TextPaint | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const r = value as Record<string, unknown>; const paint: TextPaint = {};
+  if (hex(r.color, "")) paint.color = hex(r.color, "");
+  if (typeof r.scale === "number") paint.scale = clamp(r.scale, 0.4, 4, 1);
+  if (typeof r.bold === "boolean") paint.bold = r.bold;
+  if (typeof r.italic === "boolean") paint.italic = r.italic;
+  return Object.keys(paint).length ? paint : undefined;
+}
 function parsePaint(value: unknown): MarkerPaint | undefined {
   if (!value || typeof value !== "object") return undefined;
   const r = value as Record<string, unknown>; const paint: MarkerPaint = {};
@@ -650,13 +705,20 @@ export function parseMap(value: unknown): ResearchMap | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
   if (!Array.isArray(v.strands) || !Array.isArray(v.items)) return null;
-  const rawAxes = (v.axes || {}) as Record<string, { label?: unknown; color?: unknown }>;
+  const rawAxes = (v.axes && typeof v.axes === "object" ? v.axes : {}) as Record<string, { label?: unknown; color?: unknown }>;
   const color = (c: unknown, fallback: string) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : fallback;
   const defaults = { material: { label: "Material Systems", color: "#C4572B" }, structure: { label: "Structural Logics", color: "#2459A8" }, computation: { label: "Computation & AI", color: "#8E3B8F" } };
+  // Categories: the stored ones in order, or the three defaults for an older map.
+  const axisEntries = Object.entries(rawAxes).filter(([key, a]) => id(key) && a && typeof a === "object").slice(0, 12);
+  const mapAxes: Record<string, { label: string; color: string }> = axisEntries.length
+    ? Object.fromEntries(axisEntries.map(([key, a]) => [key, { label: str(a.label, 40) || (defaults as Record<string, { label: string }>)[key]?.label || "Category", color: color(a.color, (defaults as Record<string, { color: string }>)[key]?.color || "#555555") }]))
+    : defaults;
+  const axisKeys = Object.keys(mapAxes);
   const strands = (v.strands as unknown[]).slice(0, 60).flatMap(s => {
     const r = s as Record<string, unknown>; const sid = id(r.id);
     const points = Array.isArray(r.points) ? r.points.slice(0, 40).map(pt).filter((p): p is Pt => !!p) : [];
-    return sid ? [{ id: sid, axis: pick(axes, r.axis, "material"), points }] : [];
+    const own = hex(r.color, "");
+    return sid ? [{ id: sid, axis: typeof r.axis === "string" && axisKeys.includes(r.axis) ? r.axis : axisKeys[0], points, ...(own ? { color: own } : {}) }] : [];
   });
   const items = (v.items as unknown[]).slice(0, 400).flatMap(s => {
     const r = s as Record<string, unknown>; const iid = id(r.id); if (!iid) return [];
@@ -669,23 +731,26 @@ export function parseMap(value: unknown): ResearchMap | null {
     const f = r.feeds as Record<string, unknown> | undefined;
     if (f && typeof f === "object" && id(f.strand) && pt(f.at)) item.feeds = { strand: id(f.strand)!, at: pt(f.at)!, route: pick(routes, f.route, "under") };
     if (id(r.from)) item.from = id(r.from)!;
+    const paint = parseTextPaint(r.paint); if (paint) item.paint = paint;
     return [item];
   });
   const projects = (Array.isArray(v.projects) ? v.projects : []).slice(0, 60).flatMap(s => {
     const r = s as Record<string, unknown>; const pid = id(r.id); if (!pid) return [];
     const projectId = typeof r.projectId === "string" && /^[0-9a-f-]{36}$/i.test(r.projectId) ? r.projectId : undefined;
-    return [{ id: pid, code: str(r.code, 6) || "P", name: str(r.name, 120), x: num(r.x), y: num(r.y), ...(projectId ? { projectId } : {}), ...(str(r.note, 500) ? { note: str(r.note, 500) } : {}) }];
+    return [{ id: pid, code: str(r.code, 6) || "P", name: str(r.name, 120), x: num(r.x), y: num(r.y), ...(projectId ? { projectId } : {}), ...(str(r.note, 500) ? { note: str(r.note, 500) } : {}), ...(hex(r.color, "") ? { color: hex(r.color, "") } : {}) }];
   });
   const columns = (Array.isArray(v.columns) ? v.columns : []).slice(0, 6).map(c => { const r = c as Record<string, unknown>; return { title: str(r.title, 40), subtitle: str(r.subtitle, 80), x0: num(r.x0), x1: num(r.x1) }; });
   const z = v.zone as Record<string, unknown> | null | undefined;
   return {
     version: 1, width: num(v.width, 2400) || 2400, height: num(v.height, 1500) || 1500,
     title: str(v.title, 80) || "Research Framework", subtitle: str(v.subtitle, 200),
-    axes: { material: { label: str(rawAxes.material?.label, 40) || defaults.material.label, color: color(rawAxes.material?.color, defaults.material.color) }, structure: { label: str(rawAxes.structure?.label, 40) || defaults.structure.label, color: color(rawAxes.structure?.color, defaults.structure.color) }, computation: { label: str(rawAxes.computation?.label, 40) || defaults.computation.label, color: color(rawAxes.computation?.color, defaults.computation.color) } },
+    axes: mapAxes,
     columns, zone: z && typeof z === "object" ? { x: num(z.x), y: num(z.y), w: Math.max(40, num(z.w, 200)), h: Math.max(40, num(z.h, 120)), title: str(z.title, 40) } : null,
     strands, items, projects, caption: str(v.caption, 1200),
     ...(v.style && typeof v.style === "object" ? { style: parseStyle(v.style) } : {}),
     ...(Array.isArray(v.shapes) ? { shapes: parseShapes(v.shapes) } : {}),
+    ...(() => { const r = (v.text && typeof v.text === "object" ? v.text : {}) as Record<string, unknown>; const text = Object.fromEntries(textRoles.flatMap(role => { const p = parseTextPaint(r[role]); return p ? [[role, p]] : []; })); return Object.keys(text).length ? { text } : {}; })(),
+    ...(() => { const r = (v.words && typeof v.words === "object" ? v.words : {}) as Record<string, unknown>; const words = Object.fromEntries((Object.keys(legendWords) as LegendWord[]).flatMap(k => typeof r[k] === "string" ? [[k, str(r[k], 80)]] : [])); return Object.keys(words).length ? { words } : {}; })(),
     ...(Array.isArray(v.stylePresets) ? { stylePresets: v.stylePresets.slice(0, 20).flatMap(p => { const r = p as Record<string, unknown>; const n = str(r?.name, 40); return n ? [{ name: n, style: parseStyle(r.style) }] : []; }) } : {}),
   };
 }
@@ -717,6 +782,7 @@ export function diffMaps(before: ResearchMap, after: ResearchMap) {
     if (!prev) changes.push(`Added a ${strand.axis} strand`);
     else if (prev.axis !== strand.axis) changes.push(`A strand moved from ${prev.axis} to ${strand.axis}`);
     else if (JSON.stringify(prev.points) !== JSON.stringify(strand.points)) changes.push("Re-routed a strand");
+    if (prev && (prev.color || "") !== (strand.color || "")) changes.push("Recolored a strand");
   }
   for (const strand of before.strands) if (!after.strands.some(s => s.id === strand.id)) changes.push(`Removed a ${strand.axis} strand`);
   const oldProjects = new Map(before.projects.map(p => [p.id, p]));
@@ -728,7 +794,13 @@ export function diffMaps(before: ResearchMap, after: ResearchMap) {
   for (const project of before.projects) if (!after.projects.some(p => p.id === project.id)) changes.push(`Removed project station ${project.code}`);
   if (before.caption !== after.caption) changes.push("Edited the caption");
   if (before.title !== after.title || before.subtitle !== after.subtitle) changes.push("Edited the title");
-  if (JSON.stringify(before.axes) !== JSON.stringify(after.axes)) changes.push("Changed the axes");
+  for (const key of axisIds(after)) if (!before.axes[key]) changes.push(`Added the category “${after.axes[key].label}”`);
+  for (const key of axisIds(before)) if (!after.axes[key]) changes.push(`Removed the category “${before.axes[key].label}”`);
+  if (axisIds(after).some(key => before.axes[key] && JSON.stringify(before.axes[key]) !== JSON.stringify(after.axes[key]))) changes.push("Changed the categories");
+  if (JSON.stringify(before.text || {}) !== JSON.stringify(after.text || {})) changes.push("Changed the text colors or sizes");
+  if (JSON.stringify(before.words || {}) !== JSON.stringify(after.words || {})) changes.push("Edited the legend wording");
+  const recolored = after.items.filter(item => { const prev = old.get(item.id); return prev && JSON.stringify(prev.paint || null) !== JSON.stringify(item.paint || null); }).length;
+  if (recolored) changes.push(`Restyled ${recolored} label${recolored === 1 ? "" : "s"}`);
   if (JSON.stringify(before.zone) !== JSON.stringify(after.zone)) changes.push("Moved the core zone");
   if (JSON.stringify(styleOf(before)) !== JSON.stringify(styleOf(after))) changes.push("Changed the style");
   const oldShapes = new Map(shapesOf(before).map(sh => [sh.id, sh])); const newShapes = shapesOf(after);
