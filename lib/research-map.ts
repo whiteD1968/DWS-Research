@@ -99,6 +99,8 @@ export interface MapStyle {
   font: (typeof fonts)[number]; textScale: number; ink: string;
   zoneFill: string; zoneOpacity: number; zoneHatch: (typeof hatches)[number]; zoneOutline: (typeof outlines)[number];
   construction: boolean; planes: boolean;
+  // The section scale: a tick ruler across the top with registration crosses where the columns divide.
+  scale: boolean;
 }
 export const defaultStyle: MapStyle = {
   ground: "plain", background: "#EDEDEB", rule: "#c9c9c5", bands: 0.025,
@@ -107,7 +109,7 @@ export const defaultStyle: MapStyle = {
   stationScale: 1, stationStroke: 1, interchangeFill: "white",
   font: "helvetica", textScale: 1, ink: "#1d1d1f",
   zoneFill: "#F6D78B", zoneOpacity: 0.45, zoneHatch: "none", zoneOutline: "solid",
-  construction: false, planes: false,
+  construction: false, planes: false, scale: false,
 };
 type AxisColors = Record<Axis, string>;
 export const stylePresets: { key: string; name: string; note: string; style: MapStyle; colors?: AxisColors }[] = [
@@ -115,15 +117,15 @@ export const stylePresets: { key: string; name: string; note: string; style: Map
   { key: "portfolio", name: "Portfolio original", note: "Close to the first portfolio drawing: fine dashed lines and small stations on grey.", colors: { material: "#2b2b2b", structure: "#4a4a4a", computation: "#111111" },
     style: { ...defaultStyle, background: "#E9E9E7", bands: 0, strandWidth: 3, corner: 34, strandDash: "dash", casing: false, influenceWidth: 0.9, influenceDash: "dash", influenceOpacity: 0.45, influenceInk: true, stationScale: 0.7, stationStroke: 0.8, zoneFill: "#ffffff", zoneOpacity: 0.5, zoneOutline: "dashed" } },
   { key: "ledger", name: "Ledger drawing", note: "After Bryan Cantley's layered drawings: green ledger ground, hairline construction lines and registration marks, translucent planes, hazard-striped core and interchanges, condensed type.", colors: { material: "#E0643C", structure: "#161616", computation: "#4C7DA6" },
-    style: { ground: "ledger", background: "#E3ECDD", rule: "#B7CCB0", bands: 0, strandWidth: 5, corner: 18, strandDash: "solid", casing: true, influenceWidth: 0.8, influenceDash: "solid", influenceOpacity: 0.75, influenceInk: false, stationScale: 1, stationStroke: 1.1, interchangeFill: "stripes", font: "condensed", textScale: 1, ink: "#141414", zoneFill: "#F2A890", zoneOpacity: 0.45, zoneHatch: "stripes", zoneOutline: "none", construction: true, planes: true } },
+    style: { ground: "ledger", background: "#E3ECDD", rule: "#B7CCB0", bands: 0, strandWidth: 5, corner: 18, strandDash: "solid", casing: true, influenceWidth: 0.8, influenceDash: "solid", influenceOpacity: 0.75, influenceInk: false, stationScale: 1, stationStroke: 1.1, interchangeFill: "stripes", font: "condensed", textScale: 1, ink: "#141414", zoneFill: "#F2A890", zoneOpacity: 0.45, zoneHatch: "stripes", zoneOutline: "none", construction: true, planes: true, scale: true } },
   { key: "blueprint", name: "Drafting grid", note: "Monospace lettering on a fine grid, with construction lines and white interchanges.", colors: { material: "#C8502A", structure: "#1F3F73", computation: "#6A3B8C" },
-    style: { ...defaultStyle, ground: "grid", background: "#F4F3EE", rule: "#D9D6CC", bands: 0.02, strandWidth: 4, corner: 12, font: "mono", textScale: 0.92, construction: true, zoneHatch: "chevrons", zoneFill: "#F3C46A", zoneOpacity: 0.35, zoneOutline: "dashed" } },
+    style: { ...defaultStyle, ground: "grid", background: "#F4F3EE", rule: "#D9D6CC", bands: 0.02, strandWidth: 4, corner: 12, font: "mono", textScale: 0.92, construction: true, scale: true, zoneHatch: "chevrons", zoneFill: "#F3C46A", zoneOpacity: 0.35, zoneOutline: "dashed" } },
   { key: "plan", name: "Plan collage", note: "After the pink plan collage: white sheet on a fine grid with a dot field, pink and black heavy hatching, thin black lines and dashed edges.", colors: { material: "#C46FA9", structure: "#141414", computation: "#8A8A8A" },
     style: { ...defaultStyle, ground: "dots", background: "#FBFBFA", rule: "#D8D8D6", bands: 0, strandWidth: 3.5, corner: 40, casing: true, influenceWidth: 0.9, influenceDash: "solid", influenceOpacity: 0.7, influenceInk: true, stationScale: 0.95, stationStroke: 0.9, interchangeFill: "stripes", font: "helvetica", ink: "#141414", zoneFill: "#E7B4D6", zoneOpacity: 0.6, zoneHatch: "heavy", zoneOutline: "dashed", construction: false, planes: false } },
   { key: "collimator", name: "Collimator sheet", note: "After Cantley's “2:34” sheet: salmon field, mint graph-paper plates, orange construction lines, condensed bold lettering.", colors: { material: "#E0662E", structure: "#1C1C1C", computation: "#4E9C7E" },
-    style: { ...defaultStyle, ground: "plain", background: "#ECEBE6", rule: "#C9C7BF", bands: 0, strandWidth: 5, corner: 10, casing: true, influenceWidth: 0.8, influenceDash: "solid", influenceOpacity: 0.65, stationStroke: 1.2, interchangeFill: "black", font: "condensed", ink: "#161616", zoneFill: "#D9776F", zoneOpacity: 0.6, zoneHatch: "grid", zoneOutline: "none", construction: true, planes: false } },
+    style: { ...defaultStyle, ground: "plain", background: "#ECEBE6", rule: "#C9C7BF", bands: 0, strandWidth: 5, corner: 10, casing: true, influenceWidth: 0.8, influenceDash: "solid", influenceOpacity: 0.65, stationStroke: 1.2, interchangeFill: "black", font: "condensed", ink: "#161616", zoneFill: "#D9776F", zoneOpacity: 0.6, zoneHatch: "grid", zoneOutline: "none", construction: true, planes: false, scale: true } },
   { key: "sheet", name: "Drafting sheet", note: "After the dashed-grid drafting sheet: dashed grid with a measured scale, hairline strands, small monospace notes.", colors: { material: "#555555", structure: "#1E1E1E", computation: "#1F5FA8" },
-    style: { ...defaultStyle, ground: "dashed", background: "#FFFFFF", rule: "#BDBDBD", bands: 0, strandWidth: 2.5, corner: 0, casing: false, influenceWidth: 0.7, influenceDash: "dash", influenceOpacity: 0.6, influenceInk: true, stationScale: 0.8, stationStroke: 0.7, interchangeFill: "white", font: "mono", textScale: 0.9, ink: "#222222", zoneFill: "#DDE6F2", zoneOpacity: 0.5, zoneHatch: "lines", zoneOutline: "dashed", construction: false, planes: false } },
+    style: { ...defaultStyle, ground: "dashed", background: "#FFFFFF", rule: "#BDBDBD", bands: 0, strandWidth: 2.5, corner: 0, casing: false, influenceWidth: 0.7, influenceDash: "dash", influenceOpacity: 0.6, influenceInk: true, stationScale: 0.8, stationStroke: 0.7, interchangeFill: "white", font: "mono", textScale: 0.9, ink: "#222222", zoneFill: "#DDE6F2", zoneOpacity: 0.5, zoneHatch: "lines", zoneOutline: "dashed", construction: false, planes: false, scale: true } },
 ];
 export function styleOf(map: Pick<ResearchMap, "style">): MapStyle { return map.style || defaultStyle; }
 
@@ -470,13 +472,22 @@ function constructionSvg(map: ResearchMap, style: MapStyle) {
     out.push(`<line x1="20" y1="${a[1]}" x2="${a[0]}" y2="${a[1]}" ${hair}/>`, `<line x1="${b[0]}" y1="${b[1]}" x2="${W - 20}" y2="${b[1]}" ${hair}/>`);
     for (const p of strand.points.slice(1, -1)) out.push(`<circle cx="${p[0]}" cy="${p[1]}" r="14" fill="none" ${hair}/>`);
   }
+  for (let x = 300; x < W - 100; x += 300) for (let y = 360; y < MAP_BOTTOM - 40; y += 300) out.push(`<path d="M${x - 4},${y}H${x + 4}M${x},${y - 4}V${y + 4}" stroke="${ink}" stroke-opacity="0.45" stroke-width="0.8"/>`);
+  return out.join("");
+}
+
+// The section scale: ticks numbered every ten across the top, and registration crosses at each column division, top and bottom.
+function scaleSvg(map: ResearchMap, style: MapStyle) {
+  const out: string[] = []; const ink = style.ink; const W = map.width;
+  const hair = `stroke="${ink}" stroke-opacity="0.35" stroke-width="0.6"`;
   const ticks: string[] = [];
   for (let x = 60; x <= W - 60; x += 25) { const big = (x - 60) % 250 === 0; ticks.push(`M${x},${MAP_TOP - (big ? 14 : 6)}V${MAP_TOP}`); if (big) out.push(textSvg(x + 3, MAP_TOP - 6, String((x - 60) / 25).padStart(2, "0"), { size: 9, fill: ink, weight: 600 })); }
   out.push(`<path d="${ticks.join("")}" stroke="${ink}" stroke-opacity="0.55" stroke-width="0.8"/>`, `<line x1="60" y1="${MAP_TOP}" x2="${W - 60}" y2="${MAP_TOP}" ${hair}/>`);
   const cross = (x: number, y: number, r = 9) => `<path d="M${x - r},${y}H${x + r}M${x},${y - r}V${y + r}" stroke="${ink}" stroke-width="1.2"/><circle cx="${x}" cy="${y}" r="${r * 0.45}" fill="none" stroke="${ink}" stroke-width="0.8"/>`;
   for (const col of map.columns) { out.push(cross(col.x0, MAP_TOP), cross(col.x0, MAP_BOTTOM)); }
   if (map.columns.length) { const last = map.columns[map.columns.length - 1]; out.push(cross(last.x1, MAP_TOP), cross(last.x1, MAP_BOTTOM)); }
-  for (let x = 300; x < W - 100; x += 300) for (let y = 360; y < MAP_BOTTOM - 40; y += 300) out.push(`<path d="M${x - 4},${y}H${x + 4}M${x},${y - 4}V${y + 4}" stroke="${ink}" stroke-opacity="0.45" stroke-width="0.8"/>`);
+  // Column divisions carried down the sheet as fine rules between the crosses.
+  for (const col of map.columns.slice(1)) out.push(`<line x1="${col.x0}" y1="${MAP_TOP}" x2="${col.x0}" y2="${MAP_BOTTOM}" ${hair}/>`);
   return out.join("");
 }
 
@@ -496,6 +507,7 @@ export function renderMapInner(map: ResearchMap, options: { legend?: boolean } =
     if (i > 0 && style.ground !== "ledger") add(`<line x1="${col.x0}" y1="${MAP_TOP}" x2="${col.x0}" y2="${MAP_BOTTOM}" stroke="${style.rule}" stroke-width="1"/>`);
   });
   if (style.construction) add(constructionSvg(map, style));
+  if (style.scale) add(scaleSvg(map, style));
   if (map.columns.length) {
     const x0 = map.columns[0].x0 + 20; const x1 = map.columns[map.columns.length - 1].x1 - 20;
     add(`<line x1="${x0}" y1="245" x2="${x1}" y2="245" stroke="${style.rule}" stroke-width="1"/><path d="M${x1 - 10},240 L${x1},245 L${x1 - 10},250" fill="none" stroke="#b5b5b0" stroke-width="1.2"/>`);
@@ -780,6 +792,8 @@ export function parseStyle(value: unknown): MapStyle {
     font: pick(fonts, r.font, d.font), textScale: clamp(r.textScale, 0.6, 1.6, d.textScale), ink: hex(r.ink, d.ink),
     zoneFill: hex(r.zoneFill, d.zoneFill), zoneOpacity: clamp(r.zoneOpacity, 0, 1, d.zoneOpacity), zoneHatch: pick(hatches, r.zoneHatch, d.zoneHatch), zoneOutline: pick(outlines, r.zoneOutline, d.zoneOutline),
     construction: r.construction === true, planes: r.planes === true,
+    // Older maps had the scale as part of the construction lines.
+    scale: typeof r.scale === "boolean" ? r.scale : r.construction === true,
   };
 }
 

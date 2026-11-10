@@ -630,7 +630,8 @@ export function ResearchMapEditor({ initial, isNew, log: initialLog, snapshots: 
           <div className="research-map-row research-map-wrap">{Object.entries(shapeTemplates).map(([k, t]) => <button key={k} type="button" className="button" onClick={() => addShape(k as keyof typeof shapeTemplates)}>+ {t.name}</button>)}<button type="button" className="button" onClick={addAxisPlanes}>+ Axis planes</button></div>
           <h3>Drawing layers</h3>
           <label className="research-map-check"><input type="checkbox" checked={!!map.zone} onChange={e => commit(c => ({ ...c, zone: e.target.checked ? { x: 1050, y: 555, w: 615, h: 190, title: "Core contribution" } : null }))} />Core zone</label>
-          <label className="research-map-check"><input type="checkbox" checked={style.construction} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), construction: e.target.checked } }))} />Construction lines, scale and registration marks</label>
+          <label className="research-map-check"><input type="checkbox" checked={style.scale} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), scale: e.target.checked } }))} />Section scale and registration crosses at the column divisions</label>
+          <label className="research-map-check"><input type="checkbox" checked={style.construction} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), construction: e.target.checked } }))} />Construction hairlines at strand ends and bends</label>
           <label className="research-map-check"><input type="checkbox" checked={style.bands > 0} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), bands: e.target.checked ? 0.025 : 0 } }))} />Column shading</label>
           <label className="research-map-check"><input type="checkbox" checked={style.ground !== "plain"} onChange={e => commit(c => ({ ...c, style: { ...styleOf(c), ground: e.target.checked ? "ledger" : "plain" } }))} />Ruled ground (ledger lines or grid)</label>
           <p className="research-map-hint">Click a shape, station or the core zone on the canvas to select it. Delete removes the selection.</p>
@@ -771,7 +772,8 @@ function StylePane({ map, commit }: { map: ResearchMap; commit: (change: (curren
     {color("rule", "Rules and column lines")}
     {range("bands", "Column shading", 0, 0.12, 0.005)}
     <label className="research-map-check"><input type="checkbox" checked={shapesOf(map).some(isPlane)} onChange={e => commit(c => setPlanes(c, e.target.checked))} />Translucent axis planes (edit each one under Layers)</label>
-    {toggle("construction", "Construction lines, scale and registration marks")}
+    {toggle("scale", "Section scale and registration crosses")}
+    {toggle("construction", "Construction hairlines at strand ends and bends")}
 
     <h3>Strands</h3>
     {range("strandWidth", "Line weight", 1, 14, 0.5)}
