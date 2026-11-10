@@ -36,7 +36,7 @@ const navItems = [
 const sectionTabs = [
   { routes: ["/library", "/discover", "/links"], label: "Library sections", tabs: [{ href: "/library", label: "Library" }, { href: "/links", label: "Links" }, { href: "/discover", label: "Discover" }] },
   { routes: ["/opportunities", "/contacts", "/kit"], label: "Practice sections", tabs: [{ href: "/opportunities", label: "Opportunities" }, { href: "/contacts", label: "Contacts" }, { href: "/kit", label: "Kit" }] },
-  { routes: ["/tenure"], label: "Tenure sections", tabs: [{ href: "/tenure", label: "Dossier" }, { href: "/tenure/cv", label: "CV" }] },
+  { routes: ["/tenure"], label: "Tenure sections", tabs: [{ href: "/tenure", label: "Dossier" }, { href: "/tenure/cv", label: "CV" }, { href: "/tenure/map", label: "Research map" }] },
 ];
 
 const within = (pathname: string, route: string) => pathname === route || pathname.startsWith(`${route}/`);
